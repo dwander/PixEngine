@@ -492,5 +492,31 @@ fn load_cached_exif_metadata(app_handle: &tauri::AppHandle, file_path: &str) -> 
         .ok_or_else(|| "Metadata not found".to_string())
 }
 
-// TODO: 나중에 EXIF 썸네일(~160px)이 있어도 백그라운드에서 320px 고해상도 썸네일을 생성하는 로직 추가
-// 우선순위: 낮음, 시스템 유휴 시간에만 실행
+/// 고화질 DCT 썸네일 생성 (320px, EXIF 썸네일 업그레이드용)
+pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ThumbnailResult, String> {
+    let mtime = get_file_mtime(file_path)?;
+    let cache_key = generate_cache_key(file_path, mtime);
+    let cache_path = get_cache_path(app_handle, &cache_key)?;
+
+    // EXIF 메타데이터 추출
+    let exif_metadata = extract_exif_metadata(file_path).ok();
+
+    // DCT 스케일링으로 320px 고화질 썸네일 생성
+    let (rgb_data, width, height) = generate_dct_thumbnail(file_path, 320)?;
+    let jpeg_data = encode_thumbnail_to_jpeg(&rgb_data, width, height)?;
+
+    // 캐시 업데이트 (기존 EXIF 썸네일을 덮어씀)
+    fs::write(&cache_path, &jpeg_data)
+        .map_err(|e| format!("Failed to write HQ thumbnail cache: {}", e))?;
+
+    let thumbnail_base64 = encode_to_base64(&jpeg_data);
+
+    Ok(ThumbnailResult {
+        path: file_path.to_string(),
+        thumbnail_base64,
+        width,
+        height,
+        source: ThumbnailSource::DctScaling,
+        exif_metadata,
+    })
+}

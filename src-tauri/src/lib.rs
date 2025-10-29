@@ -414,6 +414,16 @@ async fn get_completed_thumbnails(
     Ok(queue.get_all_completed().await)
 }
 
+// 고화질 DCT 썸네일 생성 시작
+#[tauri::command]
+async fn start_hq_thumbnail_generation(
+    image_paths: Vec<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    thumbnail_queue::start_hq_thumbnail_worker(app_handle, image_paths).await;
+    Ok(())
+}
+
 // 이미지 정보 가져오기
 #[derive(Serialize)]
 struct ImageInfo {
@@ -493,6 +503,7 @@ pub fn run() {
             pause_thumbnail_generation,
             resume_thumbnail_generation,
             get_completed_thumbnails,
+            start_hq_thumbnail_generation,
             get_image_info
         ])
         .run(tauri::generate_context!())

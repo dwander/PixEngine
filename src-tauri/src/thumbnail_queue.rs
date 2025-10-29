@@ -239,3 +239,33 @@ impl ThumbnailQueueManager {
         });
     }
 }
+
+/// 고화질 DCT 썸네일 생성 워커 (순차 처리)
+pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<String>) {
+    let total = image_paths.len();
+
+    tokio::spawn(async move {
+        for (index, path) in image_paths.iter().enumerate() {
+            // 고화질 DCT 썸네일 생성
+            match thumbnail::generate_hq_thumbnail(&app_handle, path).await {
+                Ok(result) => {
+                    // 진행 상태 전송
+                    let progress = ThumbnailProgress {
+                        completed: index + 1,
+                        total,
+                        current_path: path.clone(),
+                    };
+
+                    let _ = app_handle.emit("thumbnail-hq-progress", &progress);
+                    let _ = app_handle.emit("thumbnail-hq-completed", &result);
+                }
+                Err(e) => {
+                    eprintln!("Failed to generate HQ thumbnail for {}: {}", path, e);
+                }
+            }
+        }
+
+        // 모든 고화질 썸네일 생성 완료
+        let _ = app_handle.emit("thumbnail-hq-all-completed", true);
+    });
+}
