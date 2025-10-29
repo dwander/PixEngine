@@ -17,6 +17,11 @@ interface DriveInfo {
   path: string;
 }
 
+interface FolderInfo {
+  name: string;
+  path: string;
+}
+
 export function FolderTreePanel() {
   const [rootNodes, setRootNodes] = useState<FolderNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +51,39 @@ export function FolderTreePanel() {
         icon: "computer",
       };
 
-      setRootNodes([myPCNode]);
+      const nodes: FolderNode[] = [myPCNode];
+
+      // "바탕화면" 폴더
+      try {
+        const desktopInfo = await invoke<FolderInfo | null>("get_desktop_folder");
+        if (desktopInfo) {
+          nodes.push({
+            name: desktopInfo.name,
+            path: desktopInfo.path,
+            isOpen: false,
+            children: undefined,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load desktop folder:", error);
+      }
+
+      // "사진" 폴더
+      try {
+        const pictureInfo = await invoke<FolderInfo | null>("get_picture_folder");
+        if (pictureInfo) {
+          nodes.push({
+            name: pictureInfo.name,
+            path: pictureInfo.path,
+            isOpen: false,
+            children: undefined,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load picture folder:", error);
+      }
+
+      setRootNodes(nodes);
     } catch (error) {
       console.error("Failed to load root structure:", error);
     } finally {
@@ -84,6 +121,8 @@ interface FolderTreeItemProps {
 function FolderTreeItem({ node, level }: FolderTreeItemProps) {
   const [isOpen, setIsOpen] = useState(node.isOpen || false);
   const [children, setChildren] = useState<FolderNode[]>(node.children || []);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasSubdirs, setHasSubdirs] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (node.children !== undefined) {
@@ -91,17 +130,70 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
     }
   }, [node.children]);
 
+  // 서브디렉토리 존재 여부 확인
+  useEffect(() => {
+    const checkSubdirs = async () => {
+      if (!node.isCategory && node.children === undefined && !node.isDrive) {
+        try {
+          const result = await invoke<boolean>("has_subdirectories", { path: node.path });
+          setHasSubdirs(result);
+        } catch (error) {
+          console.warn("Failed to check subdirectories:", node.path, error);
+          setHasSubdirs(false);
+        }
+      }
+    };
+    checkSubdirs();
+  }, [node.path, node.isCategory, node.children, node.isDrive]);
+
   const handleToggle = async () => {
+    // 카테고리는 단순 토글
     if (node.isCategory) {
       setIsOpen(!isOpen);
       return;
     }
 
-    // TODO: 폴더 내용 로드 로직 추가
-    setIsOpen(!isOpen);
+    // 이미 children이 있으면 단순 토글
+    if (node.children !== undefined) {
+      setIsOpen(!isOpen);
+      return;
+    }
+
+    const newIsOpen = !isOpen;
+
+    // 처음 열 때 폴더 내용 로드
+    if (newIsOpen && children.length === 0 && !isLoading) {
+      setIsLoading(true);
+      try {
+        const entries = await invoke<Array<{ name: string; path: string; isDir: boolean }>>(
+          "read_directory_contents",
+          { path: node.path }
+        );
+
+        // 폴더만 필터링
+        const folderNodes: FolderNode[] = entries
+          .filter(entry => entry.isDir)
+          .map(entry => ({
+            name: entry.name,
+            path: entry.path,
+            isOpen: false,
+            children: undefined,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setChildren(folderNodes);
+        setIsOpen(true);
+      } catch (error) {
+        console.error("Failed to read directory:", node.path, error);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      setIsOpen(newIsOpen);
+    }
   };
 
-  const hasChildren = node.isCategory || node.isDrive || children.length > 0;
+  const hasChildren = node.isCategory || node.isDrive || children.length > 0 || isLoading || node.children !== undefined || hasSubdirs === true;
   const isDrive = node.isDrive || false;
 
   const renderIcon = () => {
