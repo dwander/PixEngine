@@ -1,4 +1,4 @@
-import { Folder, FolderOpen, ChevronRight, ChevronDown, HardDrive, Monitor } from "lucide-react";
+import { Folder, FolderOpen, ChevronRight, ChevronDown, HardDrive, Monitor, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
@@ -13,7 +13,9 @@ interface FolderNode {
   imageCount?: number;
   isDrive?: boolean;
   isCategory?: boolean;
-  icon?: 'computer';
+  isFavorite?: boolean;
+  icon?: 'computer' | 'star';
+  treeId?: string; // 트리 구분용 ID (main, favorites 등)
 }
 
 const IMAGE_EXTENSIONS = [
@@ -35,16 +37,24 @@ interface FolderInfo {
 
 interface LastAccessed {
   path: string;
+  treeId: string;
+}
+
+interface Favorite {
+  name: string;
+  path: string;
 }
 
 export function FolderTreePanel() {
   const [rootNodes, setRootNodes] = useState<FolderNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [lastAccessedPath, setLastAccessedPath] = useState<string | undefined>(undefined);
+  const [lastAccessed, setLastAccessed] = useState<LastAccessed | null>(null);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
 
   useEffect(() => {
     const initialize = async () => {
       await loadRootStructure();
+      await loadFavorites();
       await loadLastAccessed();
     };
     initialize();
@@ -55,23 +65,60 @@ export function FolderTreePanel() {
       const store = await load("settings.json");
       const stored = await store.get<LastAccessed>("lastAccessed");
       if (stored) {
-        setLastAccessedPath(stored.path);
+        setLastAccessed(stored);
       }
     } catch (error) {
       console.error("Failed to load last accessed:", error);
     }
   };
 
-  const saveLastAccessed = async (path: string) => {
+  const saveLastAccessed = async (path: string, treeId: string) => {
     try {
-      const data: LastAccessed = { path };
+      const data: LastAccessed = { path, treeId };
       const store = await load("settings.json");
       await store.set("lastAccessed", data);
       await store.save();
-      setLastAccessedPath(path);
+      setLastAccessed(data);
     } catch (error) {
       console.error("Failed to save last accessed:", error);
     }
+  };
+
+  const loadFavorites = async () => {
+    try {
+      const store = await load("settings.json");
+      const stored = await store.get<Favorite[]>("favorites");
+      if (stored) {
+        setFavorites(stored);
+      }
+    } catch (error) {
+      console.error("Failed to load favorites:", error);
+    }
+  };
+
+  const saveFavorites = async (newFavorites: Favorite[]) => {
+    try {
+      const store = await load("settings.json");
+      await store.set("favorites", newFavorites);
+      await store.save();
+      setFavorites(newFavorites);
+    } catch (error) {
+      console.error("Failed to save favorites:", error);
+    }
+  };
+
+  const addFavorite = (name: string, path: string) => {
+    const newFavorites = [...favorites, { name, path }];
+    saveFavorites(newFavorites);
+  };
+
+  const removeFavorite = (path: string) => {
+    const newFavorites = favorites.filter(fav => fav.path !== path);
+    saveFavorites(newFavorites);
+  };
+
+  const isFavorite = (path: string) => {
+    return favorites.some(fav => fav.path === path);
   };
 
   const loadRootStructure = async () => {
@@ -83,6 +130,7 @@ export function FolderTreePanel() {
         isOpen: false,
         children: undefined,
         isDrive: true,
+        treeId: 'main',
       }));
 
       // "내 PC" 카테고리
@@ -93,6 +141,7 @@ export function FolderTreePanel() {
         isCategory: true,
         children: driveNodes,
         icon: "computer",
+        treeId: 'main',
       };
 
       const nodes: FolderNode[] = [myPCNode];
@@ -106,6 +155,7 @@ export function FolderTreePanel() {
             path: desktopInfo.path,
             isOpen: false,
             children: undefined,
+            treeId: 'main',
           });
         }
       } catch (error) {
@@ -121,6 +171,7 @@ export function FolderTreePanel() {
             path: pictureInfo.path,
             isOpen: false,
             children: undefined,
+            treeId: 'main',
           });
         }
       } catch (error) {
@@ -149,10 +200,38 @@ export function FolderTreePanel() {
               key={node.path}
               node={node}
               level={0}
-              lastAccessedPath={lastAccessedPath}
+              lastAccessed={lastAccessed}
               onFolderClick={saveLastAccessed}
+              onAddFavorite={addFavorite}
+              onRemoveFavorite={removeFavorite}
+              isFavorite={isFavorite}
             />
           ))}
+          <FolderTreeItem
+            key="favorites"
+            node={{
+              name: "즐겨찾기",
+              path: "favorites",
+              isOpen: true,
+              isCategory: true,
+              icon: "star",
+              treeId: 'favorites',
+              children: favorites.map((fav, idx) => ({
+                name: fav.name,
+                path: fav.path,
+                isOpen: false,
+                children: undefined,
+                isFavorite: true,
+                treeId: `favorites-${idx}`,
+              })),
+            }}
+            level={0}
+            lastAccessed={lastAccessed}
+            onFolderClick={saveLastAccessed}
+            onAddFavorite={addFavorite}
+            onRemoveFavorite={removeFavorite}
+            isFavorite={isFavorite}
+          />
         </>
       )}
     </div>
@@ -164,7 +243,21 @@ interface FolderTreeItemProps {
   level: number;
 }
 
-function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: FolderTreeItemProps & { lastAccessedPath?: string; onFolderClick?: (path: string) => void }) {
+function FolderTreeItem({
+  node,
+  level,
+  lastAccessed,
+  onFolderClick,
+  onAddFavorite,
+  onRemoveFavorite,
+  isFavorite: checkIsFavorite
+}: FolderTreeItemProps & {
+  lastAccessed?: LastAccessed | null;
+  onFolderClick?: (path: string, treeId: string) => void;
+  onAddFavorite?: (name: string, path: string) => void;
+  onRemoveFavorite?: (path: string) => void;
+  isFavorite?: (path: string) => boolean;
+}) {
   const { setCurrentFolder, currentFolder } = useFolderContext();
   const { loadImageList } = useImageContext();
   const [isOpen, setIsOpen] = useState(node.isOpen || false);
@@ -173,6 +266,7 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
   const [hasSubdirs, setHasSubdirs] = useState<boolean | null>(null);
   const [imagePaths, setImagePaths] = useState<string[]>([]);
   const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (node.children !== undefined) {
@@ -198,18 +292,23 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
 
   // 마지막 접근 경로 자동 복원
   useEffect(() => {
-    if (!lastAccessedPath || hasAutoExpanded || node.isCategory || isLoading) {
+    if (!lastAccessed || hasAutoExpanded || node.isCategory || isLoading) {
       return;
     }
 
     const autoExpand = async () => {
+      // treeId가 다르면 자동 확장하지 않음
+      if (node.treeId !== lastAccessed.treeId) {
+        return;
+      }
+
       // 경로 정규화
       const normalizePath = (path: string) => {
         return path.toLowerCase().replace(/^\\\\\?\\/, '').replace(/\\/g, '/').replace(/\/+$/, '');
       };
 
       const normalizedNodePath = normalizePath(node.path);
-      const normalizedLastPath = normalizePath(lastAccessedPath);
+      const normalizedLastPath = normalizePath(lastAccessed.path);
 
       // 현재 노드가 마지막 접근 경로의 부모이거나 정확히 일치하는지 확인
       const isMatch = normalizedNodePath === normalizedLastPath || normalizedLastPath.startsWith(normalizedNodePath + '/');
@@ -236,7 +335,7 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
           );
           const folderNodes: FolderNode[] = entries
             .filter(entry => entry.isDir)
-            .map(entry => ({ name: entry.name, path: entry.path, isOpen: false, children: undefined }))
+            .map(entry => ({ name: entry.name, path: entry.path, isOpen: false, children: undefined, treeId: node.treeId }))
             .sort((a, b) => a.name.localeCompare(b.name));
           setChildren(folderNodes);
           setIsOpen(true);
@@ -254,7 +353,7 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
     };
 
     autoExpand();
-  }, [lastAccessedPath, hasAutoExpanded, node.isCategory, node.path, isOpen, isLoading, node.children, node.isDrive]);
+  }, [lastAccessed, hasAutoExpanded, node.isCategory, node.path, node.treeId, isOpen, isLoading, node.children, node.isDrive]);
 
   const loadFolderContents = async () => {
     if (isLoading) return;
@@ -277,6 +376,7 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
             path: entry.path,
             isOpen: false,
             children: undefined,
+            treeId: node.treeId, // 부모의 treeId 상속
           });
         } else {
           // 이미지 파일인지 확인
@@ -308,8 +408,8 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
         await loadImageList(imageFiles);
 
         // 마지막 접근 경로 저장
-        if (onFolderClick) {
-          onFolderClick(node.path);
+        if (onFolderClick && node.treeId) {
+          onFolderClick(node.path, node.treeId);
         }
       } else {
         setCurrentFolder(node.path, 0, 0);
@@ -356,8 +456,8 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
         await loadImageList(imagePaths);
 
         // 마지막 접근 경로 저장
-        if (onFolderClick) {
-          onFolderClick(node.path);
+        if (onFolderClick && node.treeId) {
+          onFolderClick(node.path, node.treeId);
         }
       }
     }
@@ -372,9 +472,49 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
   };
   const isCurrentFolder = currentFolder && normalizePathForComparison(node.path) === normalizePathForComparison(currentFolder);
 
+  // 컨텍스트 메뉴 외부 클릭 감지
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu) {
+        setContextMenu(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [contextMenu]);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    // 카테고리는 우클릭 메뉴 없음
+    if (node.isCategory) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleAddFavorite = () => {
+    if (onAddFavorite) {
+      onAddFavorite(node.name, node.path);
+    }
+    setContextMenu(null);
+  };
+
+  const handleRemoveFavorite = () => {
+    if (onRemoveFavorite) {
+      onRemoveFavorite(node.path);
+    }
+    setContextMenu(null);
+  };
+
+  const isInFavorites = checkIsFavorite ? checkIsFavorite(node.path) : false;
+
   const renderIcon = () => {
     if (node.icon === 'computer') {
       return <Monitor className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />;
+    }
+    if (node.icon === 'star') {
+      return <Star className="h-3.5 w-3.5 flex-shrink-0 text-yellow-400" />;
     }
     if (isDrive) {
       return <HardDrive className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />;
@@ -395,6 +535,7 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
         }`}
         style={{ paddingLeft: `${level * 14 + 6}px` }}
         onClick={handleToggle}
+        onContextMenu={handleContextMenu}
       >
         {hasChildren ? (
           isOpen ? (
@@ -409,6 +550,7 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
         <span className={`text-xs flex-1 truncate ${isCurrentFolder ? 'text-blue-300 font-semibold' : 'text-gray-200'}`}>
           {node.name}
         </span>
+        {node.isFavorite && <Star className="h-2.5 w-2.5 text-yellow-400 fill-yellow-400" />}
       </div>
       {isOpen && (
         <div>
@@ -417,10 +559,35 @@ function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: Folder
               key={child.path}
               node={child}
               level={level + 1}
-              lastAccessedPath={lastAccessedPath}
+              lastAccessed={lastAccessed}
               onFolderClick={onFolderClick}
+              onAddFavorite={onAddFavorite}
+              onRemoveFavorite={onRemoveFavorite}
+              isFavorite={checkIsFavorite}
             />
           ))}
+        </div>
+      )}
+      {contextMenu && (
+        <div
+          className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-50 min-w-[10rem]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {isInFavorites || node.isFavorite ? (
+            <button
+              className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200"
+              onClick={handleRemoveFavorite}
+            >
+              즐겨찾기에서 제거
+            </button>
+          ) : (
+            <button
+              className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200"
+              onClick={handleAddFavorite}
+            >
+              즐겨찾기에 추가
+            </button>
+          )}
         </div>
       )}
     </div>
