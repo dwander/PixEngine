@@ -40,6 +40,8 @@ export function ThumbnailPanel() {
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [hqProgress, setHqProgress] = useState<ThumbnailProgress | null>(null)
+  const [isGeneratingHq, setIsGeneratingHq] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
   const [isVertical, setIsVertical] = useState(true)
@@ -97,6 +99,8 @@ export function ThumbnailPanel() {
       setThumbnails(new Map())
       setProgress(null)
       setIsGenerating(false)
+      setHqProgress(null)
+      setIsGeneratingHq(false)
       return
     }
 
@@ -132,16 +136,49 @@ export function ThumbnailPanel() {
       })
     })
 
-    const unlistenAllCompleted = listen('thumbnail-all-completed', () => {
+    const unlistenAllCompleted = listen('thumbnail-all-completed', async () => {
       setIsGenerating(false)
+
+      // EXIF 썸네일 생성 완료 후 고화질 DCT 썸네일 생성 시작
+      try {
+        setIsGeneratingHq(true)
+        setHqProgress({ completed: 0, total: images.length, current_path: '' })
+
+        await invoke('start_hq_thumbnail_generation', {
+          imagePaths: images,
+        })
+      } catch (error) {
+        console.error('Failed to start HQ thumbnail generation:', error)
+        setIsGeneratingHq(false)
+      }
+    })
+
+    // 고화질 썸네일 이벤트 리스너
+    const unlistenHqProgress = listen<ThumbnailProgress>('thumbnail-hq-progress', (event) => {
+      setHqProgress(event.payload)
+    })
+
+    const unlistenHqCompleted = listen<ThumbnailResult>('thumbnail-hq-completed', (event) => {
+      setThumbnails((prev) => {
+        const next = new Map(prev)
+        next.set(event.payload.path, event.payload)
+        return next
+      })
+    })
+
+    const unlistenHqAllCompleted = listen('thumbnail-hq-all-completed', () => {
+      setIsGeneratingHq(false)
     })
 
     return () => {
       unlistenProgress.then((fn) => fn())
       unlistenCompleted.then((fn) => fn())
       unlistenAllCompleted.then((fn) => fn())
+      unlistenHqProgress.then((fn) => fn())
+      unlistenHqCompleted.then((fn) => fn())
+      unlistenHqAllCompleted.then((fn) => fn())
     }
-  }, [])
+  }, [images])
 
   // 뷰포트 내 이미지 우선순위 업데이트
   const handleVisibleRangeChange = useCallback(
@@ -257,12 +294,22 @@ export function ThumbnailPanel() {
           <div className="flex items-center justify-between gap-3">
             {/* 진행 상태 */}
             <div className="flex items-center gap-2">
-              {progress && (
+              {/* EXIF 썸네일 진행 */}
+              {progress && isGenerating && (
                 <>
                   <span className="text-xs text-gray-400 whitespace-nowrap">
                     {progress.completed}/{progress.total}
                   </span>
-                  {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                </>
+              )}
+              {/* 고화질 DCT 썸네일 진행 (다른 색상) */}
+              {hqProgress && isGeneratingHq && (
+                <>
+                  <span className="text-xs text-blue-400 whitespace-nowrap">
+                    {hqProgress.completed}/{hqProgress.total}
+                  </span>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
                 </>
               )}
             </div>
