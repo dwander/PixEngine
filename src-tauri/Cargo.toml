@@ -1,0 +1,51 @@
+[package]
+name = "pixengine"
+version = "0.1.0"
+description = "PixEngine - 고성능 이미지 뷰어 & 컬링 툴"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "tauri_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 비동기 런타임
+tokio = { version = "1", features = ["full"] }
+
+# 이미지 처리
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+
+# 병렬 처리
+rayon = "1.10"
+
+# 캐싱
+dashmap = "6.0"
+lru = "0.12"
+
+# 파일 시스템
+walkdir = "2"
+
+# 메타데이터
+kamadak-exif = "0.5"
+
+[profile.release]
+opt-level = 3        # 최대 최적화
+lto = true           # Link Time Optimization
+codegen-units = 1    # 단일 코드 생성 유닛 (더 나은 최적화)
+strip = true         # 심볼 제거 (파일 크기 감소)
+panic = "abort"      # 패닉 시 언와인딩 대신 즉시 종료
+

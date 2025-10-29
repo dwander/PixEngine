@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git for-each-ref:*)",
+      "Bash(git update-ref:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run check:*)",
+      "Bash(npm run:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "includeCoAuthoredBy": false,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat .claude/coding-rules.md"
+          }
+        ]
+      }
+    ]
+  }
+}

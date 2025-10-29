@@ -1,0 +1,84 @@
+/* PixEngine 커스텀 dark 테마 */
+.dockview-theme-dark {
+  /* 아웃라인 및 포커스 */
+  --dv-paneview-active-outline-color: #3b82f6; /* blue-500 */
+
+  /* 탭 관련 크기 */
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-height: 28px; /* 타이틀바와 비슷한 높이 */
+
+  /* 드래그 오버 효과 */
+  --dv-drag-over-background-color: rgba(59, 130, 246, 0.15); /* blue-500 with opacity */
+  --dv-drag-over-border-color: #3b82f6;
+
+  /* 스크롤바 */
+  --dv-tabs-container-scrollbar-color: #525252; /* neutral-600 */
+
+  /* 아이콘 호버 */
+  --dv-icon-hover-background-color: #404040; /* neutral-700 */
+
+  /* 플로팅 섀도우 */
+  --dv-floating-box-shadow: 8px 8px 16px 0px rgba(0, 0, 0, 0.5);
+
+  /* Z-인덱스 */
+  --dv-overlay-z-index: 999;
+
+  /* 탭 스타일 */
+  --dv-tab-font-size: inherit;
+  --dv-border-radius: 0px;
+  --dv-tab-margin: 0;
+
+  /* 패널 구분선 (Sash) - 탭 배경색 + 호버 시 밝게 */
+  --dv-sash-color: #1c1c1c; /* 탭 헤더 배경색과 동일 */
+  --dv-active-sash-color: #525252; /* neutral-600 - 호버 시 밝게 표시 */
+  --dv-active-sash-transition-duration: 0.15s;
+  --dv-active-sash-transition-delay: 0s;
+
+  /* 배경색 - PixEngine 테마에 맞춤 */
+  --dv-group-view-background-color: #171717; /* neutral-900 */
+  --dv-tabs-and-actions-container-background-color: #1c1c1c; /* 살짝 밝은 톤 */
+
+  /* 활성 그룹 탭 배경 */
+  --dv-activegroup-visiblepanel-tab-background-color: #262626; /* neutral-800 */
+  --dv-activegroup-hiddenpanel-tab-background-color: #1c1c1c;
+
+  /* 비활성 그룹 탭 배경 */
+  --dv-inactivegroup-visiblepanel-tab-background-color: #1c1c1c;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #171717;
+
+  /* 탭 구분선 */
+  --dv-tab-divider-color: #404040; /* neutral-700 */
+
+  /* 활성 그룹 탭 텍스트 색상 */
+  --dv-activegroup-visiblepanel-tab-color: #e5e5e5; /* gray-200 */
+  --dv-activegroup-hiddenpanel-tab-color: #a3a3a3; /* gray-400 */
+
+  /* 비활성 그룹 탭 텍스트 색상 */
+  --dv-inactivegroup-visiblepanel-tab-color: #737373; /* gray-500 */
+  --dv-inactivegroup-hiddenpanel-tab-color: #525252; /* gray-600 */
+
+  /* 구분선 - 탭 헤더 배경색과 동일하게 */
+  --dv-separator-border: #1c1c1c; /* tabs-and-actions-container-background-color와 동일 */
+
+  /* 패널뷰 헤더 */
+  --dv-paneview-header-border-color: rgba(64, 64, 64, 0.3);
+
+  /* 스크롤바 배경 */
+  --dv-scrollbar-background-color: rgba(82, 82, 82, 0.5);
+}
+
+/* 드롭 타겟 애니메이션 */
+.dockview-theme-dark .dv-drop-target-container .dv-drop-target-anchor.dv-drop-target-anchor-container-changed {
+  opacity: 0;
+  transition: none;
+}
+
+/* Sash 구분선 두께 커스터마이징 */
+.dockview-theme-dark .dv-sash {
+  width: 3px !important;
+}
+
+.dockview-theme-dark .dv-sash.dv-sash-horizontal {
+  height: 3px !important;
+  width: auto !important;
+}
