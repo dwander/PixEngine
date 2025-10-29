@@ -45,6 +45,7 @@ export function ThumbnailPanel() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
   const [isVertical, setIsVertical] = useState(true)
+  const [enableHqThumbnails, setEnableHqThumbnails] = useState(false) // HQ 썸네일 생성 활성화
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
@@ -139,7 +140,11 @@ export function ThumbnailPanel() {
     const unlistenAllCompleted = listen('thumbnail-all-completed', async () => {
       setIsGenerating(false)
 
-      // EXIF 썸네일 생성 완료 후 고화질 DCT 썸네일 생성 시작
+      // EXIF 썸네일 생성 완료 후 고화질 DCT 썸네일 생성 시작 (토글이 켜져있을 때만)
+      if (!enableHqThumbnails) {
+        return
+      }
+
       try {
         setIsGeneratingHq(true)
         setHqProgress({ completed: 0, total: images.length, current_path: '' })
@@ -178,7 +183,7 @@ export function ThumbnailPanel() {
       unlistenHqCompleted.then((fn) => fn())
       unlistenHqAllCompleted.then((fn) => fn())
     }
-  }, [images])
+  }, [images, enableHqThumbnails])
 
   // 뷰포트 내 이미지 우선순위 업데이트
   const handleVisibleRangeChange = useCallback(
@@ -293,25 +298,36 @@ export function ThumbnailPanel() {
         <div className="border-t border-neutral-700 bg-neutral-800 px-4 py-2">
           <div className="flex items-center justify-between gap-3">
             {/* 진행 상태 */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {/* EXIF 썸네일 진행 */}
-              {progress && isGenerating && (
+              {progress && (
                 <>
                   <span className="text-xs text-gray-400 whitespace-nowrap">
                     {progress.completed}/{progress.total}
                   </span>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                  {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
                 </>
               )}
               {/* 고화질 DCT 썸네일 진행 (다른 색상) */}
-              {hqProgress && isGeneratingHq && (
+              {hqProgress && (
                 <>
                   <span className="text-xs text-blue-400 whitespace-nowrap">
                     {hqProgress.completed}/{hqProgress.total}
                   </span>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                  {isGeneratingHq && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
                 </>
               )}
+
+              {/* HQ 썸네일 토글 */}
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableHqThumbnails}
+                  onChange={(e) => setEnableHqThumbnails(e.target.checked)}
+                  className="w-3 h-3 cursor-pointer"
+                />
+                <span className="text-xs text-gray-400 whitespace-nowrap">HQ</span>
+              </label>
             </div>
 
             {/* 썸네일 크기 조절 슬라이더 */}
