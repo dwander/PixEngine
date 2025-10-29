@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import {
   DockviewReact,
   DockviewReadyEvent,
@@ -6,6 +6,7 @@ import {
 } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
 import "../../styles/dockview-theme-dark.css";
+import { useLayoutState } from "../../hooks/useLayoutState";
 
 // 임시 패널 컴포넌트들
 function ImageViewerPanel(_props: IDockviewPanelProps) {
@@ -62,9 +63,29 @@ const components = {
 
 export function MainLayout() {
   const api = useRef<DockviewReadyEvent | null>(null);
+  const { loadLayoutState, saveLayoutState } = useLayoutState();
 
-  const onReady = (event: DockviewReadyEvent) => {
+  // 고정할 패널 크기 추적
+  const fixedPanelSizes = useRef<{
+    folderWidth: number;
+    metadataHeight: number;
+    thumbnailWidth: number;
+  }>({
+    folderWidth: 250,
+    metadataHeight: 300,
+    thumbnailWidth: 200,
+  });
+
+  const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;
+
+    // 저장된 레이아웃 크기 로드
+    const savedLayout = await loadLayoutState();
+    fixedPanelSizes.current = {
+      folderWidth: savedLayout.folderWidth,
+      metadataHeight: savedLayout.metadataHeight,
+      thumbnailWidth: savedLayout.thumbnailWidth,
+    };
 
     // 기본 레이아웃 구성
     // 중앙: 이미지 뷰어 (메인, 탭 헤더 숨김)
@@ -106,17 +127,87 @@ export function MainLayout() {
       position: { direction: "right" },
     });
 
-    // 초기 크기 조정
+    // 저장된 크기로 초기 설정
     if (folderPanel?.api) {
-      folderPanel.api.setSize({ width: 250 });
+      folderPanel.api.setSize({ width: fixedPanelSizes.current.folderWidth });
     }
     if (metadataPanel?.api) {
-      metadataPanel.api.setSize({ height: 300 });
+      metadataPanel.api.setSize({ height: fixedPanelSizes.current.metadataHeight });
     }
     if (thumbnailPanel?.api) {
-      thumbnailPanel.api.setSize({ width: 200 });
+      thumbnailPanel.api.setSize({ width: fixedPanelSizes.current.thumbnailWidth });
     }
+
+    // 패널 크기 변경 시 저장
+    event.api.onDidLayoutChange(() => {
+      const folder = event.api.getPanel("folders");
+      const metadata = event.api.getPanel("metadata");
+      const thumbnail = event.api.getPanel("thumbnails");
+
+      if (folder?.group) {
+        fixedPanelSizes.current.folderWidth = folder.group.width;
+      }
+      if (metadata?.group) {
+        fixedPanelSizes.current.metadataHeight = metadata.group.height;
+      }
+      if (thumbnail?.group) {
+        fixedPanelSizes.current.thumbnailWidth = thumbnail.group.width;
+      }
+
+      // 디바운스된 저장
+      saveLayoutState(fixedPanelSizes.current);
+    });
   };
+
+  // 창 크기 변경 시 고정 패널 크기 복원
+  useEffect(() => {
+    const restorePanelSizes = () => {
+      if (!api.current) return;
+
+      // dockview의 resize 이후에 실행
+      requestAnimationFrame(() => {
+        if (!api.current) return;
+
+        const folderPanel = api.current.api.getPanel("folders");
+        const metadataPanel = api.current.api.getPanel("metadata");
+        const thumbnailPanel = api.current.api.getPanel("thumbnails");
+
+        if (folderPanel?.group) {
+          folderPanel.group.api.setSize({
+            width: fixedPanelSizes.current.folderWidth,
+          });
+        }
+
+        if (metadataPanel?.group) {
+          metadataPanel.group.api.setSize({
+            height: fixedPanelSizes.current.metadataHeight,
+          });
+        }
+
+        if (thumbnailPanel?.group) {
+          thumbnailPanel.group.api.setSize({
+            width: fixedPanelSizes.current.thumbnailWidth,
+          });
+        }
+      });
+    };
+
+    window.addEventListener("resize", restorePanelSizes);
+
+    // 디바운스된 복원 (최대화/복원 등)
+    let resizeTimeout: number;
+    const debouncedRestore = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = window.setTimeout(restorePanelSizes, 100);
+    };
+    window.addEventListener("resize", debouncedRestore);
+
+    return () => {
+      window.removeEventListener("resize", restorePanelSizes);
+      window.removeEventListener("resize", debouncedRestore);
+      clearTimeout(resizeTimeout);
+    };
+  }, []);
 
   return (
     <DockviewReact
