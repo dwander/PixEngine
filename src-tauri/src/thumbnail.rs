@@ -378,40 +378,11 @@ pub fn encode_to_base64(data: &[u8]) -> String {
 
 /// 썸네일 생성 (캐시 우선, EXIF → DCT fallback)
 pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ThumbnailResult, String> {
-    let mtime = get_file_mtime(file_path)?;
-    let cache_key = generate_cache_key(file_path, mtime);
-    let cache_path = get_cache_path(app_handle, &cache_key)?;
-
     // 항상 원본 이미지에서 EXIF 메타데이터 추출 (orientation 정보 필수)
     let exif_metadata = extract_exif_metadata(file_path).ok();
 
-    // 1. 캐시 확인
-    if cache_path.exists() {
-        let cached_data = fs::read(&cache_path)
-            .map_err(|e| format!("Failed to read cache: {}", e))?;
-
-        let thumbnail_base64 = encode_to_base64(&cached_data);
-
-        // 캐시된 이미지 크기 확인
-        let img = image::load_from_memory(&cached_data)
-            .map_err(|e| format!("Failed to decode cached image: {}", e))?;
-
-        return Ok(ThumbnailResult {
-            path: file_path.to_string(),
-            thumbnail_base64,
-            width: img.width(),
-            height: img.height(),
-            source: ThumbnailSource::Cache,
-            exif_metadata,
-        });
-    }
-
-    // 3. EXIF 썸네일 추출 시도
+    // 1. EXIF 썸네일 추출 시도 (캐시 없이 항상 추출 - 매우 빠름)
     if let Ok(exif_thumb) = extract_exif_thumbnail(file_path) {
-        // EXIF 썸네일을 캐시에 저장
-        fs::write(&cache_path, &exif_thumb)
-            .map_err(|e| format!("Failed to write cache: {}", e))?;
-
         let thumbnail_base64 = encode_to_base64(&exif_thumb);
 
         let img = image::load_from_memory(&exif_thumb)
@@ -427,11 +398,35 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
         });
     }
 
-    // 4. DCT 스케일링 fallback
+    // 2. HQ 캐시 확인 (EXIF 썸네일이 없는 경우)
+    let mtime = get_file_mtime(file_path)?;
+    let cache_key = generate_cache_key(file_path, mtime);
+    let cache_path = get_cache_path(app_handle, &cache_key)?;
+
+    if cache_path.exists() {
+        let cached_data = fs::read(&cache_path)
+            .map_err(|e| format!("Failed to read cache: {}", e))?;
+
+        let thumbnail_base64 = encode_to_base64(&cached_data);
+
+        let img = image::load_from_memory(&cached_data)
+            .map_err(|e| format!("Failed to decode cached image: {}", e))?;
+
+        return Ok(ThumbnailResult {
+            path: file_path.to_string(),
+            thumbnail_base64,
+            width: img.width(),
+            height: img.height(),
+            source: ThumbnailSource::Cache,
+            exif_metadata,
+        });
+    }
+
+    // 3. DCT 스케일링 fallback (EXIF도 없고 캐시도 없는 경우)
     let (rgb_data, width, height) = generate_dct_thumbnail(file_path, 320)?;
     let jpeg_data = encode_thumbnail_to_jpeg(&rgb_data, width, height)?;
 
-    // 캐시에 저장
+    // HQ 캐시에 저장
     fs::write(&cache_path, &jpeg_data)
         .map_err(|e| format!("Failed to write cache: {}", e))?;
 
