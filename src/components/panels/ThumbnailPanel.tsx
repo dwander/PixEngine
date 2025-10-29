@@ -36,10 +36,11 @@ interface ThumbnailProgress {
 }
 
 export function ThumbnailPanel() {
-  const { imageList: images } = useImageContext()
+  const { imageList: images, loadImage } = useImageContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   // 썸네일 생성 시작
   useEffect(() => {
@@ -156,9 +157,19 @@ export function ThumbnailPanel() {
               ? getOrientationTransform(thumbnail.exif_metadata.orientation)
               : ''
 
+            const isSelected = selectedImage === imagePath
+
             return (
               <div className="p-2">
-                <div className="group relative aspect-square overflow-hidden rounded-lg bg-neutral-800">
+                <div
+                  className={`group relative aspect-square cursor-pointer overflow-hidden rounded-lg ${
+                    isSelected ? 'ring-2 ring-blue-500 bg-neutral-700' : 'bg-neutral-800'
+                  } hover:bg-neutral-700 transition-colors`}
+                  onClick={() => {
+                    setSelectedImage(imagePath)
+                    loadImage(imagePath)
+                  }}
+                >
                   {thumbnail ? (
                     <img
                       src={`data:image/jpeg;base64,${thumbnail.thumbnail_base64}`}

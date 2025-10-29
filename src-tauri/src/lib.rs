@@ -414,10 +414,46 @@ async fn get_completed_thumbnails(
     Ok(queue.get_all_completed().await)
 }
 
+// 이미지 정보 가져오기
+#[derive(Serialize)]
+struct ImageInfo {
+    path: String,
+    width: u32,
+    height: u32,
+    file_size: u64,
+}
+
+#[tauri::command]
+async fn get_image_info(file_path: String) -> Result<ImageInfo, String> {
+    use image::ImageReader;
+
+    // ImageReader로 메타데이터만 빠르게 읽기 (디코딩 안함!)
+    let reader = ImageReader::open(&file_path)
+        .map_err(|e| format!("Failed to open image: {}", e))?
+        .with_guessed_format()
+        .map_err(|e| format!("Failed to guess format: {}", e))?;
+
+    let (width, height) = reader
+        .into_dimensions()
+        .map_err(|e| format!("Failed to get dimensions: {}", e))?;
+
+    let file_size = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to get file size: {}", e))?
+        .len();
+
+    Ok(ImageInfo {
+        path: file_path,
+        width,
+        height,
+        file_size,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
 
@@ -456,7 +492,8 @@ pub fn run() {
             update_thumbnail_priorities,
             pause_thumbnail_generation,
             resume_thumbnail_generation,
-            get_completed_thumbnails
+            get_completed_thumbnails,
+            get_image_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

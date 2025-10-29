@@ -24,6 +24,29 @@
     "core:window:allow-outer-position",
     "core:window:allow-start-dragging",
     "core:window:allow-show",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "fs:default",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        "C:/**",
+        "D:/**",
+        "E:/**",
+        "F:/**",
+        "S:/**",
+        "Z:/**"
+      ]
+    },
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "C:/**",
+        "D:/**",
+        "E:/**",
+        "F:/**",
+        "S:/**",
+        "Z:/**"
+      ]
+    }
   ]
 }
