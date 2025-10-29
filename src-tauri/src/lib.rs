@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 mod thumbnail;
 mod thumbnail_queue;
+mod idle_detector;
 
 use thumbnail_queue::ThumbnailQueueManager;
 

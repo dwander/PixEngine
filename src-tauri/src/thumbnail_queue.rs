@@ -2,9 +2,11 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
+use tokio::time::{sleep, Duration};
 use tauri::{AppHandle, Emitter};
 
 use crate::thumbnail::{self, ThumbnailResult};
+use crate::idle_detector;
 
 /// 고화질 썸네일 생성 취소 플래그 (전역)
 static HQ_GENERATION_CANCELLED: AtomicBool = AtomicBool::new(false);
@@ -258,6 +260,19 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
                 eprintln!("HQ thumbnail generation cancelled");
                 let _ = app_handle.emit("thumbnail-hq-cancelled", true);
                 return;
+            }
+
+            // 유휴 시간 확인 (5초 이상 입력 없으면 활성, 아니면 대기)
+            while !idle_detector::is_idle(5000) {
+                // 유휴 상태가 아니면 1초 대기 후 재확인
+                sleep(Duration::from_secs(1)).await;
+
+                // 대기 중에도 취소 플래그 확인
+                if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
+                    eprintln!("HQ thumbnail generation cancelled during idle wait");
+                    let _ = app_handle.emit("thumbnail-hq-cancelled", true);
+                    return;
+                }
             }
 
             // 고화질 DCT 썸네일 생성
