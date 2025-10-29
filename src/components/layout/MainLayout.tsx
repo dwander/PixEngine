@@ -64,6 +64,7 @@ const components = {
 export function MainLayout() {
   const api = useRef<DockviewReadyEvent | null>(null);
   const { loadLayoutState, saveLayoutState } = useLayoutState();
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
   // 고정할 패널 크기 추적
   const fixedPanelSizes = useRef<{
@@ -79,135 +80,84 @@ export function MainLayout() {
   const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;
 
-    // 저장된 레이아웃 크기 로드
-    const savedLayout = await loadLayoutState();
-    fixedPanelSizes.current = {
-      folderWidth: savedLayout.folderWidth,
-      metadataHeight: savedLayout.metadataHeight,
-      thumbnailWidth: savedLayout.thumbnailWidth,
-    };
+    // 저장된 dockview 레이아웃 복원 시도
+    let layoutRestored = false;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const savedLayout = await invoke<any>("load_dockview_layout");
 
-    // 기본 레이아웃 구성
-    // 중앙: 이미지 뷰어 (메인, 탭 헤더 숨김)
+      if (savedLayout) {
+        event.api.fromJSON(savedLayout);
+
+        // 이미지 뷰어 탭 헤더 숨기기 (복원 후)
+        const centerPanel = event.api.getPanel("center");
+        if (centerPanel?.group) {
+          (centerPanel.group as any).header.hidden = true;
+        }
+
+        layoutRestored = true;
+      }
+    } catch (error) {
+      console.warn('[Layout] Failed to restore layout, creating default:', error);
+    }
+
+    // 기본 레이아웃 구성 (복원 실패 시에만)
+    if (!layoutRestored) {
+    // 중앙: 이미지 뷰어
     const centerPanel = event.api.addPanel({
       id: "center",
       component: "imageViewer",
       title: "Viewer",
     });
 
-    // 이미지 뷰어 그룹의 탭 헤더 숨기기
     if (centerPanel?.group) {
       (centerPanel.group as any).header.hidden = true;
     }
 
     // 왼쪽: 폴더 트리
-    const folderPanel = event.api.addPanel({
+    event.api.addPanel({
       id: "folders",
       component: "folderTree",
       title: "Folders",
       position: { direction: "left" },
     });
 
-    // 왼쪽 하단: 메타데이터 (폴더 패널과 같은 그룹에 아래쪽으로 분할)
-    const metadataPanel = event.api.addPanel({
+    // 왼쪽: 메타데이터 (폴더와 같은 곳에 탭으로)
+    event.api.addPanel({
       id: "metadata",
       component: "metadata",
       title: "Metadata",
-      position: {
-        referencePanel: folderPanel,
-        direction: "below",
-      },
+      position: { direction: "left" },
     });
 
-    // 오른쪽: 썸네일 스트립
-    const thumbnailPanel = event.api.addPanel({
-      id: "thumbnails",
-      component: "thumbnails",
-      title: "Thumbnails",
-      position: { direction: "right" },
-    });
-
-    // 저장된 크기로 초기 설정
-    if (folderPanel?.api) {
-      folderPanel.api.setSize({ width: fixedPanelSizes.current.folderWidth });
-    }
-    if (metadataPanel?.api) {
-      metadataPanel.api.setSize({ height: fixedPanelSizes.current.metadataHeight });
-    }
-    if (thumbnailPanel?.api) {
-      thumbnailPanel.api.setSize({ width: fixedPanelSizes.current.thumbnailWidth });
+      // 오른쪽: 썸네일
+      event.api.addPanel({
+        id: "thumbnails",
+        component: "thumbnails",
+        title: "Thumbnails",
+        position: { direction: "right" },
+      });
     }
 
-    // 패널 크기 변경 시 저장
+    // 레이아웃 변경 시 자동 저장 (디바운스) - 항상 등록
     event.api.onDidLayoutChange(() => {
-      const folder = event.api.getPanel("folders");
-      const metadata = event.api.getPanel("metadata");
-      const thumbnail = event.api.getPanel("thumbnails");
-
-      if (folder?.group) {
-        fixedPanelSizes.current.folderWidth = folder.group.width;
-      }
-      if (metadata?.group) {
-        fixedPanelSizes.current.metadataHeight = metadata.group.height;
-      }
-      if (thumbnail?.group) {
-        fixedPanelSizes.current.thumbnailWidth = thumbnail.group.width;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
 
-      // 디바운스된 저장
-      saveLayoutState(fixedPanelSizes.current);
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const layout = event.api.toJSON();
+          await invoke("save_dockview_layout", { layout });
+        } catch (error) {
+          console.error('[Layout] Save failed:', error);
+        }
+      }, 500);
     });
   };
 
-  // 창 크기 변경 시 고정 패널 크기 복원
-  useEffect(() => {
-    const restorePanelSizes = () => {
-      if (!api.current) return;
-
-      // dockview의 resize 이후에 실행
-      requestAnimationFrame(() => {
-        if (!api.current) return;
-
-        const folderPanel = api.current.api.getPanel("folders");
-        const metadataPanel = api.current.api.getPanel("metadata");
-        const thumbnailPanel = api.current.api.getPanel("thumbnails");
-
-        if (folderPanel?.group) {
-          folderPanel.group.api.setSize({
-            width: fixedPanelSizes.current.folderWidth,
-          });
-        }
-
-        if (metadataPanel?.group) {
-          metadataPanel.group.api.setSize({
-            height: fixedPanelSizes.current.metadataHeight,
-          });
-        }
-
-        if (thumbnailPanel?.group) {
-          thumbnailPanel.group.api.setSize({
-            width: fixedPanelSizes.current.thumbnailWidth,
-          });
-        }
-      });
-    };
-
-    window.addEventListener("resize", restorePanelSizes);
-
-    // 디바운스된 복원 (최대화/복원 등)
-    let resizeTimeout: number;
-    const debouncedRestore = () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = window.setTimeout(restorePanelSizes, 100);
-    };
-    window.addEventListener("resize", debouncedRestore);
-
-    return () => {
-      window.removeEventListener("resize", restorePanelSizes);
-      window.removeEventListener("resize", debouncedRestore);
-      clearTimeout(resizeTimeout);
-    };
-  }, []);
+  // dockview가 레이아웃을 자동으로 관리하므로 별도의 resize 로직 불필요
 
   return (
     <DockviewReact

@@ -35,6 +35,14 @@ fn get_layout_state_path(app: &tauri::AppHandle) -> PathBuf {
         .join("layout-state.json")
 }
 
+// dockview 레이아웃 파일 경로 가져오기
+fn get_dockview_layout_path(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .expect("Failed to get app data dir")
+        .join("dockview-layout.json")
+}
+
 // 저장된 윈도우 상태 로드
 fn load_window_state(app: &tauri::AppHandle) -> Option<WindowState> {
     let path = get_window_state_path(app);
@@ -124,6 +132,35 @@ fn load_layout_state(app: tauri::AppHandle) -> Result<Option<LayoutState>, Strin
     }
 }
 
+// dockview 레이아웃 저장
+#[tauri::command]
+fn save_dockview_layout(app: tauri::AppHandle, layout: serde_json::Value) -> Result<(), String> {
+    let path = get_dockview_layout_path(&app);
+
+    // 디렉토리가 없으면 생성
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let content = serde_json::to_string_pretty(&layout).map_err(|e| e.to_string())?;
+    fs::write(path, content).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+// dockview 레이아웃 로드
+#[tauri::command]
+fn load_dockview_layout(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
+    let path = get_dockview_layout_path(&app);
+    if path.exists() {
+        let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let layout: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        Ok(Some(layout))
+    } else {
+        Ok(None)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -147,7 +184,9 @@ pub fn run() {
             save_window_state,
             show_window,
             save_layout_state,
-            load_layout_state
+            load_layout_state,
+            save_dockview_layout,
+            load_dockview_layout
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
