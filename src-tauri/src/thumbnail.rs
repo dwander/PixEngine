@@ -92,18 +92,20 @@ pub fn get_file_mtime(path: &str) -> Result<u64, String> {
 
 /// 캐시 디렉토리 가져오기
 pub fn get_cache_dir() -> Result<PathBuf, String> {
-    let local_data = dirs::data_local_dir()
-        .ok_or_else(|| "Failed to get local data directory".to_string())?;
+    let app_data = dirs::data_local_dir()
+        .ok_or_else(|| "Failed to get local data directory".to_string())?
+        .join("com.dqsty.pixengine");
 
-    Ok(local_data.join("imageviewer").join("thumbnails"))
+    Ok(app_data.join("thumbnails"))
 }
 
 /// 메타데이터 디렉토리 가져오기
 pub fn get_metadata_dir() -> Result<PathBuf, String> {
-    let local_data = dirs::data_local_dir()
-        .ok_or_else(|| "Failed to get local data directory".to_string())?;
+    let app_data = dirs::data_local_dir()
+        .ok_or_else(|| "Failed to get local data directory".to_string())?
+        .join("com.dqsty.pixengine");
 
-    Ok(local_data.join("imageviewer").join("metadata"))
+    Ok(app_data.join("metadata"))
 }
 
 /// 캐시 파일 경로 가져오기

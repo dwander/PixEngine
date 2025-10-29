@@ -1,9 +1,14 @@
-use tauri::{Manager, PhysicalPosition, PhysicalSize};
+use tauri::{Manager, PhysicalPosition, PhysicalSize, State};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 mod thumbnail;
+mod thumbnail_queue;
+
+use thumbnail_queue::ThumbnailQueueManager;
 
 #[derive(Serialize)]
 struct DriveInfo {
@@ -354,6 +359,58 @@ async fn generate_thumbnail_for_image(file_path: String) -> Result<thumbnail::Th
     thumbnail::generate_thumbnail(&file_path).await
 }
 
+// 썸네일 배치 생성 시작
+#[tauri::command]
+async fn start_thumbnail_generation(
+    image_paths: Vec<String>,
+    queue: State<'_, Arc<Mutex<ThumbnailQueueManager>>>,
+) -> Result<(), String> {
+    let queue = queue.lock().await;
+    queue.initialize(image_paths).await;
+    queue.start_worker().await;
+    Ok(())
+}
+
+// 썸네일 우선순위 업데이트
+#[tauri::command]
+async fn update_thumbnail_priorities(
+    visible_indices: Vec<usize>,
+    queue: State<'_, Arc<Mutex<ThumbnailQueueManager>>>,
+) -> Result<(), String> {
+    let queue = queue.lock().await;
+    queue.update_priorities(visible_indices).await;
+    Ok(())
+}
+
+// 썸네일 생성 일시정지
+#[tauri::command]
+async fn pause_thumbnail_generation(
+    queue: State<'_, Arc<Mutex<ThumbnailQueueManager>>>,
+) -> Result<(), String> {
+    let queue = queue.lock().await;
+    queue.pause().await;
+    Ok(())
+}
+
+// 썸네일 생성 재개
+#[tauri::command]
+async fn resume_thumbnail_generation(
+    queue: State<'_, Arc<Mutex<ThumbnailQueueManager>>>,
+) -> Result<(), String> {
+    let queue = queue.lock().await;
+    queue.resume().await;
+    Ok(())
+}
+
+// 완료된 썸네일 가져오기
+#[tauri::command]
+async fn get_completed_thumbnails(
+    queue: State<'_, Arc<Mutex<ThumbnailQueueManager>>>,
+) -> Result<std::collections::HashMap<String, thumbnail::ThumbnailResult>, String> {
+    let queue = queue.lock().await;
+    Ok(queue.get_all_completed().await)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -371,6 +428,10 @@ pub fn run() {
                 }
             }
 
+            // 썸네일 큐 매니저 초기화
+            let queue_manager = ThumbnailQueueManager::new(app.handle().clone());
+            app.manage(Arc::new(Mutex::new(queue_manager)));
+
             Ok(())
         })
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -387,7 +448,12 @@ pub fn run() {
             get_desktop_folder,
             read_directory_contents,
             calculate_images_total_size,
-            generate_thumbnail_for_image
+            generate_thumbnail_for_image,
+            start_thumbnail_generation,
+            update_thumbnail_priorities,
+            pause_thumbnail_generation,
+            resume_thumbnail_generation,
+            get_completed_thumbnails
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
