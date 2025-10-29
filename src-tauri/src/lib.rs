@@ -424,6 +424,13 @@ async fn start_hq_thumbnail_generation(
     Ok(())
 }
 
+// 고화질 DCT 썸네일 생성 취소
+#[tauri::command]
+fn cancel_hq_thumbnail_generation() -> Result<(), String> {
+    thumbnail_queue::cancel_hq_thumbnail_generation();
+    Ok(())
+}
+
 // 이미지 정보 가져오기
 #[derive(Serialize)]
 struct ImageInfo {
@@ -504,6 +511,7 @@ pub fn run() {
             resume_thumbnail_generation,
             get_completed_thumbnails,
             start_hq_thumbnail_generation,
+            cancel_hq_thumbnail_generation,
             get_image_info
         ])
         .run(tauri::generate_context!())

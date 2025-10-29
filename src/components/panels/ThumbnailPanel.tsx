@@ -106,11 +106,18 @@ export function ThumbnailPanel() {
       setIsGenerating(false)
       setHqProgress(null)
       setIsGeneratingHq(false)
+      // HQ 작업 취소
+      invoke('cancel_hq_thumbnail_generation').catch(console.error)
       return
     }
 
     const startGeneration = async () => {
       try {
+        // 이전 HQ 작업 취소 (폴더 변경 시)
+        await invoke('cancel_hq_thumbnail_generation')
+        setIsGeneratingHq(false)
+        setHqProgress(null)
+
         setIsGenerating(true)
         setProgress({ completed: 0, total: images.length, current_path: '' })
 
@@ -179,6 +186,10 @@ export function ThumbnailPanel() {
       setIsGeneratingHq(false)
     })
 
+    const unlistenHqCancelled = listen('thumbnail-hq-cancelled', () => {
+      setIsGeneratingHq(false)
+    })
+
     return () => {
       unlistenProgress.then((fn) => fn())
       unlistenCompleted.then((fn) => fn())
@@ -186,6 +197,7 @@ export function ThumbnailPanel() {
       unlistenHqProgress.then((fn) => fn())
       unlistenHqCompleted.then((fn) => fn())
       unlistenHqAllCompleted.then((fn) => fn())
+      unlistenHqCancelled.then((fn) => fn())
     }
   }, [images, enableHqThumbnails])
 
@@ -332,18 +344,31 @@ export function ThumbnailPanel() {
                     setEnableHqThumbnails(enabled)
                     localStorage.setItem('enableHqThumbnails', String(enabled))
 
-                    // HQ를 켰고, EXIF 썸네일이 완료되었고, HQ 생성 중이 아니라면 즉시 시작
-                    if (enabled && !isGenerating && !isGeneratingHq && images.length > 0) {
-                      try {
-                        setIsGeneratingHq(true)
-                        setHqProgress({ completed: 0, total: images.length, current_path: '' })
+                    if (enabled) {
+                      // HQ를 켰고, EXIF 썸네일이 완료되었고, HQ 생성 중이 아니라면 즉시 시작
+                      if (!isGenerating && !isGeneratingHq && images.length > 0) {
+                        try {
+                          setIsGeneratingHq(true)
+                          setHqProgress({ completed: 0, total: images.length, current_path: '' })
 
-                        await invoke('start_hq_thumbnail_generation', {
-                          imagePaths: images,
-                        })
-                      } catch (error) {
-                        console.error('Failed to start HQ thumbnail generation:', error)
-                        setIsGeneratingHq(false)
+                          await invoke('start_hq_thumbnail_generation', {
+                            imagePaths: images,
+                          })
+                        } catch (error) {
+                          console.error('Failed to start HQ thumbnail generation:', error)
+                          setIsGeneratingHq(false)
+                        }
+                      }
+                    } else {
+                      // HQ를 껐을 때 작업 취소
+                      if (isGeneratingHq) {
+                        try {
+                          await invoke('cancel_hq_thumbnail_generation')
+                          setIsGeneratingHq(false)
+                          setHqProgress(null)
+                        } catch (error) {
+                          console.error('Failed to cancel HQ thumbnail generation:', error)
+                        }
                       }
                     }
                   }}

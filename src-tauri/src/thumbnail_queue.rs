@@ -1,9 +1,13 @@
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tauri::{AppHandle, Emitter};
 
 use crate::thumbnail::{self, ThumbnailResult};
+
+/// 고화질 썸네일 생성 취소 플래그 (전역)
+static HQ_GENERATION_CANCELLED: AtomicBool = AtomicBool::new(false);
 
 /// 썸네일 생성 요청
 #[derive(Debug, Clone)]
@@ -244,8 +248,18 @@ impl ThumbnailQueueManager {
 pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<String>) {
     let total = image_paths.len();
 
+    // 새 작업 시작 전 취소 플래그 초기화
+    HQ_GENERATION_CANCELLED.store(false, Ordering::SeqCst);
+
     tokio::spawn(async move {
         for (index, path) in image_paths.iter().enumerate() {
+            // 취소 플래그 확인
+            if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
+                eprintln!("HQ thumbnail generation cancelled");
+                let _ = app_handle.emit("thumbnail-hq-cancelled", true);
+                return;
+            }
+
             // 고화질 DCT 썸네일 생성
             match thumbnail::generate_hq_thumbnail(&app_handle, path).await {
                 Ok(result) => {
@@ -268,4 +282,9 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
         // 모든 고화질 썸네일 생성 완료
         let _ = app_handle.emit("thumbnail-hq-all-completed", true);
     });
+}
+
+/// 고화질 썸네일 생성 취소
+pub fn cancel_hq_thumbnail_generation() {
+    HQ_GENERATION_CANCELLED.store(true, Ordering::SeqCst);
 }
