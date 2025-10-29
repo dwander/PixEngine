@@ -1,0 +1,87 @@
+{
+  "activeGroup": "3",
+  "grid": {
+    "height": 1083,
+    "orientation": "HORIZONTAL",
+    "root": {
+      "data": [
+        {
+          "data": [
+            {
+              "data": {
+                "activeView": "folders",
+                "id": "2",
+                "views": [
+                  "folders"
+                ]
+              },
+              "size": 541,
+              "type": "leaf"
+            },
+            {
+              "data": {
+                "activeView": "metadata",
+                "id": "3",
+                "views": [
+                  "metadata"
+                ]
+              },
+              "size": 542,
+              "type": "leaf"
+            }
+          ],
+          "size": 335,
+          "type": "branch"
+        },
+        {
+          "data": {
+            "activeView": "center",
+            "hideHeader": true,
+            "id": "1",
+            "views": [
+              "center"
+            ]
+          },
+          "size": 1112,
+          "type": "leaf"
+        },
+        {
+          "data": {
+            "activeView": "thumbnails",
+            "id": "4",
+            "views": [
+              "thumbnails"
+            ]
+          },
+          "size": 489,
+          "type": "leaf"
+        }
+      ],
+      "size": 1083,
+      "type": "branch"
+    },
+    "width": 1936
+  },
+  "panels": {
+    "center": {
+      "contentComponent": "imageViewer",
+      "id": "center",
+      "title": "Viewer"
+    },
+    "folders": {
+      "contentComponent": "folderTree",
+      "id": "folders",
+      "title": "Folders"
+    },
+    "metadata": {
+      "contentComponent": "metadata",
+      "id": "metadata",
+      "title": "Metadata"
+    },
+    "thumbnails": {
+      "contentComponent": "thumbnails",
+      "id": "thumbnails",
+      "title": "Thumbnails"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import {
   DockviewReact,
   DockviewReadyEvent,
@@ -6,7 +6,6 @@ import {
 } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
 import "../../styles/dockview-theme-dark.css";
-import { useLayoutState } from "../../hooks/useLayoutState";
 
 // 임시 패널 컴포넌트들
 function ImageViewerPanel(_props: IDockviewPanelProps) {
@@ -63,19 +62,7 @@ const components = {
 
 export function MainLayout() {
   const api = useRef<DockviewReadyEvent | null>(null);
-  const { loadLayoutState, saveLayoutState } = useLayoutState();
-  const saveTimeoutRef = useRef<NodeJS.Timeout>();
-
-  // 고정할 패널 크기 추적
-  const fixedPanelSizes = useRef<{
-    folderWidth: number;
-    metadataHeight: number;
-    thumbnailWidth: number;
-  }>({
-    folderWidth: 250,
-    metadataHeight: 300,
-    thumbnailWidth: 200,
-  });
+  const saveTimeoutRef = useRef<number | undefined>(undefined);
 
   const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;
@@ -101,42 +88,34 @@ export function MainLayout() {
       console.warn('[Layout] Failed to restore layout, creating default:', error);
     }
 
-    // 기본 레이아웃 구성 (복원 실패 시에만)
+    // 기본 레이아웃 로드 (복원 실패 시)
     if (!layoutRestored) {
-    // 중앙: 이미지 뷰어
-    const centerPanel = event.api.addPanel({
-      id: "center",
-      component: "imageViewer",
-      title: "Viewer",
-    });
+      try {
+        console.log('[Layout] Loading default layout from public/dockview-layout.json');
 
-    if (centerPanel?.group) {
-      (centerPanel.group as any).header.hidden = true;
-    }
+        // public/dockview-layout.json 파일 로드
+        const response = await fetch('/dockview-layout.json');
+        const defaultLayout = await response.json();
 
-    // 왼쪽: 폴더 트리
-    event.api.addPanel({
-      id: "folders",
-      component: "folderTree",
-      title: "Folders",
-      position: { direction: "left" },
-    });
+        console.log('[Layout] Default layout loaded, applying...');
 
-    // 왼쪽: 메타데이터 (폴더와 같은 곳에 탭으로)
-    event.api.addPanel({
-      id: "metadata",
-      component: "metadata",
-      title: "Metadata",
-      position: { direction: "left" },
-    });
+        // 기본 레이아웃 적용
+        event.api.fromJSON(defaultLayout);
 
-      // 오른쪽: 썸네일
-      event.api.addPanel({
-        id: "thumbnails",
-        component: "thumbnails",
-        title: "Thumbnails",
-        position: { direction: "right" },
-      });
+        // 이미지 뷰어 탭 헤더 숨기기
+        const centerPanel = event.api.getPanel("center");
+        if (centerPanel?.group) {
+          (centerPanel.group as any).header.hidden = true;
+        }
+
+        // 기본 레이아웃을 AppData에 저장
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("save_dockview_layout", { layout: defaultLayout });
+
+        console.log('[Layout] Default layout saved to AppData');
+      } catch (error) {
+        console.error('[Layout] Failed to load default layout:', error);
+      }
     }
 
     // 레이아웃 변경 시 자동 저장 (디바운스) - 항상 등록
