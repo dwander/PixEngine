@@ -45,7 +45,11 @@ export function ThumbnailPanel() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
   const [isVertical, setIsVertical] = useState(true)
-  const [enableHqThumbnails, setEnableHqThumbnails] = useState(false) // HQ 썸네일 생성 활성화
+  const [enableHqThumbnails, setEnableHqThumbnails] = useState(() => {
+    // localStorage에서 HQ 설정 로드
+    const saved = localStorage.getItem('enableHqThumbnails')
+    return saved === 'true'
+  })
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
@@ -323,7 +327,26 @@ export function ThumbnailPanel() {
                 <input
                   type="checkbox"
                   checked={enableHqThumbnails}
-                  onChange={(e) => setEnableHqThumbnails(e.target.checked)}
+                  onChange={async (e) => {
+                    const enabled = e.target.checked
+                    setEnableHqThumbnails(enabled)
+                    localStorage.setItem('enableHqThumbnails', String(enabled))
+
+                    // HQ를 켰고, EXIF 썸네일이 완료되었고, HQ 생성 중이 아니라면 즉시 시작
+                    if (enabled && !isGenerating && !isGeneratingHq && images.length > 0) {
+                      try {
+                        setIsGeneratingHq(true)
+                        setHqProgress({ completed: 0, total: images.length, current_path: '' })
+
+                        await invoke('start_hq_thumbnail_generation', {
+                          imagePaths: images,
+                        })
+                      } catch (error) {
+                        console.error('Failed to start HQ thumbnail generation:', error)
+                        setIsGeneratingHq(false)
+                      }
+                    }
+                  }}
                   className="w-3 h-3 cursor-pointer"
                 />
                 <span className="text-xs text-gray-400 whitespace-nowrap">HQ</span>
