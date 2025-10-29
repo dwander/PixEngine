@@ -1,6 +1,7 @@
 import { Folder, FolderOpen, ChevronRight, ChevronDown, HardDrive, Monitor } from "lucide-react";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { load } from "@tauri-apps/plugin-store";
 import { useFolderContext } from "../../contexts/FolderContext";
 import { useImageContext } from "../../contexts/ImageContext";
 
@@ -32,13 +33,46 @@ interface FolderInfo {
   path: string;
 }
 
+interface LastAccessed {
+  path: string;
+}
+
 export function FolderTreePanel() {
   const [rootNodes, setRootNodes] = useState<FolderNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastAccessedPath, setLastAccessedPath] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    loadRootStructure();
+    const initialize = async () => {
+      await loadRootStructure();
+      await loadLastAccessed();
+    };
+    initialize();
   }, []);
+
+  const loadLastAccessed = async () => {
+    try {
+      const store = await load("settings.json");
+      const stored = await store.get<LastAccessed>("lastAccessed");
+      if (stored) {
+        setLastAccessedPath(stored.path);
+      }
+    } catch (error) {
+      console.error("Failed to load last accessed:", error);
+    }
+  };
+
+  const saveLastAccessed = async (path: string) => {
+    try {
+      const data: LastAccessed = { path };
+      const store = await load("settings.json");
+      await store.set("lastAccessed", data);
+      await store.save();
+      setLastAccessedPath(path);
+    } catch (error) {
+      console.error("Failed to save last accessed:", error);
+    }
+  };
 
   const loadRootStructure = async () => {
     try {
@@ -115,6 +149,8 @@ export function FolderTreePanel() {
               key={node.path}
               node={node}
               level={0}
+              lastAccessedPath={lastAccessedPath}
+              onFolderClick={saveLastAccessed}
             />
           ))}
         </>
@@ -128,14 +164,15 @@ interface FolderTreeItemProps {
   level: number;
 }
 
-function FolderTreeItem({ node, level }: FolderTreeItemProps) {
-  const { setCurrentFolder } = useFolderContext();
+function FolderTreeItem({ node, level, lastAccessedPath, onFolderClick }: FolderTreeItemProps & { lastAccessedPath?: string; onFolderClick?: (path: string) => void }) {
+  const { setCurrentFolder, currentFolder } = useFolderContext();
   const { loadImageList } = useImageContext();
   const [isOpen, setIsOpen] = useState(node.isOpen || false);
   const [children, setChildren] = useState<FolderNode[]>(node.children || []);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSubdirs, setHasSubdirs] = useState<boolean | null>(null);
   const [imagePaths, setImagePaths] = useState<string[]>([]);
+  const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
 
   useEffect(() => {
     if (node.children !== undefined) {
@@ -159,6 +196,131 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
     checkSubdirs();
   }, [node.path, node.isCategory, node.children, node.isDrive]);
 
+  // 마지막 접근 경로 자동 복원
+  useEffect(() => {
+    if (!lastAccessedPath || hasAutoExpanded || node.isCategory || isLoading) {
+      return;
+    }
+
+    const autoExpand = async () => {
+      // 경로 정규화
+      const normalizePath = (path: string) => {
+        return path.toLowerCase().replace(/^\\\\\?\\/, '').replace(/\\/g, '/').replace(/\/+$/, '');
+      };
+
+      const normalizedNodePath = normalizePath(node.path);
+      const normalizedLastPath = normalizePath(lastAccessedPath);
+
+      // 현재 노드가 마지막 접근 경로의 부모이거나 정확히 일치하는지 확인
+      const isMatch = normalizedNodePath === normalizedLastPath || normalizedLastPath.startsWith(normalizedNodePath + '/');
+
+      if (!isMatch || isOpen) {
+        return;
+      }
+
+      setHasAutoExpanded(true);
+
+      // 카테고리나 이미 children이 있는 노드는 단순 펼치기
+      if (node.children !== undefined) {
+        setIsOpen(true);
+        return;
+      }
+
+      // 드라이브는 폴더 목록만 로드 (이미지 필터링 없음)
+      if (node.isDrive) {
+        setIsLoading(true);
+        try {
+          const entries = await invoke<Array<{ name: string; path: string; isDir: boolean }>>(
+            "read_directory_contents",
+            { path: node.path }
+          );
+          const folderNodes: FolderNode[] = entries
+            .filter(entry => entry.isDir)
+            .map(entry => ({ name: entry.name, path: entry.path, isOpen: false, children: undefined }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setChildren(folderNodes);
+          setIsOpen(true);
+        } catch (error) {
+          console.error("Failed to read drive:", node.path, error);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // 일반 폴더는 loadFolderContents 사용
+      await loadFolderContents();
+      setIsOpen(true);
+    };
+
+    autoExpand();
+  }, [lastAccessedPath, hasAutoExpanded, node.isCategory, node.path, isOpen, isLoading, node.children, node.isDrive]);
+
+  const loadFolderContents = async () => {
+    if (isLoading) return;
+
+    setIsLoading(true);
+    try {
+      const entries = await invoke<Array<{ name: string; path: string; isDir: boolean }>>(
+        "read_directory_contents",
+        { path: node.path }
+      );
+
+      // 폴더와 이미지 파일 분리
+      const folderNodes: FolderNode[] = [];
+      const imageFiles: string[] = [];
+
+      for (const entry of entries) {
+        if (entry.isDir) {
+          folderNodes.push({
+            name: entry.name,
+            path: entry.path,
+            isOpen: false,
+            children: undefined,
+          });
+        } else {
+          // 이미지 파일인지 확인
+          const isImage = IMAGE_EXTENSIONS.some(ext => entry.name.toLowerCase().endsWith(ext.toLowerCase()));
+          if (isImage) {
+            imageFiles.push(entry.path);
+          }
+        }
+      }
+
+      // 폴더 정렬
+      folderNodes.sort((a, b) => a.name.localeCompare(b.name));
+
+      setChildren(folderNodes);
+      setImagePaths(imageFiles);
+
+      // 이미지가 있으면 ImageContext와 FolderContext 업데이트
+      if (imageFiles.length > 0) {
+        // 총 용량 계산
+        let totalSize = 0;
+        try {
+          totalSize = await invoke<number>("calculate_images_total_size", { paths: imageFiles });
+        } catch (error) {
+          console.error("Failed to calculate total size:", error);
+        }
+
+        // Context 업데이트
+        setCurrentFolder(node.path, imageFiles.length, totalSize);
+        await loadImageList(imageFiles);
+
+        // 마지막 접근 경로 저장
+        if (onFolderClick) {
+          onFolderClick(node.path);
+        }
+      } else {
+        setCurrentFolder(node.path, 0, 0);
+      }
+    } catch (error) {
+      console.error("Failed to read directory:", node.path, error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleToggle = async () => {
     // 카테고리는 단순 토글
     if (node.isCategory) {
@@ -176,73 +338,13 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
 
     // 처음 열 때 폴더 내용 로드
     if (newIsOpen && children.length === 0 && !isLoading) {
-      setIsLoading(true);
-      try {
-        const entries = await invoke<Array<{ name: string; path: string; isDir: boolean }>>(
-          "read_directory_contents",
-          { path: node.path }
-        );
-
-        // 폴더와 이미지 파일 분리
-        const folderNodes: FolderNode[] = [];
-        const imageFiles: string[] = [];
-
-        for (const entry of entries) {
-          if (entry.isDir) {
-            folderNodes.push({
-              name: entry.name,
-              path: entry.path,
-              isOpen: false,
-              children: undefined,
-            });
-          } else {
-            // 이미지 파일인지 확인
-            const isImage = IMAGE_EXTENSIONS.some(ext => entry.name.toLowerCase().endsWith(ext.toLowerCase()));
-            if (isImage) {
-              imageFiles.push(entry.path);
-            }
-          }
-        }
-
-        // 폴더 정렬
-        folderNodes.sort((a, b) => a.name.localeCompare(b.name));
-
-        setChildren(folderNodes);
-        setImagePaths(imageFiles);
-        setIsOpen(true);
-
-        // 이미지가 있으면 ImageContext와 FolderContext 업데이트
-        if (imageFiles.length > 0) {
-          console.log(`[FolderTree] Loaded ${imageFiles.length} images from ${node.path}`);
-          console.log('[FolderTree] Image paths:', imageFiles);
-
-          // 총 용량 계산
-          let totalSize = 0;
-          try {
-            totalSize = await invoke<number>("calculate_images_total_size", { paths: imageFiles });
-          } catch (error) {
-            console.error("Failed to calculate total size:", error);
-          }
-
-          // Context 업데이트
-          setCurrentFolder(node.path, imageFiles.length, totalSize);
-          await loadImageList(imageFiles);
-        } else {
-          console.log(`[FolderTree] No images found in ${node.path}`);
-          setCurrentFolder(node.path, 0, 0);
-        }
-      } catch (error) {
-        console.error("Failed to read directory:", node.path, error);
-      } finally {
-        setIsLoading(false);
-      }
+      await loadFolderContents();
+      setIsOpen(true);
     } else {
       setIsOpen(newIsOpen);
 
       // 이미 로드된 이미지가 있으면 다시 Context 업데이트
       if (newIsOpen && imagePaths.length > 0) {
-        console.log(`[FolderTree] Reloading ${imagePaths.length} images from ${node.path}`);
-
         let totalSize = 0;
         try {
           totalSize = await invoke<number>("calculate_images_total_size", { paths: imagePaths });
@@ -252,12 +354,23 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
 
         setCurrentFolder(node.path, imagePaths.length, totalSize);
         await loadImageList(imagePaths);
+
+        // 마지막 접근 경로 저장
+        if (onFolderClick) {
+          onFolderClick(node.path);
+        }
       }
     }
   };
 
   const hasChildren = node.isCategory || node.isDrive || children.length > 0 || isLoading || node.children !== undefined || hasSubdirs === true;
   const isDrive = node.isDrive || false;
+
+  // 현재 폴더인지 확인 (경로 정규화)
+  const normalizePathForComparison = (path: string) => {
+    return path.toLowerCase().replace(/\\/g, '/').replace(/^\\\\\?\\/, '');
+  };
+  const isCurrentFolder = currentFolder && normalizePathForComparison(node.path) === normalizePathForComparison(currentFolder);
 
   const renderIcon = () => {
     if (node.icon === 'computer') {
@@ -267,7 +380,7 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
       return <HardDrive className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />;
     }
     if (isOpen) {
-      return <FolderOpen className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" />;
+      return <FolderOpen className={`h-3.5 w-3.5 flex-shrink-0 ${isCurrentFolder ? 'text-blue-500' : 'text-blue-400'}`} />;
     }
     return <Folder className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />;
   };
@@ -275,21 +388,27 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
   return (
     <div>
       <div
-        className="flex items-center gap-1 px-2 py-0.5 hover:bg-neutral-800 rounded cursor-pointer group"
+        className={`flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer group ${
+          isCurrentFolder
+            ? 'bg-blue-900/30 border border-blue-500/50 hover:bg-blue-900/40'
+            : 'hover:bg-neutral-800'
+        }`}
         style={{ paddingLeft: `${level * 14 + 6}px` }}
         onClick={handleToggle}
       >
         {hasChildren ? (
           isOpen ? (
-            <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />
+            <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ${isCurrentFolder ? 'text-blue-400' : ''}`} />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" />
+            <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ${isCurrentFolder ? 'text-blue-400' : ''}`} />
           )
         ) : (
           <span className="w-3.5" />
         )}
         {renderIcon()}
-        <span className="text-xs flex-1 truncate text-gray-200">{node.name}</span>
+        <span className={`text-xs flex-1 truncate ${isCurrentFolder ? 'text-blue-300 font-semibold' : 'text-gray-200'}`}>
+          {node.name}
+        </span>
       </div>
       {isOpen && (
         <div>
@@ -298,6 +417,8 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
               key={child.path}
               node={child}
               level={level + 1}
+              lastAccessedPath={lastAccessedPath}
+              onFolderClick={onFolderClick}
             />
           ))}
         </div>
