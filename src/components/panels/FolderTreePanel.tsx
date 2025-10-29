@@ -407,7 +407,7 @@ function FolderTreeItem({
       setChildren(folderNodes);
       setImagePaths(imageFiles);
 
-      // 이미지가 있으면 ImageContext와 FolderContext 업데이트
+      // ImageContext와 FolderContext 업데이트
       if (imageFiles.length > 0) {
         // 총 용량 계산
         let totalSize = 0;
@@ -426,7 +426,9 @@ function FolderTreeItem({
           onFolderClick(node.path, node.treeId);
         }
       } else {
+        // 이미지가 없으면 빈 배열로 초기화
         setCurrentFolder(node.path, 0, 0);
+        await loadImageList([]);
       }
     } catch (error) {
       console.error("Failed to read directory:", node.path, error);
@@ -457,21 +459,27 @@ function FolderTreeItem({
     } else {
       setIsOpen(newIsOpen);
 
-      // 이미 로드된 이미지가 있으면 다시 Context 업데이트
-      if (newIsOpen && imagePaths.length > 0) {
-        let totalSize = 0;
-        try {
-          totalSize = await invoke<number>("calculate_images_total_size", { paths: imagePaths });
-        } catch (error) {
-          console.error("Failed to calculate total size:", error);
-        }
+      // 이미 로드된 데이터가 있으면 다시 Context 업데이트
+      if (newIsOpen) {
+        if (imagePaths.length > 0) {
+          let totalSize = 0;
+          try {
+            totalSize = await invoke<number>("calculate_images_total_size", { paths: imagePaths });
+          } catch (error) {
+            console.error("Failed to calculate total size:", error);
+          }
 
-        setCurrentFolder(node.path, imagePaths.length, totalSize);
-        await loadImageList(imagePaths);
+          setCurrentFolder(node.path, imagePaths.length, totalSize);
+          await loadImageList(imagePaths);
 
-        // 마지막 접근 경로 저장
-        if (onFolderClick && node.treeId) {
-          onFolderClick(node.path, node.treeId);
+          // 마지막 접근 경로 저장
+          if (onFolderClick && node.treeId) {
+            onFolderClick(node.path, node.treeId);
+          }
+        } else {
+          // 이미지가 없으면 빈 배열로 초기화
+          setCurrentFolder(node.path, 0, 0);
+          await loadImageList([]);
         }
       }
     }
