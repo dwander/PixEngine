@@ -71,6 +71,26 @@ export function ThumbnailPanel() {
     }
   }, [])
 
+  // 가로 모드에서 마우스 휠로 좌우 스크롤
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current
+    if (!scrollArea || isVertical) return
+
+    const handleWheel = (e: WheelEvent) => {
+      // 가로 스크롤이 가능한 경우에만 처리
+      if (scrollArea.scrollWidth > scrollArea.clientWidth) {
+        e.preventDefault()
+        scrollArea.scrollLeft += e.deltaY
+      }
+    }
+
+    scrollArea.addEventListener('wheel', handleWheel, { passive: false })
+
+    return () => {
+      scrollArea.removeEventListener('wheel', handleWheel)
+    }
+  }, [isVertical])
+
   // 썸네일 생성 시작
   useEffect(() => {
     if (images.length === 0) {
@@ -248,7 +268,7 @@ export function ThumbnailPanel() {
             </div>
 
             {/* 썸네일 크기 조절 슬라이더 */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="flex items-center gap-2 mr-4" style={{ width: '150px' }}>
               <span className="text-xs text-gray-400 whitespace-nowrap">{thumbnailSize}px</span>
               <input
                 type="range"
