@@ -39,6 +39,10 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         // 없으면 첫 번째 이미지 자동 로드
         await loadImage(paths[0]);
       }
+    } else {
+      // 이미지가 없으면 상태 초기화
+      setCurrentPath(null);
+      setCurrentIndex(-1);
     }
   }, [currentPath, loadImage]);
 
