@@ -378,6 +378,9 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
     let cache_key = generate_cache_key(file_path, mtime);
     let cache_path = get_cache_path(app_handle, &cache_key)?;
 
+    // 항상 원본 이미지에서 EXIF 메타데이터 추출 (orientation 정보 필수)
+    let exif_metadata = extract_exif_metadata(file_path).ok();
+
     // 1. 캐시 확인
     if cache_path.exists() {
         let cached_data = fs::read(&cache_path)
@@ -389,9 +392,6 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
         let img = image::load_from_memory(&cached_data)
             .map_err(|e| format!("Failed to decode cached image: {}", e))?;
 
-        // EXIF 메타데이터 로드 (캐시에서)
-        let exif_metadata = load_cached_exif_metadata(app_handle, file_path).ok();
-
         return Ok(ThumbnailResult {
             path: file_path.to_string(),
             thumbnail_base64,
@@ -401,9 +401,6 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
             exif_metadata,
         });
     }
-
-    // 2. EXIF 메타데이터 추출 (orientation 필수)
-    let exif_metadata = extract_exif_metadata(file_path).ok();
 
     // 3. EXIF 썸네일 추출 시도
     if let Ok(exif_thumb) = extract_exif_thumbnail(file_path) {
