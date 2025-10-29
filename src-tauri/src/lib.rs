@@ -475,6 +475,17 @@ pub fn run() {
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
 
+            // 윈도우 핸들을 idle_detector에 설정 (Windows만)
+            #[cfg(target_os = "windows")]
+            {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(win32_handle) = handle.as_raw() {
+                        idle_detector::set_app_window_handle(win32_handle.hwnd.get() as isize);
+                    }
+                }
+            }
+
             // 저장된 윈도우 상태 복원
             if let Some(state) = load_window_state(&app.handle()) {
                 if state.maximized {

@@ -284,9 +284,9 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
                 // 세마포어 획득
                 let _permit = semaphore.acquire().await.unwrap();
 
-                // 유휴 시간 확인 (임계값 이상 입력 없으면 활성, 아니면 대기)
-                while !idle_detector::is_idle(IDLE_THRESHOLD_MS) {
-                    // 유휴 상태가 아니면 재확인 간격만큼 대기 후 재확인
+                // HQ 생성 가능 여부 확인 (백그라운드면 즉시, 포그라운드면 유휴 시간 대기)
+                while !idle_detector::should_generate_hq(IDLE_THRESHOLD_MS) {
+                    // 조건 충족 안되면 재확인 간격만큼 대기 후 재확인
                     sleep(Duration::from_millis(IDLE_CHECK_INTERVAL_MS)).await;
 
                     // 대기 중에도 취소 플래그 확인
