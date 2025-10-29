@@ -156,14 +156,23 @@ export function ImageViewerPanel() {
       }
     }
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // 키를 떼면 즉시 큐 비우기
+        navigationQueueRef.current = []
+      }
+    }
+
     // containerRef에 포커스를 주어야 키보드 이벤트를 받을 수 있음
     if (containerRef.current) {
       containerRef.current.focus()
     }
 
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
     }
   }, [imageList, currentIndex, goToIndex])
 
