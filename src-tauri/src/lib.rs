@@ -3,6 +3,18 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+#[derive(Serialize)]
+struct DriveInfo {
+    name: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+struct FolderInfo {
+    name: String,
+    path: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct WindowState {
     x: i32,
@@ -161,6 +173,179 @@ fn load_dockview_layout(app: tauri::AppHandle) -> Result<Option<serde_json::Valu
     }
 }
 
+// 드라이브 목록 가져오기
+#[tauri::command]
+fn get_drives() -> Vec<DriveInfo> {
+    let mut drives = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: A-Z 드라이브 체크
+        for letter in b'A'..=b'Z' {
+            let drive_path = format!("{}:\\", letter as char);
+            if std::path::Path::new(&drive_path).exists() {
+                drives.push(DriveInfo {
+                    name: format!("{}:", letter as char),
+                    path: drive_path,
+                });
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: /Volumes 디렉토리의 볼륨들
+        if let Ok(entries) = fs::read_dir("/Volumes") {
+            for entry in entries.flatten() {
+                if let Ok(name) = entry.file_name().into_string() {
+                    let path = format!("/Volumes/{}", name);
+                    drives.push(DriveInfo {
+                        name: name.clone(),
+                        path,
+                    });
+                }
+            }
+        }
+
+        // 루트 디렉토리도 추가
+        drives.push(DriveInfo {
+            name: "Macintosh HD".to_string(),
+            path: "/".to_string(),
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux: 루트와 마운트 포인트
+        drives.push(DriveInfo {
+            name: "Root".to_string(),
+            path: "/".to_string(),
+        });
+
+        // /mnt와 /media의 마운트 포인트들
+        for mount_dir in ["/mnt", "/media"] {
+            if let Ok(entries) = fs::read_dir(mount_dir) {
+                for entry in entries.flatten() {
+                    if let Ok(name) = entry.file_name().into_string() {
+                        let path = format!("{}/{}", mount_dir, name);
+                        drives.push(DriveInfo {
+                            name: name.clone(),
+                            path,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    drives
+}
+
+// 서브디렉토리 존재 여부 확인
+#[tauri::command]
+fn has_subdirectories(path: &str) -> bool {
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+
+            // canonicalize로 심볼릭 링크/junction 해결
+            let real_path = fs::canonicalize(&entry_path)
+                .unwrap_or_else(|_| entry_path.clone());
+
+            // 실제 경로의 메타데이터로 디렉토리 확인
+            if let Ok(metadata) = fs::metadata(&real_path) {
+                if metadata.is_dir() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+// 사진 폴더 가져오기
+#[tauri::command]
+fn get_picture_folder() -> Option<FolderInfo> {
+    if let Some(picture_dir) = dirs::picture_dir() {
+        // canonicalize로 심볼릭 링크를 실제 경로로 해결
+        let real_path = fs::canonicalize(&picture_dir)
+            .unwrap_or(picture_dir.clone());
+
+        Some(FolderInfo {
+            name: "사진".to_string(),
+            path: real_path.to_string_lossy().to_string(),
+        })
+    } else {
+        None
+    }
+}
+
+// 바탕화면 폴더 가져오기
+#[tauri::command]
+fn get_desktop_folder() -> Option<FolderInfo> {
+    if let Some(desktop_dir) = dirs::desktop_dir() {
+        // canonicalize로 심볼릭 링크를 실제 경로로 해결
+        let real_path = fs::canonicalize(&desktop_dir)
+            .unwrap_or(desktop_dir.clone());
+
+        Some(FolderInfo {
+            name: "바탕화면".to_string(),
+            path: real_path.to_string_lossy().to_string(),
+        })
+    } else {
+        None
+    }
+}
+
+// 디렉토리 내용 읽기
+#[tauri::command]
+fn read_directory_contents(path: &str) -> Result<Vec<serde_json::Value>, String> {
+    let entries = fs::read_dir(path)
+        .map_err(|e| format!("Failed to read directory: {}", e))?;
+
+    let mut results = Vec::new();
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+
+        // canonicalize로 심볼릭 링크/junction 해결
+        let real_path = fs::canonicalize(&path)
+            .unwrap_or_else(|_| path.clone());
+
+        // 실제 경로의 메타데이터 확인
+        if let Ok(metadata) = fs::metadata(&real_path) {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = metadata.is_dir();
+
+            results.push(serde_json::json!({
+                "name": name,
+                "path": real_path.to_string_lossy().to_string(),
+                "isDir": is_dir,
+            }));
+        }
+    }
+
+    Ok(results)
+}
+
+// 이미지 파일들의 총 용량 계산
+#[tauri::command]
+async fn calculate_images_total_size(paths: Vec<String>) -> Result<u64, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut total_size: u64 = 0;
+
+        for path in paths {
+            if let Ok(metadata) = fs::metadata(&path) {
+                total_size += metadata.len();
+            }
+        }
+
+        Ok(total_size)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -180,13 +365,20 @@ pub fn run() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_store::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             save_window_state,
             show_window,
             save_layout_state,
             load_layout_state,
             save_dockview_layout,
-            load_dockview_layout
+            load_dockview_layout,
+            get_drives,
+            has_subdirectories,
+            get_picture_folder,
+            get_desktop_folder,
+            read_directory_contents,
+            calculate_images_total_size
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

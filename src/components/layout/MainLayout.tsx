@@ -6,6 +6,7 @@ import {
 } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
 import "../../styles/dockview-theme-dark.css";
+import { FolderTreePanel } from "../panels/FolderTreePanel";
 
 // 임시 패널 컴포넌트들
 function ImageViewerPanel(_props: IDockviewPanelProps) {
@@ -19,15 +20,8 @@ function ImageViewerPanel(_props: IDockviewPanelProps) {
   );
 }
 
-function FolderTreePanel(_props: IDockviewPanelProps) {
-  return (
-    <div className="flex items-center justify-center h-full bg-neutral-900 text-gray-400">
-      <div className="text-center">
-        <p className="text-lg font-bold mb-2">Folder Tree</p>
-        <p className="text-xs">폴더 트리 패널</p>
-      </div>
-    </div>
-  );
+function FolderTreePanelWrapper(_props: IDockviewPanelProps) {
+  return <FolderTreePanel />;
 }
 
 function MetadataPanel(_props: IDockviewPanelProps) {
@@ -55,7 +49,7 @@ function ThumbnailPanel(_props: IDockviewPanelProps) {
 // 컴포넌트 맵
 const components = {
   imageViewer: ImageViewerPanel,
-  folderTree: FolderTreePanel,
+  folderTree: FolderTreePanelWrapper,
   metadata: MetadataPanel,
   thumbnails: ThumbnailPanel,
 };
