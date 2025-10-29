@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { Virtuoso } from 'react-virtuoso'
@@ -41,6 +41,35 @@ export function ThumbnailPanel() {
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
+  const [isVertical, setIsVertical] = useState(true)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
+
+  // 패널 방향 감지
+  useEffect(() => {
+    const checkOrientation = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect()
+        // 세로형: 높이가 너비보다 큼
+        setIsVertical(height > width)
+      }
+    }
+
+    // 초기 방향 체크 (약간 지연)
+    const timeoutId = setTimeout(checkOrientation, 0)
+
+    // ResizeObserver로 크기 변화 감지
+    const resizeObserver = new ResizeObserver(checkOrientation)
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => {
+      clearTimeout(timeoutId)
+      resizeObserver.disconnect()
+    }
+  }, [])
 
   // 썸네일 생성 시작
   useEffect(() => {
@@ -116,7 +145,7 @@ export function ThumbnailPanel() {
   // 이미지가 없을 때
   if (images.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-neutral-900 text-gray-400">
+      <div ref={containerRef} className="flex h-full items-center justify-center bg-neutral-900 text-gray-400">
         <p className="text-sm">폴더를 선택하여 이미지를 불러오세요</p>
       </div>
     )
@@ -138,20 +167,24 @@ export function ThumbnailPanel() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-neutral-900">
-      {/* 상단 헤더 - 정렬/검색 기능 공간 확보 */}
-      <div className="border-b border-neutral-700 bg-neutral-800 px-4 py-2">
-        <div className="text-sm text-gray-400">
-          {/* 향후 정렬/검색 기능 들어갈 공간 */}
-        </div>
-      </div>
-
-      {/* 썸네일 그리드 */}
-      <div className="flex-1 overflow-hidden">
-        <Virtuoso
-          data={images}
-          rangeChanged={handleVisibleRangeChange}
-          itemContent={(_index, imagePath) => {
+    <div ref={containerRef} className="flex h-full flex-col bg-neutral-900">
+      {/* 썸네일 영역 */}
+      <div
+        ref={scrollAreaRef}
+        className={isVertical ? 'flex-1 overflow-auto p-2' : 'flex-1 overflow-x-auto overflow-y-hidden py-2'}
+      >
+        {/* 세로형: 그리드, 가로형: 한 줄 가로 스크롤 */}
+        <div
+          className={isVertical ? 'grid gap-2' : 'flex flex-nowrap gap-2 h-full items-center px-2'}
+          style={
+            isVertical
+              ? {
+                  gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`,
+                }
+              : undefined
+          }
+        >
+          {images.map((imagePath, index) => {
             const thumbnail = thumbnails.get(imagePath)
             const transform = thumbnail?.exif_metadata
               ? getOrientationTransform(thumbnail.exif_metadata.orientation)
@@ -160,15 +193,18 @@ export function ThumbnailPanel() {
             const isSelected = selectedImage === imagePath
 
             return (
-              <div className="p-2">
+              <div
+                key={imagePath}
+                className={isVertical ? 'w-full aspect-square' : 'h-full aspect-square flex-shrink-0'}
+                onClick={() => {
+                  setSelectedImage(imagePath)
+                  loadImage(imagePath)
+                }}
+              >
                 <div
-                  className={`group relative aspect-square cursor-pointer overflow-hidden rounded-lg ${
-                    isSelected ? 'ring-2 ring-blue-500 bg-neutral-700' : 'bg-neutral-800'
-                  } hover:bg-neutral-700 transition-colors`}
-                  onClick={() => {
-                    setSelectedImage(imagePath)
-                    loadImage(imagePath)
-                  }}
+                  className={`group relative w-full h-full cursor-pointer overflow-hidden ${
+                    isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''
+                  } hover:bg-neutral-800/50 transition-colors`}
                 >
                   {thumbnail ? (
                     <img
@@ -186,26 +222,43 @@ export function ThumbnailPanel() {
 
                   {/* 호버 시 파일명 표시 */}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                    <p className="truncate text-xs text-white">
-                      {imagePath.split(/[/\\]/).pop()}
-                    </p>
+                    <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
                   </div>
                 </div>
               </div>
             )
-          }}
-          style={{ height: '100%' }}
-        />
+          })}
+        </div>
       </div>
 
-      {/* 하단 상태 표시 */}
-      {progress && (
+      {/* 하단 상태 표시 - 세로 모드일 때만 표시 */}
+      {isVertical && (
         <div className="border-t border-neutral-700 bg-neutral-800 px-4 py-2">
-          <div className="flex items-center gap-2 text-sm text-gray-400">
-            <span>
-              {progress.completed}/{progress.total}
-            </span>
-            {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          <div className="flex items-center justify-between gap-3">
+            {/* 진행 상태 */}
+            <div className="flex items-center gap-2">
+              {progress && (
+                <>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                    {progress.completed}/{progress.total}
+                  </span>
+                  {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+                </>
+              )}
+            </div>
+
+            {/* 썸네일 크기 조절 슬라이더 */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-xs text-gray-400 whitespace-nowrap">{thumbnailSize}px</span>
+              <input
+                type="range"
+                min="75"
+                max="320"
+                value={thumbnailSize}
+                onChange={(e) => setThumbnailSize(Number(e.target.value))}
+                className="flex-1 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
           </div>
         </div>
       )}

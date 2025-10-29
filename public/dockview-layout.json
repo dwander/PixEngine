@@ -81,13 +81,7 @@
     "thumbnails": {
       "contentComponent": "thumbnails",
       "id": "thumbnails",
-      "title": "Thumbnails",
-      "params": {
-        "constraints": {
-          "maximumWidth": 600,
-          "maximumHeight": 300
-        }
-      }
+      "title": "Thumbnails"
     }
   }
 }
