@@ -264,8 +264,8 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
 
             // 유휴 시간 확인 (5초 이상 입력 없으면 활성, 아니면 대기)
             while !idle_detector::is_idle(5000) {
-                // 유휴 상태가 아니면 1초 대기 후 재확인
-                sleep(Duration::from_secs(1)).await;
+                // 유휴 상태가 아니면 500ms 대기 후 재확인
+                sleep(Duration::from_millis(500)).await;
 
                 // 대기 중에도 취소 플래그 확인
                 if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
