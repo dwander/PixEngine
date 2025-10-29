@@ -184,7 +184,7 @@ impl ThumbnailQueueManager {
 
                         let handle = tokio::spawn(async move {
                             // 썸네일 생성
-                            match thumbnail::generate_thumbnail(&req.path).await {
+                            match thumbnail::generate_thumbnail(&app_handle_clone, &req.path).await {
                                 Ok(result) => {
                                     // 완료 목록에 추가
                                     {

@@ -9,6 +9,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use exif::{In, Reader, Tag};
 use image::{ImageBuffer, RgbImage};
 use jpeg_decoder::Decoder as JpegDecoder;
+use tauri::Manager;
 
 /// 썸네일 결과
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,26 +92,24 @@ pub fn get_file_mtime(path: &str) -> Result<u64, String> {
 }
 
 /// 캐시 디렉토리 가져오기
-pub fn get_cache_dir() -> Result<PathBuf, String> {
-    let app_data = dirs::data_local_dir()
-        .ok_or_else(|| "Failed to get local data directory".to_string())?
-        .join("com.dqsty.pixengine");
+pub fn get_cache_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     Ok(app_data.join("thumbnails"))
 }
 
 /// 메타데이터 디렉토리 가져오기
-pub fn get_metadata_dir() -> Result<PathBuf, String> {
-    let app_data = dirs::data_local_dir()
-        .ok_or_else(|| "Failed to get local data directory".to_string())?
-        .join("com.dqsty.pixengine");
+pub fn get_metadata_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     Ok(app_data.join("metadata"))
 }
 
 /// 캐시 파일 경로 가져오기
-pub fn get_cache_path(cache_key: &str) -> Result<PathBuf, String> {
-    let cache_dir = get_cache_dir()?;
+pub fn get_cache_path(app_handle: &tauri::AppHandle, cache_key: &str) -> Result<PathBuf, String> {
+    let cache_dir = get_cache_dir(app_handle)?;
     fs::create_dir_all(&cache_dir)
         .map_err(|e| format!("Failed to create cache directory: {}", e))?;
 
@@ -118,8 +117,8 @@ pub fn get_cache_path(cache_key: &str) -> Result<PathBuf, String> {
 }
 
 /// 메타데이터 파일 경로 가져오기 (폴더별)
-pub fn get_metadata_path(folder_path: &str) -> Result<PathBuf, String> {
-    let metadata_dir = get_metadata_dir()?;
+pub fn get_metadata_path(app_handle: &tauri::AppHandle, folder_path: &str) -> Result<PathBuf, String> {
+    let metadata_dir = get_metadata_dir(app_handle)?;
     fs::create_dir_all(&metadata_dir)
         .map_err(|e| format!("Failed to create metadata directory: {}", e))?;
 
@@ -374,10 +373,10 @@ pub fn encode_to_base64(data: &[u8]) -> String {
 }
 
 /// 썸네일 생성 (캐시 우선, EXIF → DCT fallback)
-pub async fn generate_thumbnail(file_path: &str) -> Result<ThumbnailResult, String> {
+pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ThumbnailResult, String> {
     let mtime = get_file_mtime(file_path)?;
     let cache_key = generate_cache_key(file_path, mtime);
-    let cache_path = get_cache_path(&cache_key)?;
+    let cache_path = get_cache_path(app_handle, &cache_key)?;
 
     // 1. 캐시 확인
     if cache_path.exists() {
@@ -391,7 +390,7 @@ pub async fn generate_thumbnail(file_path: &str) -> Result<ThumbnailResult, Stri
             .map_err(|e| format!("Failed to decode cached image: {}", e))?;
 
         // EXIF 메타데이터 로드 (캐시에서)
-        let exif_metadata = load_cached_exif_metadata(file_path).ok();
+        let exif_metadata = load_cached_exif_metadata(app_handle, file_path).ok();
 
         return Ok(ThumbnailResult {
             path: file_path.to_string(),
@@ -449,10 +448,11 @@ pub async fn generate_thumbnail(file_path: &str) -> Result<ThumbnailResult, Stri
 
 /// 폴더별 EXIF 메타데이터 저장
 pub fn save_folder_metadata(
+    app_handle: &tauri::AppHandle,
     folder_path: &str,
     metadata_map: &HashMap<String, ExifMetadata>,
 ) -> Result<(), String> {
-    let metadata_path = get_metadata_path(folder_path)?;
+    let metadata_path = get_metadata_path(app_handle, folder_path)?;
 
     let json = serde_json::to_string_pretty(metadata_map)
         .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
@@ -464,8 +464,8 @@ pub fn save_folder_metadata(
 }
 
 /// 폴더별 EXIF 메타데이터 로드
-pub fn load_folder_metadata(folder_path: &str) -> Result<HashMap<String, ExifMetadata>, String> {
-    let metadata_path = get_metadata_path(folder_path)?;
+pub fn load_folder_metadata(app_handle: &tauri::AppHandle, folder_path: &str) -> Result<HashMap<String, ExifMetadata>, String> {
+    let metadata_path = get_metadata_path(app_handle, folder_path)?;
 
     if !metadata_path.exists() {
         return Ok(HashMap::new());
@@ -481,14 +481,14 @@ pub fn load_folder_metadata(folder_path: &str) -> Result<HashMap<String, ExifMet
 }
 
 /// 개별 파일 EXIF 메타데이터 캐시에서 로드
-fn load_cached_exif_metadata(file_path: &str) -> Result<ExifMetadata, String> {
+fn load_cached_exif_metadata(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ExifMetadata, String> {
     let parent_dir = Path::new(file_path)
         .parent()
         .ok_or("No parent directory")?
         .to_str()
         .ok_or("Invalid path")?;
 
-    let metadata_map = load_folder_metadata(parent_dir)?;
+    let metadata_map = load_folder_metadata(app_handle, parent_dir)?;
     metadata_map
         .get(file_path)
         .cloned()

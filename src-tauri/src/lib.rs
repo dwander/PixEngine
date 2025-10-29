@@ -355,8 +355,11 @@ async fn calculate_images_total_size(paths: Vec<String>) -> Result<u64, String> 
 
 // 썸네일 생성 (단일 파일)
 #[tauri::command]
-async fn generate_thumbnail_for_image(file_path: String) -> Result<thumbnail::ThumbnailResult, String> {
-    thumbnail::generate_thumbnail(&file_path).await
+async fn generate_thumbnail_for_image(
+    app: tauri::AppHandle,
+    file_path: String,
+) -> Result<thumbnail::ThumbnailResult, String> {
+    thumbnail::generate_thumbnail(&app, &file_path).await
 }
 
 // 썸네일 배치 생성 시작
