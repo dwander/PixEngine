@@ -30,19 +30,26 @@ tokio = { version = "1", features = ["full"] }
 
 # 이미지 처리
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+jpeg-decoder = "0.3"           # DCT 스케일링 지원
+fast_image_resize = "4.0"      # 고속 리사이징
 
 # 병렬 처리
 rayon = "1.10"
+num_cpus = "1.16"              # CPU 코어 수 감지
 
 # 캐싱
 dashmap = "6.0"
 lru = "0.12"
+blake3 = "1.5"                 # 캐시 키 해싱
 
 # 파일 시스템
 walkdir = "2"
 
 # 메타데이터
 kamadak-exif = "0.5"
+
+# 인코딩
+base64 = "0.22"                # Base64 인코딩
 
 [profile.release]
 opt-level = 3        # 최대 최적화

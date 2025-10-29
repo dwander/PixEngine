@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+mod thumbnail;
+
 #[derive(Serialize)]
 struct DriveInfo {
     name: String,
@@ -346,6 +348,12 @@ async fn calculate_images_total_size(paths: Vec<String>) -> Result<u64, String> 
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// 썸네일 생성 (단일 파일)
+#[tauri::command]
+async fn generate_thumbnail_for_image(file_path: String) -> Result<thumbnail::ThumbnailResult, String> {
+    thumbnail::generate_thumbnail(&file_path).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -378,7 +386,8 @@ pub fn run() {
             get_picture_folder,
             get_desktop_folder,
             read_directory_contents,
-            calculate_images_total_size
+            calculate_images_total_size,
+            generate_thumbnail_for_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
