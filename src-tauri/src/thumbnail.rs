@@ -349,11 +349,15 @@ pub fn generate_dct_thumbnail(file_path: &str, max_size: u16) -> Result<(Vec<u8>
 
 /// 썸네일을 JPEG로 인코딩
 pub fn encode_thumbnail_to_jpeg(rgb_data: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
+    encode_thumbnail_to_jpeg_with_quality(rgb_data, width, height, 90)
+}
+
+pub fn encode_thumbnail_to_jpeg_with_quality(rgb_data: &[u8], width: u32, height: u32, quality: u8) -> Result<Vec<u8>, String> {
     let img: RgbImage = ImageBuffer::from_raw(width, height, rgb_data.to_vec())
         .ok_or_else(|| "Failed to create RGB image buffer".to_string())?;
 
     let mut jpeg_data = Vec::new();
-    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_data, 90);
+    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_data, quality);
 
     encoder
         .encode(
@@ -498,12 +502,36 @@ pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &st
     let cache_key = generate_cache_key(file_path, mtime);
     let cache_path = get_cache_path(app_handle, &cache_key)?;
 
+    // 캐시 파일이 이미 존재하고 크기가 30KB 이상이면 이미 HQ 썸네일이므로 스킵
+    if let Ok(metadata) = fs::metadata(&cache_path) {
+        if metadata.len() >= 30_000 {
+            // 기존 HQ 썸네일 로드
+            let jpeg_data = fs::read(&cache_path)
+                .map_err(|e| format!("Failed to read cached HQ thumbnail: {}", e))?;
+
+            let thumbnail_base64 = encode_to_base64(&jpeg_data);
+            let exif_metadata = extract_exif_metadata(file_path).ok();
+
+            // 이미지 크기 추출 (간단한 JPEG 헤더 파싱)
+            let (width, height) = extract_jpeg_dimensions(&jpeg_data).unwrap_or((320, 320));
+
+            return Ok(ThumbnailResult {
+                path: file_path.to_string(),
+                thumbnail_base64,
+                width,
+                height,
+                source: ThumbnailSource::Cache,
+                exif_metadata,
+            });
+        }
+    }
+
     // EXIF 메타데이터 추출
     let exif_metadata = extract_exif_metadata(file_path).ok();
 
-    // DCT 스케일링으로 320px 고화질 썸네일 생성
+    // DCT 스케일링으로 320px 고화질 썸네일 생성 (품질 70으로 용량 절감)
     let (rgb_data, width, height) = generate_dct_thumbnail(file_path, 320)?;
-    let jpeg_data = encode_thumbnail_to_jpeg(&rgb_data, width, height)?;
+    let jpeg_data = encode_thumbnail_to_jpeg_with_quality(&rgb_data, width, height, 70)?;
 
     // 캐시 업데이트 (기존 EXIF 썸네일을 덮어씀)
     fs::write(&cache_path, &jpeg_data)
@@ -519,4 +547,32 @@ pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &st
         source: ThumbnailSource::DctScaling,
         exif_metadata,
     })
+}
+
+/// JPEG 파일의 이미지 크기 추출
+fn extract_jpeg_dimensions(jpeg_data: &[u8]) -> Option<(u32, u32)> {
+    if jpeg_data.len() < 2 || jpeg_data[0] != 0xFF || jpeg_data[1] != 0xD8 {
+        return None;
+    }
+
+    let mut i = 2;
+    while i + 9 < jpeg_data.len() {
+        if jpeg_data[i] != 0xFF {
+            return None;
+        }
+
+        let marker = jpeg_data[i + 1];
+        let length = u16::from_be_bytes([jpeg_data[i + 2], jpeg_data[i + 3]]) as usize;
+
+        // SOF0, SOF1, SOF2 마커에서 이미지 크기 추출
+        if marker == 0xC0 || marker == 0xC1 || marker == 0xC2 {
+            let height = u16::from_be_bytes([jpeg_data[i + 5], jpeg_data[i + 6]]) as u32;
+            let width = u16::from_be_bytes([jpeg_data[i + 7], jpeg_data[i + 8]]) as u32;
+            return Some((width, height));
+        }
+
+        i += 2 + length;
+    }
+
+    None
 }
