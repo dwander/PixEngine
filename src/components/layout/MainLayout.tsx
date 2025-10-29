@@ -79,7 +79,7 @@ export function MainLayout() {
       (centerPanel.group as any).header.hidden = true;
     }
 
-    // 왼쪽 상단: 폴더 트리
+    // 왼쪽: 폴더 트리
     const folderPanel = event.api.addPanel({
       id: "folders",
       component: "folderTree",
@@ -87,12 +87,15 @@ export function MainLayout() {
       position: { direction: "left" },
     });
 
-    // 왼쪽 하단: 메타데이터 (폴더 트리 아래에 배치)
-    event.api.addPanel({
+    // 왼쪽 하단: 메타데이터 (폴더 패널과 같은 그룹에 아래쪽으로 분할)
+    const metadataPanel = event.api.addPanel({
       id: "metadata",
       component: "metadata",
       title: "Metadata",
-      position: { referencePanel: "folders", direction: "below" },
+      position: {
+        referencePanel: folderPanel,
+        direction: "below",
+      },
     });
 
     // 오른쪽: 썸네일 스트립
@@ -106,6 +109,9 @@ export function MainLayout() {
     // 초기 크기 조정
     if (folderPanel?.api) {
       folderPanel.api.setSize({ width: 250 });
+    }
+    if (metadataPanel?.api) {
+      metadataPanel.api.setSize({ height: 300 });
     }
     if (thumbnailPanel?.api) {
       thumbnailPanel.api.setSize({ width: 200 });

@@ -73,12 +73,37 @@
   transition: none;
 }
 
-/* Sash 구분선 두께 커스터마이징 */
+/* Sash 구분선 - 클릭 영역은 유지하고 시각적 표시만 조정 */
 .dockview-theme-dark .dv-sash {
-  width: 3px !important;
+  /* width는 기본값 사용 (클릭 영역 유지) */
 }
 
 .dockview-theme-dark .dv-sash.dv-sash-horizontal {
-  height: 3px !important;
-  width: auto !important;
+  /* height는 기본값 사용 (클릭 영역 유지) */
+}
+
+/* Sash 내부의 실제 보이는 라인만 3px로 */
+.dockview-theme-dark .dv-sash::before {
+  content: '';
+  position: absolute;
+  background-color: var(--dv-sash-color);
+  transition: background-color var(--dv-active-sash-transition-duration) var(--dv-active-sash-transition-delay);
+}
+
+.dockview-theme-dark .dv-sash.dv-sash-vertical::before {
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 100%;
+}
+
+.dockview-theme-dark .dv-sash.dv-sash-horizontal::before {
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  width: 100%;
+}
+
+.dockview-theme-dark .dv-sash:hover::before {
+  background-color: var(--dv-active-sash-color);
 }
