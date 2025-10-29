@@ -268,6 +268,20 @@ function FolderTreeItem({
   const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
+  // 서브폴더가 없는 폴더는 다른 폴더로 이동하면 자동으로 닫힘
+  useEffect(() => {
+    if (hasSubdirs === false && isOpen && currentFolder) {
+      const normalizePathForComparison = (path: string) => {
+        return path.toLowerCase().replace(/\\/g, '/').replace(/^\\\\\?\\/, '');
+      };
+      const isCurrentFolder = normalizePathForComparison(node.path) === normalizePathForComparison(currentFolder);
+
+      if (!isCurrentFolder) {
+        setIsOpen(false);
+      }
+    }
+  }, [currentFolder, hasSubdirs, isOpen, node.path]);
+
   useEffect(() => {
     if (node.children !== undefined) {
       setChildren(node.children);

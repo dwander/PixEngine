@@ -121,21 +121,28 @@ export function ThumbnailPanel() {
     )
   }
 
+  // EXIF orientation을 CSS transform으로 변환
+  const getOrientationTransform = (orientation?: number): string => {
+    if (!orientation) return ''
+    switch (orientation) {
+      case 3:
+        return 'rotate(180deg)'
+      case 6:
+        return 'rotate(90deg)'
+      case 8:
+        return 'rotate(-90deg)'
+      default:
+        return ''
+    }
+  }
+
   return (
     <div className="flex h-full flex-col bg-neutral-900">
-      {/* 상단 헤더 */}
-      <div className="flex items-center justify-between border-b border-neutral-700 bg-neutral-800 px-4 py-2">
-        <div className="flex items-center gap-2 text-sm text-gray-300">
-          <span>총 {images.length}개</span>
+      {/* 상단 헤더 - 정렬/검색 기능 공간 확보 */}
+      <div className="border-b border-neutral-700 bg-neutral-800 px-4 py-2">
+        <div className="text-sm text-gray-400">
+          {/* 향후 정렬/검색 기능 들어갈 공간 */}
         </div>
-        {progress && (
-          <div className="flex items-center gap-2 text-sm text-gray-400">
-            <span>
-              {progress.completed}/{progress.total}
-            </span>
-            {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          </div>
-        )}
       </div>
 
       {/* 썸네일 그리드 */}
@@ -145,6 +152,9 @@ export function ThumbnailPanel() {
           rangeChanged={handleVisibleRangeChange}
           itemContent={(_index, imagePath) => {
             const thumbnail = thumbnails.get(imagePath)
+            const transform = thumbnail?.exif_metadata
+              ? getOrientationTransform(thumbnail.exif_metadata.orientation)
+              : ''
 
             return (
               <div className="p-2">
@@ -154,6 +164,7 @@ export function ThumbnailPanel() {
                       src={`data:image/jpeg;base64,${thumbnail.thumbnail_base64}`}
                       alt={imagePath}
                       className="h-full w-full object-contain"
+                      style={{ transform }}
                       loading="lazy"
                     />
                   ) : (
@@ -175,6 +186,18 @@ export function ThumbnailPanel() {
           style={{ height: '100%' }}
         />
       </div>
+
+      {/* 하단 상태 표시 */}
+      {progress && (
+        <div className="border-t border-neutral-700 bg-neutral-800 px-4 py-2">
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <span>
+              {progress.completed}/{progress.total}
+            </span>
+            {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
