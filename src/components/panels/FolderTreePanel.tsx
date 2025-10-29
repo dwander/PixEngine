@@ -1,16 +1,26 @@
 import { Folder, FolderOpen, ChevronRight, ChevronDown, HardDrive, Monitor } from "lucide-react";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useFolderContext } from "../../contexts/FolderContext";
+import { useImageContext } from "../../contexts/ImageContext";
 
 interface FolderNode {
   name: string;
   path: string;
   isOpen?: boolean;
   children?: FolderNode[];
+  imageCount?: number;
   isDrive?: boolean;
   isCategory?: boolean;
   icon?: 'computer';
 }
+
+const IMAGE_EXTENSIONS = [
+  '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
+  '.svg', '.ico', '.tiff', '.tif', '.heic', '.heif',
+  '.JPG', '.JPEG', '.PNG', '.GIF', '.BMP', '.WEBP',
+  '.SVG', '.ICO', '.TIFF', '.TIF', '.HEIC', '.HEIF'
+];
 
 interface DriveInfo {
   name: string;
@@ -119,10 +129,13 @@ interface FolderTreeItemProps {
 }
 
 function FolderTreeItem({ node, level }: FolderTreeItemProps) {
+  const { setCurrentFolder } = useFolderContext();
+  const { loadImageList } = useImageContext();
   const [isOpen, setIsOpen] = useState(node.isOpen || false);
   const [children, setChildren] = useState<FolderNode[]>(node.children || []);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSubdirs, setHasSubdirs] = useState<boolean | null>(null);
+  const [imagePaths, setImagePaths] = useState<string[]>([]);
 
   useEffect(() => {
     if (node.children !== undefined) {
@@ -170,19 +183,54 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
           { path: node.path }
         );
 
-        // 폴더만 필터링
-        const folderNodes: FolderNode[] = entries
-          .filter(entry => entry.isDir)
-          .map(entry => ({
-            name: entry.name,
-            path: entry.path,
-            isOpen: false,
-            children: undefined,
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
+        // 폴더와 이미지 파일 분리
+        const folderNodes: FolderNode[] = [];
+        const imageFiles: string[] = [];
+
+        for (const entry of entries) {
+          if (entry.isDir) {
+            folderNodes.push({
+              name: entry.name,
+              path: entry.path,
+              isOpen: false,
+              children: undefined,
+            });
+          } else {
+            // 이미지 파일인지 확인
+            const isImage = IMAGE_EXTENSIONS.some(ext => entry.name.toLowerCase().endsWith(ext.toLowerCase()));
+            if (isImage) {
+              imageFiles.push(entry.path);
+            }
+          }
+        }
+
+        // 폴더 정렬
+        folderNodes.sort((a, b) => a.name.localeCompare(b.name));
 
         setChildren(folderNodes);
+        setImagePaths(imageFiles);
         setIsOpen(true);
+
+        // 이미지가 있으면 ImageContext와 FolderContext 업데이트
+        if (imageFiles.length > 0) {
+          console.log(`[FolderTree] Loaded ${imageFiles.length} images from ${node.path}`);
+          console.log('[FolderTree] Image paths:', imageFiles);
+
+          // 총 용량 계산
+          let totalSize = 0;
+          try {
+            totalSize = await invoke<number>("calculate_images_total_size", { paths: imageFiles });
+          } catch (error) {
+            console.error("Failed to calculate total size:", error);
+          }
+
+          // Context 업데이트
+          setCurrentFolder(node.path, imageFiles.length, totalSize);
+          await loadImageList(imageFiles);
+        } else {
+          console.log(`[FolderTree] No images found in ${node.path}`);
+          setCurrentFolder(node.path, 0, 0);
+        }
       } catch (error) {
         console.error("Failed to read directory:", node.path, error);
       } finally {
@@ -190,6 +238,21 @@ function FolderTreeItem({ node, level }: FolderTreeItemProps) {
       }
     } else {
       setIsOpen(newIsOpen);
+
+      // 이미 로드된 이미지가 있으면 다시 Context 업데이트
+      if (newIsOpen && imagePaths.length > 0) {
+        console.log(`[FolderTree] Reloading ${imagePaths.length} images from ${node.path}`);
+
+        let totalSize = 0;
+        try {
+          totalSize = await invoke<number>("calculate_images_total_size", { paths: imagePaths });
+        } catch (error) {
+          console.error("Failed to calculate total size:", error);
+        }
+
+        setCurrentFolder(node.path, imagePaths.length, totalSize);
+        await loadImageList(imagePaths);
+      }
     }
   };
 
