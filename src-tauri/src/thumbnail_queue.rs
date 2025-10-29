@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, Semaphore};
 use tokio::time::{sleep, Duration};
 use tauri::{AppHandle, Emitter};
 
@@ -10,6 +10,14 @@ use crate::idle_detector;
 
 /// 고화질 썸네일 생성 취소 플래그 (전역)
 static HQ_GENERATION_CANCELLED: AtomicBool = AtomicBool::new(false);
+
+// HQ 썸네일 생성 상수
+/// HQ 썸네일 최대 동시 생성 개수
+const HQ_MAX_CONCURRENT: usize = 3;
+/// 유휴 시간 감지 임계값 (밀리초)
+const IDLE_THRESHOLD_MS: u64 = 3000;
+/// 유휴 상태 재확인 간격 (밀리초)
+const IDLE_CHECK_INTERVAL_MS: u64 = 500;
 
 /// 썸네일 생성 요청
 #[derive(Debug, Clone)]
@@ -246,7 +254,7 @@ impl ThumbnailQueueManager {
     }
 }
 
-/// 고화질 DCT 썸네일 생성 워커 (순차 처리)
+/// 고화질 DCT 썸네일 생성 워커 (병렬 처리)
 pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<String>) {
     let total = image_paths.len();
 
@@ -254,48 +262,79 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
     HQ_GENERATION_CANCELLED.store(false, Ordering::SeqCst);
 
     tokio::spawn(async move {
-        for (index, path) in image_paths.iter().enumerate() {
+        let completed = Arc::new(AtomicUsize::new(0));
+        let semaphore = Arc::new(Semaphore::new(HQ_MAX_CONCURRENT));
+
+        let mut tasks = Vec::new();
+
+        for (_index, path) in image_paths.iter().enumerate() {
             // 취소 플래그 확인
             if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
                 eprintln!("HQ thumbnail generation cancelled");
                 let _ = app_handle.emit("thumbnail-hq-cancelled", true);
-                return;
+                break;
             }
 
-            // 유휴 시간 확인 (5초 이상 입력 없으면 활성, 아니면 대기)
-            while !idle_detector::is_idle(5000) {
-                // 유휴 상태가 아니면 500ms 대기 후 재확인
-                sleep(Duration::from_millis(500)).await;
+            let app_handle = app_handle.clone();
+            let path = path.clone();
+            let completed = Arc::clone(&completed);
+            let semaphore = Arc::clone(&semaphore);
 
-                // 대기 중에도 취소 플래그 확인
+            let task = tokio::spawn(async move {
+                // 세마포어 획득
+                let _permit = semaphore.acquire().await.unwrap();
+
+                // 유휴 시간 확인 (임계값 이상 입력 없으면 활성, 아니면 대기)
+                while !idle_detector::is_idle(IDLE_THRESHOLD_MS) {
+                    // 유휴 상태가 아니면 재확인 간격만큼 대기 후 재확인
+                    sleep(Duration::from_millis(IDLE_CHECK_INTERVAL_MS)).await;
+
+                    // 대기 중에도 취소 플래그 확인
+                    if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
+                        return;
+                    }
+                }
+
+                // 취소 확인
                 if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
-                    eprintln!("HQ thumbnail generation cancelled during idle wait");
-                    let _ = app_handle.emit("thumbnail-hq-cancelled", true);
                     return;
                 }
-            }
 
-            // 고화질 DCT 썸네일 생성
-            match thumbnail::generate_hq_thumbnail(&app_handle, path).await {
-                Ok(result) => {
-                    // 진행 상태 전송
-                    let progress = ThumbnailProgress {
-                        completed: index + 1,
-                        total,
-                        current_path: path.clone(),
-                    };
+                // 고화질 DCT 썸네일 생성
+                match thumbnail::generate_hq_thumbnail(&app_handle, &path).await {
+                    Ok(result) => {
+                        let count = completed.fetch_add(1, Ordering::SeqCst) + 1;
 
-                    let _ = app_handle.emit("thumbnail-hq-progress", &progress);
-                    let _ = app_handle.emit("thumbnail-hq-completed", &result);
+                        // 진행 상태 전송
+                        let progress = ThumbnailProgress {
+                            completed: count,
+                            total,
+                            current_path: path.clone(),
+                        };
+
+                        let _ = app_handle.emit("thumbnail-hq-progress", &progress);
+                        let _ = app_handle.emit("thumbnail-hq-completed", &result);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to generate HQ thumbnail for {}: {}", path, e);
+                    }
                 }
-                Err(e) => {
-                    eprintln!("Failed to generate HQ thumbnail for {}: {}", path, e);
-                }
-            }
+            });
+
+            tasks.push(task);
         }
 
-        // 모든 고화질 썸네일 생성 완료
-        let _ = app_handle.emit("thumbnail-hq-all-completed", true);
+        // 모든 작업 완료 대기
+        for task in tasks {
+            let _ = task.await;
+        }
+
+        // 취소되지 않았으면 완료 이벤트 전송
+        if !HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
+            let _ = app_handle.emit("thumbnail-hq-all-completed", true);
+        } else {
+            let _ = app_handle.emit("thumbnail-hq-cancelled", true);
+        }
     });
 }
 
