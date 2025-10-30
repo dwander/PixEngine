@@ -292,64 +292,56 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     setContinuousPlayState({ isActive: false, direction: null })
   }, [])
 
-  // 연속 재생 시작 함수 (15fps = 66.6ms 간격)
+  // 연속 재생 시작 함수 (모든 이미지를 빠짐없이 순차 재생)
   const startContinuousPlay = useCallback((direction: 'left' | 'right' | 'up' | 'down') => {
     // 이미 실행 중이면 무시
     if (continuousPlayRef.current.animationFrameId !== null) return
 
     setContinuousPlayState({ isActive: true, direction })
 
-    const FRAME_INTERVAL = 66.6 // 15fps
+    // 첫 이미지로 이동하여 연속 재생 시작
+    // animationFrameId를 1로 설정하여 활성화 표시 (실제 RAF ID는 useEffect에서 관리)
+    continuousPlayRef.current.animationFrameId = 1
+  }, [])
 
-    const playLoop = (timestamp: number) => {
-      const elapsed = timestamp - continuousPlayRef.current.lastFrameTime
+  // 연속 재생 중 focusedIndex 변경 시 다음 이미지로 자동 이동
+  useEffect(() => {
+    if (!continuousPlayState.isActive) return
+    if (continuousPlayRef.current.animationFrameId === null) return
 
-      if (elapsed >= FRAME_INTERVAL) {
-        // 다음 인덱스 계산 및 캐시 확인
-        setFocusedIndex(prev => {
-          let nextIndex = prev
+    // 이미지 로딩 완료 대기 시간 (캐시 히트 시 빠르게, 미스 시 충분한 시간 확보)
+    const imagePath = images[focusedIndex]
+    const cachedImage = getCachedImage(imagePath)
+    const waitTime = cachedImage ? 10 : 100 // 캐시 히트: 10ms, 미스: 100ms
 
-          // 방향에 따라 다음 인덱스 계산
-          if (direction === 'left') {
-            nextIndex = Math.max(0, prev - 1)
-          } else if (direction === 'right') {
-            nextIndex = Math.min(images.length - 1, prev + 1)
-          } else if (direction === 'up' && isVertical) {
-            nextIndex = Math.max(0, prev - columnCount)
-          } else if (direction === 'down' && isVertical) {
-            nextIndex = Math.min(images.length - 1, prev + columnCount)
-          }
+    const timer = setTimeout(() => {
+      if (!continuousPlayState.isActive) return
 
-          // 경계 체크: 더 이상 이동할 수 없으면 중지
-          if (nextIndex === prev) {
-            stopContinuousPlay()
-            return prev
-          }
+      // 다음 인덱스 계산
+      let nextIndex = focusedIndex
 
-          // 캐시 확인
-          const imagePath = images[nextIndex]
-          const cachedImage = getCachedImage(imagePath)
-
-          if (cachedImage) {
-            // 캐시 히트: 즉시 로드
-            continuousPlayRef.current.lastFrameTime = timestamp
-          } else {
-            // 캐시 미스: 프레임 스킵하고 계속 진행
-            continuousPlayRef.current.lastFrameTime = timestamp
-          }
-
-          return nextIndex
-        })
+      if (continuousPlayState.direction === 'left') {
+        nextIndex = Math.max(0, focusedIndex - 1)
+      } else if (continuousPlayState.direction === 'right') {
+        nextIndex = Math.min(images.length - 1, focusedIndex + 1)
+      } else if (continuousPlayState.direction === 'up' && isVertical) {
+        nextIndex = Math.max(0, focusedIndex - columnCount)
+      } else if (continuousPlayState.direction === 'down' && isVertical) {
+        nextIndex = Math.min(images.length - 1, focusedIndex + columnCount)
       }
 
-      // 다음 프레임 예약
-      continuousPlayRef.current.animationFrameId = requestAnimationFrame(playLoop)
-    }
+      // 경계 체크: 더 이상 이동할 수 없으면 중지
+      if (nextIndex === focusedIndex) {
+        stopContinuousPlay()
+        return
+      }
 
-    // 첫 프레임 시작
-    continuousPlayRef.current.lastFrameTime = performance.now()
-    continuousPlayRef.current.animationFrameId = requestAnimationFrame(playLoop)
-  }, [images, isVertical, columnCount, getCachedImage, stopContinuousPlay])
+      // 다음 이미지로 이동
+      setFocusedIndex(nextIndex)
+    }, waitTime)
+
+    return () => clearTimeout(timer)
+  }, [focusedIndex, continuousPlayState, images, isVertical, columnCount, getCachedImage, stopContinuousPlay])
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
