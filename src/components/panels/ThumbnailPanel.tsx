@@ -137,19 +137,29 @@ export function ThumbnailPanel() {
     enabled: isVertical,
   })
 
-  // 가로 모드 아이템 크기 계산 (내부 컨테이너 높이 기반)
-  const horizontalItemSize = useMemo(() => {
-    if (isVertical) return 150 + 8
+  // 가로 모드 아이템 크기 상태
+  const [horizontalItemSize, setHorizontalItemSize] = useState(150 + 8)
 
-    // horizontalContentRef의 높이를 직접 사용
-    const contentContainer = horizontalContentRef.current
-    if (!contentContainer) return 150 + 8
+  // 가로 모드 아이템 크기 측정
+  useEffect(() => {
+    if (isVertical) return
 
-    const contentHeight = contentContainer.getBoundingClientRect().height
-    const gap = 8 // marginRight 0.5rem
+    const measureSize = () => {
+      const contentContainer = horizontalContentRef.current
+      if (!contentContainer) return
 
-    return contentHeight + gap
-  }, [isVertical, containerHeight]) // containerHeight 변경 시 재계산
+      const contentHeight = contentContainer.getBoundingClientRect().height
+      const gap = 8 // marginRight 0.5rem
+      const newSize = contentHeight + gap
+
+      setHorizontalItemSize(newSize)
+    }
+
+    // 초기 측정
+    const timeoutId = setTimeout(measureSize, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [isVertical, containerHeight, images.length])
 
   // 가상화 설정 (가로 모드 - 수평 스크롤)
   const horizontalVirtualizer = useVirtualizer({
