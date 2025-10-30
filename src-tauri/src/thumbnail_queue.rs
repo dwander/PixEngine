@@ -1,7 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock, Semaphore};
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, Duration};
 use tauri::{AppHandle, Emitter};
 
@@ -292,7 +292,9 @@ pub async fn load_existing_hq_thumbnails(app_handle: AppHandle, image_paths: Vec
     });
 }
 
-/// 고화질 DCT 썸네일 생성 워커 (병렬 처리, 유휴 시간 대기)
+/// 고화질 DCT 썸네일 생성 워커 (유휴 상태에 따라 동적 병렬 처리)
+/// - 비유휴 상태: 뷰포트 우선 1개씩 순차 처리
+/// - 유휴 상태: 인덱스 순서로 3개 병렬 처리
 pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<String>) {
     let total = image_paths.len();
 
@@ -301,55 +303,84 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
 
     tokio::spawn(async move {
         let completed = Arc::new(AtomicUsize::new(0));
-        let semaphore = Arc::new(Semaphore::new(HQ_MAX_CONCURRENT));
+        let viewport_indices = Arc::new(RwLock::new(HashSet::<usize>::new()));
 
-        let mut tasks = Vec::new();
+        // 이미지 경로와 인덱스를 함께 관리
+        let mut remaining: Vec<(usize, String)> = image_paths.into_iter().enumerate().collect();
 
-        for (_index, path) in image_paths.iter().enumerate() {
-            // 취소 플래그 확인
+        while !remaining.is_empty() {
+            // 취소 확인
             if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
                 eprintln!("HQ thumbnail generation cancelled");
                 let _ = app_handle.emit("thumbnail-hq-cancelled", true);
-                break;
+                return;
             }
 
-            let app_handle = app_handle.clone();
-            let path = path.clone();
-            let completed = Arc::clone(&completed);
-            let semaphore = Arc::clone(&semaphore);
+            let is_idle = idle_detector::should_generate_hq(IDLE_THRESHOLD_MS);
 
-            let task = tokio::spawn(async move {
-                // 세마포어 획득
-                let _permit = semaphore.acquire().await.unwrap();
+            if is_idle {
+                // 유휴 상태: 인덱스 순서로 최대 3개 병렬 처리
+                let batch_size = HQ_MAX_CONCURRENT.min(remaining.len());
+                let batch: Vec<_> = remaining.drain(..batch_size).collect();
 
-                // HQ 생성 가능 여부 확인 (백그라운드면 즉시, 포그라운드면 유휴 시간 대기)
-                while !idle_detector::should_generate_hq(IDLE_THRESHOLD_MS) {
-                    // 조건 충족 안되면 재확인 간격만큼 대기 후 재확인
-                    sleep(Duration::from_millis(IDLE_CHECK_INTERVAL_MS)).await;
+                let mut tasks = Vec::new();
+                for (_index, path) in batch {
+                    let app_handle = app_handle.clone();
+                    let completed = Arc::clone(&completed);
 
-                    // 대기 중에도 취소 플래그 확인
-                    if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
-                        return;
-                    }
+                    let task = tokio::spawn(async move {
+                        match thumbnail::generate_hq_thumbnail(&app_handle, &path).await {
+                            Ok(result) => {
+                                let count = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                                let progress = ThumbnailProgress {
+                                    completed: count,
+                                    total,
+                                    current_path: path.clone(),
+                                };
+                                let _ = app_handle.emit("thumbnail-hq-progress", &progress);
+                                let _ = app_handle.emit("thumbnail-hq-completed", &result);
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to generate HQ thumbnail for {}: {}", path, e);
+                            }
+                        }
+                    });
+
+                    tasks.push(task);
                 }
 
-                // 취소 확인
-                if HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
-                    return;
+                // 배치 완료 대기
+                for task in tasks {
+                    let _ = task.await;
                 }
+            } else {
+                // 비유휴 상태: 뷰포트에 있는 것 우선, 1개씩 순차 처리
+                let viewport = viewport_indices.read().await;
 
-                // 고화질 DCT 썸네일 생성
+                // 뷰포트에 있는 항목 찾기
+                let viewport_item_idx = remaining.iter().position(|(idx, _)| viewport.contains(idx));
+
+                let item = if let Some(pos) = viewport_item_idx {
+                    // 뷰포트 항목 우선
+                    remaining.remove(pos)
+                } else {
+                    // 없으면 첫 번째 항목
+                    remaining.remove(0)
+                };
+
+                drop(viewport); // RwLock 해제
+
+                let (_index, path) = item;
+
+                // 1개씩 처리
                 match thumbnail::generate_hq_thumbnail(&app_handle, &path).await {
                     Ok(result) => {
                         let count = completed.fetch_add(1, Ordering::SeqCst) + 1;
-
-                        // 진행 상태 전송
                         let progress = ThumbnailProgress {
                             completed: count,
                             total,
                             current_path: path.clone(),
                         };
-
                         let _ = app_handle.emit("thumbnail-hq-progress", &progress);
                         let _ = app_handle.emit("thumbnail-hq-completed", &result);
                     }
@@ -357,17 +388,13 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
                         eprintln!("Failed to generate HQ thumbnail for {}: {}", path, e);
                     }
                 }
-            });
 
-            tasks.push(task);
+                // UI 응답성을 위한 짧은 대기
+                sleep(Duration::from_millis(10)).await;
+            }
         }
 
-        // 모든 작업 완료 대기
-        for task in tasks {
-            let _ = task.await;
-        }
-
-        // 취소되지 않았으면 완료 이벤트 전송
+        // 완료 이벤트 전송
         if !HQ_GENERATION_CANCELLED.load(Ordering::SeqCst) {
             let _ = app_handle.emit("thumbnail-hq-all-completed", true);
         } else {
