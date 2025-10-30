@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { flushSync } from "react-dom";
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 interface ImageCacheEntry {
@@ -91,13 +90,11 @@ export function ImageProvider({ children }: { children: ReactNode }) {
     // 이미지 리스트에서 현재 인덱스 찾기
     const index = imageList.indexOf(path);
 
-    // 상태 업데이트 배칭 (flushSync를 사용하여 동기적으로 업데이트)
-    flushSync(() => {
-      setCurrentPath(path);
-      if (index !== -1) {
-        setCurrentIndex(index);
-      }
-    });
+    // 상태 업데이트 (React 18의 자동 배칭 활용)
+    setCurrentPath(path);
+    if (index !== -1) {
+      setCurrentIndex(index);
+    }
 
     // 주변 이미지 프리로딩 (백그라운드)
     if (index !== -1) {

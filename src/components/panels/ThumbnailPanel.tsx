@@ -4,7 +4,6 @@ import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Loader2 } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
-import { useThrottle } from '../../hooks/useThrottle'
 import { useDebounce } from '../../hooks/useDebounce'
 
 interface ThumbnailResult {
@@ -38,7 +37,7 @@ interface ThumbnailProgress {
 }
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
-  const { imageList: images, loadImage } = useImageContext()
+  const { imageList: images, loadImage, getCachedImage } = useImageContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -53,6 +52,18 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const horizontalContentRef = useRef<HTMLDivElement>(null) // 가로 모드 내부 컨테이너
   const [focusedIndex, setFocusedIndex] = useState(0) // 키보드 포커스 인덱스
+
+  // 연속 재생 모드 상태
+  const [continuousPlayState, setContinuousPlayState] = useState<{
+    isActive: boolean
+    direction: 'left' | 'right' | 'up' | 'down' | null
+  }>({ isActive: false, direction: null })
+
+  // 연속 재생 제어용 ref
+  const continuousPlayRef = useRef<{
+    animationFrameId: number | null
+    lastFrameTime: number
+  }>({ animationFrameId: null, lastFrameTime: 0 })
 
   // 패널 방향 및 크기 감지
   useEffect(() => {
@@ -257,8 +268,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
   }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
 
-  // focusedIndex를 디바운싱하여 빠른 키 입력 시 마지막 이미지만 로드
-  const debouncedFocusedIndex = useDebounce(focusedIndex, 150)
+  // focusedIndex를 디바운싱 (연속 재생 모드일 때는 0ms로 즉시 적용)
+  const debouncedFocusedIndex = useDebounce(
+    focusedIndex,
+    continuousPlayState.isActive ? 0 : 150
+  )
 
   // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드
   useEffect(() => {
@@ -269,26 +283,110 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedFocusedIndex])
 
-  // 키보드 네비게이션 핸들러 (쓰로틀링 적용)
-  const handleNavigation = useCallback((e: KeyboardEvent) => {
-    // 네비게이션 키들
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault()
-      setFocusedIndex(prev => Math.max(0, prev - 1))
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault()
-      setFocusedIndex(prev => Math.min(images.length - 1, prev + 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (isVertical) {
-        setFocusedIndex(prev => Math.max(0, prev - columnCount))
+  // 연속 재생 중지 함수
+  const stopContinuousPlay = useCallback(() => {
+    if (continuousPlayRef.current.animationFrameId !== null) {
+      cancelAnimationFrame(continuousPlayRef.current.animationFrameId)
+      continuousPlayRef.current.animationFrameId = null
+    }
+    setContinuousPlayState({ isActive: false, direction: null })
+  }, [])
+
+  // 연속 재생 시작 함수 (15fps = 66.6ms 간격)
+  const startContinuousPlay = useCallback((direction: 'left' | 'right' | 'up' | 'down') => {
+    // 이미 실행 중이면 무시
+    if (continuousPlayRef.current.animationFrameId !== null) return
+
+    setContinuousPlayState({ isActive: true, direction })
+
+    const FRAME_INTERVAL = 66.6 // 15fps
+
+    const playLoop = (timestamp: number) => {
+      const elapsed = timestamp - continuousPlayRef.current.lastFrameTime
+
+      if (elapsed >= FRAME_INTERVAL) {
+        // 다음 인덱스 계산 및 캐시 확인
+        setFocusedIndex(prev => {
+          let nextIndex = prev
+
+          // 방향에 따라 다음 인덱스 계산
+          if (direction === 'left') {
+            nextIndex = Math.max(0, prev - 1)
+          } else if (direction === 'right') {
+            nextIndex = Math.min(images.length - 1, prev + 1)
+          } else if (direction === 'up' && isVertical) {
+            nextIndex = Math.max(0, prev - columnCount)
+          } else if (direction === 'down' && isVertical) {
+            nextIndex = Math.min(images.length - 1, prev + columnCount)
+          }
+
+          // 경계 체크: 더 이상 이동할 수 없으면 중지
+          if (nextIndex === prev) {
+            stopContinuousPlay()
+            return prev
+          }
+
+          // 캐시 확인
+          const imagePath = images[nextIndex]
+          const cachedImage = getCachedImage(imagePath)
+
+          if (cachedImage) {
+            // 캐시 히트: 즉시 로드
+            continuousPlayRef.current.lastFrameTime = timestamp
+          } else {
+            // 캐시 미스: 프레임 스킵하고 계속 진행
+            continuousPlayRef.current.lastFrameTime = timestamp
+          }
+
+          return nextIndex
+        })
       }
-    } else if (e.key === 'ArrowDown') {
+
+      // 다음 프레임 예약
+      continuousPlayRef.current.animationFrameId = requestAnimationFrame(playLoop)
+    }
+
+    // 첫 프레임 시작
+    continuousPlayRef.current.lastFrameTime = performance.now()
+    continuousPlayRef.current.animationFrameId = requestAnimationFrame(playLoop)
+  }, [images, isVertical, columnCount, getCachedImage, stopContinuousPlay])
+
+  // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // 방향키 처리
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
       e.preventDefault()
-      if (isVertical) {
-        setFocusedIndex(prev => Math.min(images.length - 1, prev + columnCount))
+
+      // 단일 탭: e.repeat === false
+      if (!e.repeat) {
+        // 연속 재생 모드 종료 (혹시 모를 상태 정리)
+        stopContinuousPlay()
+
+        // 즉시 이동 (현재 동작 유지)
+        if (e.key === 'ArrowLeft') {
+          setFocusedIndex(prev => Math.max(0, prev - 1))
+        } else if (e.key === 'ArrowRight') {
+          setFocusedIndex(prev => Math.min(images.length - 1, prev + 1))
+        } else if (e.key === 'ArrowUp' && isVertical) {
+          setFocusedIndex(prev => Math.max(0, prev - columnCount))
+        } else if (e.key === 'ArrowDown' && isVertical) {
+          setFocusedIndex(prev => Math.min(images.length - 1, prev + columnCount))
+        }
       }
-    } else if (e.key === 'Home') {
+      // 연속 재생: e.repeat === true
+      else {
+        const direction = e.key === 'ArrowLeft' ? 'left'
+                        : e.key === 'ArrowRight' ? 'right'
+                        : e.key === 'ArrowUp' ? 'up'
+                        : 'down'
+
+        startContinuousPlay(direction)
+      }
+      return
+    }
+
+    // 나머지 키들 (Home, End, PageUp/Down, 검색)
+    if (e.key === 'Home') {
       e.preventDefault()
       setFocusedIndex(0)
     } else if (e.key === 'End') {
@@ -360,20 +458,35 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [images.length, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer])
+  }, [images.length, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay])
 
-  // 쓰로틀링된 네비게이션 핸들러 (16ms = 60fps)
-  const throttledHandleNavigation = useThrottle(handleNavigation, 16)
+  // 키보드 업 핸들러 (연속 재생 종료)
+  const handleKeyUp = useCallback((e: KeyboardEvent) => {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      stopContinuousPlay()
+    }
+  }, [stopContinuousPlay])
 
-  // 키보드 네비게이션 (4방향 + Home/End + PageUp/PageDown + 검색)
+  // 키보드 네비게이션 (방향키 + Home/End + PageUp/PageDown + 검색)
   useEffect(() => {
     if (images.length === 0) return
 
-    window.addEventListener('keydown', throttledHandleNavigation)
-    return () => {
-      window.removeEventListener('keydown', throttledHandleNavigation)
+    // 포커스 손실 시 연속 재생 중지
+    const handleBlur = () => {
+      stopContinuousPlay()
     }
-  }, [images.length, throttledHandleNavigation])
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+      stopContinuousPlay() // 클린업 시 연속 재생 중지
+    }
+  }, [images.length, handleKeyDown, handleKeyUp, stopContinuousPlay])
 
   // 썸네일 생성 시작
   useEffect(() => {
