@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { Loader2 } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { Store } from '@tauri-apps/plugin-store'
 
 interface ThumbnailResult {
   path: string
@@ -44,7 +45,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [hqProgress, setHqProgress] = useState<ThumbnailProgress | null>(null)
   const [isGeneratingHq, setIsGeneratingHq] = useState(false)
   // const [selectedImage, setSelectedImage] = useState<string | null>(null) // 임시 비활성화
-  const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
+  const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px (store에서 로드)
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
   const [containerHeight, setContainerHeight] = useState(0)
@@ -64,6 +65,54 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     animationFrameId: number | null
     lastFrameTime: number
   }>({ animationFrameId: null, lastFrameTime: 0 })
+
+  // 썸네일 크기 store에서 로드 및 저장
+  useEffect(() => {
+    let store: Store | null = null
+
+    const loadThumbnailSize = async () => {
+      try {
+        store = await Store.load('settings.json')
+        const savedSize = await store.get<number>('thumbnailSize')
+        if (savedSize !== null && savedSize !== undefined) {
+          setThumbnailSize(savedSize)
+        }
+      } catch (error) {
+        console.error('Failed to load thumbnail size:', error)
+      }
+    }
+
+    loadThumbnailSize()
+
+    // cleanup
+    return () => {
+      store = null
+    }
+  }, [])
+
+  // 썸네일 크기 변경 시 저장
+  useEffect(() => {
+    let store: Store | null = null
+    let timeoutId: number | undefined
+
+    const saveThumbnailSize = async () => {
+      try {
+        store = await Store.load('settings.json')
+        await store.set('thumbnailSize', thumbnailSize)
+        await store.save()
+      } catch (error) {
+        console.error('Failed to save thumbnail size:', error)
+      }
+    }
+
+    // 디바운스 (500ms 후 저장)
+    timeoutId = window.setTimeout(saveThumbnailSize, 500)
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      store = null
+    }
+  }, [thumbnailSize])
 
   // 패널 방향 및 크기 감지
   useEffect(() => {
@@ -828,15 +877,18 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             </div>
 
             {/* 썸네일 크기 조절 슬라이더 */}
-            <div className="flex items-center gap-2 mr-4" style={{ width: '150px' }}>
-              <span className="text-xs text-gray-400 whitespace-nowrap">{thumbnailSize}px</span>
+            <div className="flex items-center gap-2 mr-4">
+              <span className="text-xs text-gray-400 whitespace-nowrap inline-block text-right" style={{ width: '48px' }}>
+                {thumbnailSize}px
+              </span>
               <input
                 type="range"
                 min="75"
                 max="320"
                 value={thumbnailSize}
                 onChange={(e) => setThumbnailSize(Number(e.target.value))}
-                className="flex-1 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer"
+                className="h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer"
+                style={{ width: '100px' }}
               />
             </div>
           </div>
