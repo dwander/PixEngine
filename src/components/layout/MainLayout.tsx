@@ -125,6 +125,22 @@ export function MainLayout() {
         }
       }, 500);
     });
+
+    // 페이지 언로드 전 pending된 저장 강제 실행
+    const handleBeforeUnload = async () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const layout = event.api.toJSON();
+          await invoke("save_dockview_layout", { layout });
+        } catch (error) {
+          console.error('[Layout] Save on unload failed:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
   };
 
   // dockview가 레이아웃을 자동으로 관리하므로 별도의 resize 로직 불필요
