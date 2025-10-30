@@ -107,3 +107,8 @@
 .dockview-theme-dark .dv-sash:hover::before {
   background-color: var(--dv-active-sash-color);
 }
+
+/* 탭 닫기 버튼 숨기기 */
+.dockview-theme-dark .dv-default-tab-action {
+  display: none !important;
+}

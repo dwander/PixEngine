@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { TitleBar } from "./components/layout/TitleBar";
 import { MainLayout } from "./components/layout/MainLayout";
 import { useWindowState } from "./hooks/useWindowState";
@@ -9,16 +10,44 @@ function App() {
   // 윈도우 상태 저장/복원
   useWindowState();
 
+  const [visiblePanels, setVisiblePanels] = useState({
+    folders: true,
+    metadata: true,
+    thumbnails: true,
+  });
+
+  const [togglePanelId, setTogglePanelId] = useState<string | null>(null);
+
+  const handleTogglePanel = useCallback((panelId: string) => {
+    setTogglePanelId(panelId);
+    // 상태 즉시 업데이트 (낙관적 업데이트)
+    setVisiblePanels(prev => ({
+      ...prev,
+      [panelId]: !prev[panelId as keyof typeof prev],
+    }));
+  }, []);
+
+  const handlePanelVisibilityChange = useCallback((panels: typeof visiblePanels) => {
+    setVisiblePanels(panels);
+    setTogglePanelId(null);
+  }, []);
+
   return (
     <FolderProvider>
       <ImageProvider>
         <div className={`flex flex-col h-screen ${theme.background.primary}`}>
           {/* 커스텀 타이틀바 */}
-          <TitleBar />
+          <TitleBar
+            onTogglePanel={handleTogglePanel}
+            visiblePanels={visiblePanels}
+          />
 
           {/* 메인 레이아웃 (dockview) */}
           <main className="flex-1 overflow-hidden">
-            <MainLayout />
+            <MainLayout
+              onPanelVisibilityChange={handlePanelVisibilityChange}
+              togglePanelId={togglePanelId}
+            />
           </main>
 
           {/* 상태 표시 영역 */}

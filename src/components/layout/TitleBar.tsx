@@ -1,13 +1,24 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Minus, Square, Copy, X } from "lucide-react";
 import { theme, getTitleBarColors } from "../../lib/theme";
 
 const appWindow = getCurrentWindow();
 
-export function TitleBar() {
+interface TitleBarProps {
+  onTogglePanel?: (panelId: string) => void;
+  visiblePanels?: {
+    folders: boolean;
+    metadata: boolean;
+    thumbnails: boolean;
+  };
+}
+
+export function TitleBar({ onTogglePanel, visiblePanels }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFocused, setIsFocused] = useState(true);
+  const [isPanelMenuOpen, setIsPanelMenuOpen] = useState(false);
+  const panelMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // 윈도우 상태 감지
@@ -49,6 +60,23 @@ export function TitleBar() {
       if (cleanup) cleanup();
     };
   }, []);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (panelMenuRef.current && !panelMenuRef.current.contains(event.target as Node)) {
+        setIsPanelMenuOpen(false);
+      }
+    };
+
+    if (isPanelMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isPanelMenuOpen]);
 
   const handleMinimize = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -92,16 +120,72 @@ export function TitleBar() {
         {/* 메뉴 */}
         <nav className="flex items-center gap-1">
           <button className={colors.menuButton}>
-            File
+            파일
           </button>
           <button className={colors.menuButton}>
-            Edit
+            편집
           </button>
           <button className={colors.menuButton}>
-            View
+            보기
           </button>
+
+          {/* 패널 메뉴 (드롭다운) */}
+          <div className="relative" ref={panelMenuRef}>
+            <button
+              className={colors.menuButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPanelMenuOpen(!isPanelMenuOpen);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              패널
+            </button>
+
+            {isPanelMenuOpen && (
+              <div
+                className="absolute top-full left-0 mt-1 bg-neutral-800 border border-neutral-700 rounded shadow-lg py-1 min-w-[160px] z-50"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  className="w-full px-3 py-2 text-left hover:bg-neutral-700 flex items-center justify-between"
+                  style={{ fontSize: '1rem' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePanel?.('folders');
+                  }}
+                >
+                  <span>폴더</span>
+                  <span className="text-neutral-500">{visiblePanels?.folders ? '✓' : ''}</span>
+                </button>
+                <button
+                  className="w-full px-3 py-2 text-left hover:bg-neutral-700 flex items-center justify-between"
+                  style={{ fontSize: '1rem' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePanel?.('metadata');
+                  }}
+                >
+                  <span>메타데이터</span>
+                  <span className="text-neutral-500">{visiblePanels?.metadata ? '✓' : ''}</span>
+                </button>
+                <button
+                  className="w-full px-3 py-2 text-left hover:bg-neutral-700 flex items-center justify-between"
+                  style={{ fontSize: '1rem' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePanel?.('thumbnails');
+                  }}
+                >
+                  <span>썸네일</span>
+                  <span className="text-neutral-500">{visiblePanels?.thumbnails ? '✓' : ''}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <button className={colors.menuButton}>
-            Help
+            도움말
           </button>
         </nav>
       </div>

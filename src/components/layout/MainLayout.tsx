@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import {
   DockviewReact,
   DockviewReadyEvent,
@@ -42,10 +42,71 @@ const components = {
   thumbnails: ThumbnailPanelWrapper,
 };
 
-export function MainLayout() {
+interface MainLayoutProps {
+  onPanelVisibilityChange?: (visiblePanels: {
+    folders: boolean;
+    metadata: boolean;
+    thumbnails: boolean;
+  }) => void;
+  togglePanelId?: string | null;
+}
+
+export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayoutProps) {
   const api = useRef<DockviewReadyEvent | null>(null);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
   const panelSizesBeforeDragRef = useRef<Map<string, { width: number; height: number }>>(new Map());
+
+  // 패널 가시성 체크 및 콜백 호출
+  const updatePanelVisibility = useCallback(() => {
+    if (!api.current) return;
+
+    const visiblePanels = {
+      folders: !!api.current.api.getPanel('folders'),
+      metadata: !!api.current.api.getPanel('metadata'),
+      thumbnails: !!api.current.api.getPanel('thumbnails'),
+    };
+
+    onPanelVisibilityChange?.(visiblePanels);
+  }, [onPanelVisibilityChange]);
+
+  // 패널 토글 함수
+  const togglePanel = useCallback((panelId: string) => {
+    if (!api.current) return;
+
+    const panel = api.current.api.getPanel(panelId);
+
+    if (panel) {
+      // 패널이 있으면 제거
+      api.current.api.removePanel(panel);
+    } else {
+      // 패널이 없으면 플로팅 윈도우로 추가 (기존 레이아웃 유지)
+      const panelConfig = {
+        folders: { id: 'folders', component: 'folderTree', title: '폴더' },
+        metadata: { id: 'metadata', component: 'metadata', title: '메타데이터' },
+        thumbnails: { id: 'thumbnails', component: 'thumbnails', title: '썸네일' },
+      };
+
+      const config = panelConfig[panelId as keyof typeof panelConfig];
+      if (config) {
+        api.current.api.addPanel({
+          id: config.id,
+          component: config.component,
+          title: config.title,
+          floating: true, // 플로팅 윈도우로 추가
+        });
+      }
+    }
+
+    // 가시성 업데이트
+    setTimeout(updatePanelVisibility, 100);
+  }, [updatePanelVisibility]);
+
+  // 외부에서 패널 토글 요청 처리
+  useEffect(() => {
+    if (togglePanelId) {
+      togglePanel(togglePanelId);
+    }
+  }, [togglePanelId, togglePanel]);
 
   const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;
@@ -113,6 +174,9 @@ export function MainLayout() {
           (centerPanel.group as any).header.hidden = true;
         }
 
+        // 초기 패널 가시성 체크
+        updatePanelVisibility();
+
         layoutRestored = true;
       }
     } catch (error) {
@@ -138,6 +202,9 @@ export function MainLayout() {
         if (centerPanel?.group) {
           (centerPanel.group as any).header.hidden = true;
         }
+
+        // 초기 패널 가시성 체크
+        updatePanelVisibility();
 
         // 기본 레이아웃을 AppData에 저장
         const { invoke } = await import("@tauri-apps/api/core");
