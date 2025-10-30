@@ -171,7 +171,14 @@ export function ThumbnailPanel() {
     enabled: !isVertical,
   })
 
-  // horizontalItemSize 변경 시 가상화 재측정
+  // rowHeight 변경 시 가상화 재측정 (세로 모드)
+  useEffect(() => {
+    if (isVertical) {
+      rowVirtualizer.measure()
+    }
+  }, [rowHeight, isVertical, rows.length])
+
+  // horizontalItemSize 변경 시 가상화 재측정 (가로 모드)
   useEffect(() => {
     if (!isVertical) {
       horizontalVirtualizer.measure()
