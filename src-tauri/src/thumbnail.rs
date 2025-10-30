@@ -497,28 +497,25 @@ pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &st
     let cache_key = generate_cache_key(file_path, mtime);
     let cache_path = get_cache_path(app_handle, &cache_key)?;
 
-    // 캐시 파일이 이미 존재하고 크기가 30KB 이상이면 이미 HQ 썸네일이므로 스킵
-    if let Ok(metadata) = fs::metadata(&cache_path) {
-        if metadata.len() >= 30_000 {
-            // 기존 HQ 썸네일 로드
-            let jpeg_data = fs::read(&cache_path)
-                .map_err(|e| format!("Failed to read cached HQ thumbnail: {}", e))?;
+    // 캐시 파일이 이미 존재하면 기존 HQ 썸네일 로드
+    if cache_path.exists() {
+        let jpeg_data = fs::read(&cache_path)
+            .map_err(|e| format!("Failed to read cached HQ thumbnail: {}", e))?;
 
-            let thumbnail_base64 = encode_to_base64(&jpeg_data);
-            let exif_metadata = extract_exif_metadata(file_path).ok();
+        let thumbnail_base64 = encode_to_base64(&jpeg_data);
+        let exif_metadata = extract_exif_metadata(file_path).ok();
 
-            // 이미지 크기 추출 (간단한 JPEG 헤더 파싱)
-            let (width, height) = extract_jpeg_dimensions(&jpeg_data).unwrap_or((320, 320));
+        // 이미지 크기 추출 (간단한 JPEG 헤더 파싱)
+        let (width, height) = extract_jpeg_dimensions(&jpeg_data).unwrap_or((320, 320));
 
-            return Ok(ThumbnailResult {
-                path: file_path.to_string(),
-                thumbnail_base64,
-                width,
-                height,
-                source: ThumbnailSource::Cache,
-                exif_metadata,
-            });
-        }
+        return Ok(ThumbnailResult {
+            path: file_path.to_string(),
+            thumbnail_base64,
+            width,
+            height,
+            source: ThumbnailSource::Cache,
+            exif_metadata,
+        });
     }
 
     // EXIF 메타데이터 추출
@@ -528,7 +525,7 @@ pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &st
     let (rgb_data, width, height) = generate_dct_thumbnail(file_path, 320)?;
     let jpeg_data = encode_thumbnail_to_jpeg_with_quality(&rgb_data, width, height, 70)?;
 
-    // 캐시 업데이트 (기존 EXIF 썸네일을 덮어씀)
+    // 캐시 저장
     fs::write(&cache_path, &jpeg_data)
         .map_err(|e| format!("Failed to write HQ thumbnail cache: {}", e))?;
 
@@ -572,18 +569,14 @@ fn extract_jpeg_dimensions(jpeg_data: &[u8]) -> Option<(u32, u32)> {
     None
 }
 
-/// HQ 썸네일이 이미 존재하는지 확인 (30KB 이상의 캐시)
+/// HQ 썸네일이 이미 존재하는지 확인 (캐시 파일 존재 여부)
+/// 이제 캐시는 모두 HQ 썸네일만 저장되므로 파일 존재만 확인
 pub fn has_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> bool {
     match get_file_mtime(file_path) {
         Ok(mtime) => {
             let cache_key = generate_cache_key(file_path, mtime);
             match get_cache_path(app_handle, &cache_key) {
-                Ok(cache_path) => {
-                    if let Ok(metadata) = fs::metadata(&cache_path) {
-                        return metadata.len() >= 30_000;
-                    }
-                    false
-                }
+                Ok(cache_path) => cache_path.exists(),
                 Err(_) => false,
             }
         }
