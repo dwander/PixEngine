@@ -254,53 +254,37 @@ impl ThumbnailQueueManager {
     }
 }
 
-/// 기존 HQ 썸네일 즉시 로드 (유휴 시간 대기 없음)
+/// 기존 HQ 썸네일 즉시 로드 (유휴 시간 대기 없음, 순차 처리로 UI 블로킹 방지)
 pub async fn load_existing_hq_thumbnails(app_handle: AppHandle, image_paths: Vec<String>) {
     let total = image_paths.len();
 
     tokio::spawn(async move {
-        let completed = Arc::new(AtomicUsize::new(0));
-        let semaphore = Arc::new(Semaphore::new(HQ_MAX_CONCURRENT));
+        let mut completed = 0;
 
-        let mut tasks = Vec::new();
+        // 1개씩 순차 처리 (UI 블로킹 방지)
+        for path in image_paths.iter() {
+            // 기존 HQ 썸네일 로드 (캐시에서 읽기만 하므로 빠름)
+            match thumbnail::generate_hq_thumbnail(&app_handle, path).await {
+                Ok(result) => {
+                    completed += 1;
 
-        for (_index, path) in image_paths.iter().enumerate() {
-            let app_handle = app_handle.clone();
-            let path = path.clone();
-            let completed = Arc::clone(&completed);
-            let semaphore = Arc::clone(&semaphore);
+                    // 진행 상태 전송
+                    let progress = ThumbnailProgress {
+                        completed,
+                        total,
+                        current_path: path.clone(),
+                    };
 
-            let task = tokio::spawn(async move {
-                // 세마포어 획득
-                let _permit = semaphore.acquire().await.unwrap();
-
-                // 기존 HQ 썸네일 로드 (유휴 시간 대기 없음)
-                match thumbnail::generate_hq_thumbnail(&app_handle, &path).await {
-                    Ok(result) => {
-                        let count = completed.fetch_add(1, Ordering::SeqCst) + 1;
-
-                        // 진행 상태 전송
-                        let progress = ThumbnailProgress {
-                            completed: count,
-                            total,
-                            current_path: path.clone(),
-                        };
-
-                        let _ = app_handle.emit("thumbnail-hq-progress", &progress);
-                        let _ = app_handle.emit("thumbnail-hq-completed", &result);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to load existing HQ thumbnail for {}: {}", path, e);
-                    }
+                    let _ = app_handle.emit("thumbnail-hq-progress", &progress);
+                    let _ = app_handle.emit("thumbnail-hq-completed", &result);
                 }
-            });
+                Err(e) => {
+                    eprintln!("Failed to load existing HQ thumbnail for {}: {}", path, e);
+                }
+            }
 
-            tasks.push(task);
-        }
-
-        // 모든 작업 완료 대기
-        for task in tasks {
-            let _ = task.await;
+            // UI 응답성을 위한 짧은 대기 (1ms)
+            sleep(Duration::from_millis(1)).await;
         }
 
         // 완료 이벤트 전송
