@@ -1,9 +1,11 @@
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Loader2 } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
+import { useThrottle } from '../../hooks/useThrottle'
+import { useDebounce } from '../../hooks/useDebounce'
 
 interface ThumbnailResult {
   path: string
@@ -35,7 +37,7 @@ interface ThumbnailProgress {
   current_path: string
 }
 
-export function ThumbnailPanel() {
+export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { imageList: images, loadImage } = useImageContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
@@ -255,116 +257,123 @@ export function ThumbnailPanel() {
     }
   }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
 
-  // focusedIndex 변경 시 이미지 자동 로드
+  // focusedIndex를 디바운싱하여 빠른 키 입력 시 마지막 이미지만 로드
+  const debouncedFocusedIndex = useDebounce(focusedIndex, 150)
+
+  // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드
   useEffect(() => {
-    if (focusedIndex >= 0 && focusedIndex < images.length) {
-      const imagePath = images[focusedIndex]
+    if (debouncedFocusedIndex >= 0 && debouncedFocusedIndex < images.length) {
+      const imagePath = images[debouncedFocusedIndex]
       loadImage(imagePath)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedIndex])
+  }, [debouncedFocusedIndex])
 
-  // 키보드 네비게이션 (4방향 + Home/End + PageUp/PageDown + 검색)
-  useEffect(() => {
-    if (images.length === 0) return
+  // 키보드 네비게이션 핸들러 (쓰로틀링 적용)
+  const handleNavigation = useCallback((e: KeyboardEvent) => {
+    // 네비게이션 키들
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      setFocusedIndex(prev => Math.max(0, prev - 1))
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      setFocusedIndex(prev => Math.min(images.length - 1, prev + 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (isVertical) {
+        setFocusedIndex(prev => Math.max(0, prev - columnCount))
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (isVertical) {
+        setFocusedIndex(prev => Math.min(images.length - 1, prev + columnCount))
+      }
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      setFocusedIndex(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      setFocusedIndex(images.length - 1)
+    } else if (e.key === 'PageUp') {
+      e.preventDefault()
+      if (isVertical) {
+        const virtualRows = rowVirtualizer.getVirtualItems()
+        if (virtualRows.length > 0) {
+          const firstRowIndex = virtualRows[0].index
+          const firstVisibleIndex = firstRowIndex * columnCount
+          setFocusedIndex(Math.max(0, firstVisibleIndex))
+        }
+      } else {
+        const virtualItems = horizontalVirtualizer.getVirtualItems()
+        if (virtualItems.length > 0) {
+          setFocusedIndex(virtualItems[0].index)
+        }
+      }
+    } else if (e.key === 'PageDown') {
+      e.preventDefault()
+      if (isVertical) {
+        const virtualRows = rowVirtualizer.getVirtualItems()
+        if (virtualRows.length > 0) {
+          const lastRowIndex = virtualRows[virtualRows.length - 1].index
+          const lastVisibleIndex = Math.min(images.length - 1, (lastRowIndex + 1) * columnCount - 1)
+          setFocusedIndex(lastVisibleIndex)
+        }
+      } else {
+        const virtualItems = horizontalVirtualizer.getVirtualItems()
+        if (virtualItems.length > 0) {
+          setFocusedIndex(virtualItems[virtualItems.length - 1].index)
+        }
+      }
+    } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
+      // 알파벳/숫자 키: 단일 문자로 시작하는 다음 파일 검색
+      e.preventDefault()
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // 네비게이션 키들
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        setFocusedIndex(prev => Math.max(0, prev - 1))
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        setFocusedIndex(prev => Math.min(images.length - 1, prev + 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        if (isVertical) {
-          setFocusedIndex(prev => Math.max(0, prev - columnCount))
-        }
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        if (isVertical) {
-          setFocusedIndex(prev => Math.min(images.length - 1, prev + columnCount))
-        }
-      } else if (e.key === 'Home') {
-        e.preventDefault()
-        setFocusedIndex(0)
-      } else if (e.key === 'End') {
-        e.preventDefault()
-        setFocusedIndex(images.length - 1)
-      } else if (e.key === 'PageUp') {
-        e.preventDefault()
-        if (isVertical) {
-          const virtualRows = rowVirtualizer.getVirtualItems()
-          if (virtualRows.length > 0) {
-            const firstRowIndex = virtualRows[0].index
-            const firstVisibleIndex = firstRowIndex * columnCount
-            setFocusedIndex(Math.max(0, firstVisibleIndex))
-          }
-        } else {
-          const virtualItems = horizontalVirtualizer.getVirtualItems()
-          if (virtualItems.length > 0) {
-            setFocusedIndex(virtualItems[0].index)
-          }
-        }
-      } else if (e.key === 'PageDown') {
-        e.preventDefault()
-        if (isVertical) {
-          const virtualRows = rowVirtualizer.getVirtualItems()
-          if (virtualRows.length > 0) {
-            const lastRowIndex = virtualRows[virtualRows.length - 1].index
-            const lastVisibleIndex = Math.min(images.length - 1, (lastRowIndex + 1) * columnCount - 1)
-            setFocusedIndex(lastVisibleIndex)
-          }
-        } else {
-          const virtualItems = horizontalVirtualizer.getVirtualItems()
-          if (virtualItems.length > 0) {
-            setFocusedIndex(virtualItems[virtualItems.length - 1].index)
-          }
-        }
-      } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
-        // 알파벳/숫자 키: 단일 문자로 시작하는 다음 파일 검색
-        e.preventDefault()
+      const searchChar = e.key.toLowerCase()
 
-        const searchChar = e.key.toLowerCase()
+      // 파일명에서 basename 추출
+      const getBasename = (path: string) => {
+        const parts = path.split(/[/\\]/)
+        return parts[parts.length - 1].toLowerCase()
+      }
 
-        // 파일명에서 basename 추출
-        const getBasename = (path: string) => {
-          const parts = path.split(/[/\\]/)
-          return parts[parts.length - 1].toLowerCase()
+      // 현재 위치 다음부터 검색
+      let foundIndex = -1
+      for (let i = focusedIndex + 1; i < images.length; i++) {
+        if (getBasename(images[i]).startsWith(searchChar)) {
+          foundIndex = i
+          break
         }
+      }
 
-        // 현재 위치 다음부터 검색
-        let foundIndex = -1
-        for (let i = focusedIndex + 1; i < images.length; i++) {
+      // 못 찾으면 처음부터 현재 위치까지 검색 (순환)
+      if (foundIndex === -1) {
+        for (let i = 0; i <= focusedIndex; i++) {
           if (getBasename(images[i]).startsWith(searchChar)) {
             foundIndex = i
             break
           }
         }
+      }
 
-        // 못 찾으면 처음부터 현재 위치까지 검색 (순환)
-        if (foundIndex === -1) {
-          for (let i = 0; i <= focusedIndex; i++) {
-            if (getBasename(images[i]).startsWith(searchChar)) {
-              foundIndex = i
-              break
-            }
-          }
-        }
-
-        // 찾았으면 이동
-        if (foundIndex !== -1) {
-          setFocusedIndex(foundIndex)
-        }
+      // 찾았으면 이동
+      if (foundIndex !== -1) {
+        setFocusedIndex(foundIndex)
       }
     }
+  }, [images.length, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer])
 
-    window.addEventListener('keydown', handleKeyDown)
+  // 쓰로틀링된 네비게이션 핸들러 (16ms = 60fps)
+  const throttledHandleNavigation = useThrottle(handleNavigation, 16)
+
+  // 키보드 네비게이션 (4방향 + Home/End + PageUp/PageDown + 검색)
+  useEffect(() => {
+    if (images.length === 0) return
+
+    window.addEventListener('keydown', throttledHandleNavigation)
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keydown', throttledHandleNavigation)
     }
-  }, [images, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer])
+  }, [images.length, throttledHandleNavigation])
 
   // 썸네일 생성 시작
   useEffect(() => {
@@ -717,4 +726,4 @@ export function ThumbnailPanel() {
       )}
     </div>
   )
-}
+})

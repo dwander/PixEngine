@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
@@ -10,8 +10,8 @@ interface ImageInfo {
   file_size: number
 }
 
-export function ImageViewerPanel() {
-  const { currentPath, imageList, currentIndex, goToIndex } = useImageContext()
+export const ImageViewerPanel = memo(function ImageViewerPanel() {
+  const { currentPath, imageList, currentIndex, goToIndex, getCachedImage } = useImageContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
@@ -20,37 +20,6 @@ export function ImageViewerPanel() {
   const navigationQueueRef = useRef<number[]>([])
   const isProcessingRef = useRef(false)
   const currentImageRef = useRef<HTMLImageElement | null>(null)
-
-  // 이미지 로딩
-  useEffect(() => {
-    if (!currentPath) {
-      setImageUrl(null)
-      setImageInfo(null)
-      setImageLoaded(false)
-      return
-    }
-
-    async function loadImage() {
-      setImageLoaded(false)
-
-      try {
-        // 1. 이미지 정보 가져오기
-        const info = await invoke<ImageInfo>('get_image_info', {
-          filePath: currentPath,
-        })
-
-        setImageInfo(info)
-
-        // 2. convertFileSrc로 asset URL 생성
-        const assetUrl = convertFileSrc(currentPath!)
-        setImageUrl(assetUrl)
-      } catch (err) {
-        console.error('Failed to load image:', err)
-      }
-    }
-
-    loadImage()
-  }, [currentPath])
 
   // Canvas에 이미지 렌더링 함수
   const renderImageToCanvas = useCallback(() => {
@@ -98,7 +67,54 @@ export function ImageViewerPanel() {
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight)
   }, [])
 
-  // Canvas에 이미지 렌더링 (뷰포트에 맞게 리사이즈)
+  // 이미지 로딩 (캐시 우선)
+  useEffect(() => {
+    if (!currentPath) {
+      setImageUrl(null)
+      setImageInfo(null)
+      setImageLoaded(false)
+      return
+    }
+
+    async function loadImage() {
+      if (!currentPath) return;
+
+      setImageLoaded(false)
+
+      try {
+        // 캐시에서 이미지 확인
+        const cachedImg = getCachedImage(currentPath);
+
+        // 1. 이미지 정보 가져오기
+        const info = await invoke<ImageInfo>('get_image_info', {
+          filePath: currentPath,
+        })
+
+        setImageInfo(info)
+
+        // 2. 캐시된 이미지가 있으면 즉시 렌더링
+        if (cachedImg) {
+          currentImageRef.current = cachedImg
+
+          // 다음 프레임에서 렌더링 (DOM 업데이트 후)
+          requestAnimationFrame(() => {
+            renderImageToCanvas()
+            setImageLoaded(true)
+          })
+        } else {
+          // 캐시에 없으면 일반적인 로드 프로세스
+          const assetUrl = convertFileSrc(currentPath!)
+          setImageUrl(assetUrl)
+        }
+      } catch (err) {
+        console.error('Failed to load image:', err)
+      }
+    }
+
+    loadImage()
+  }, [currentPath, getCachedImage, renderImageToCanvas])
+
+  // Canvas에 이미지 렌더링 (뷰포트에 맞게 리사이즈) - 캐시에 없는 경우
   useEffect(() => {
     if (!imageUrl || !canvasRef.current || !containerRef.current) return
 
@@ -223,4 +239,4 @@ export function ImageViewerPanel() {
       </div>
     </div>
   )
-}
+})
