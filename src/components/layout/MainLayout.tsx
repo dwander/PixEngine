@@ -45,6 +45,7 @@ const components = {
 export function MainLayout() {
   const api = useRef<DockviewReadyEvent | null>(null);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
+  const panelSizesBeforeDragRef = useRef<Map<string, { width: number; height: number }>>(new Map());
 
   const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;
@@ -56,6 +57,45 @@ export function MainLayout() {
       if (centerPanel && (e as any).group?.id === centerPanel.group.id) {
         e.preventDefault();
       }
+    });
+
+    // 패널 드래그 시작 시 모든 그룹의 크기 저장
+    event.api.onWillDragPanel(() => {
+      panelSizesBeforeDragRef.current.clear();
+
+      // 모든 그룹의 현재 크기 저장
+      event.api.groups.forEach((group) => {
+        panelSizesBeforeDragRef.current.set(group.id, {
+          width: group.width,
+          height: group.height,
+        });
+      });
+    });
+
+    // 패널 드롭 후 ImageViewer 외 패널들의 크기 복원
+    event.api.onDidMovePanel(() => {
+      // 약간의 딜레이 후 크기 복원 (레이아웃 재계산 후)
+      setTimeout(() => {
+        const centerPanel = event.api.getPanel("center");
+
+        event.api.groups.forEach((group) => {
+          // ImageViewer 그룹은 제외
+          if (centerPanel && group.id === centerPanel.group.id) {
+            return;
+          }
+
+          const savedSize = panelSizesBeforeDragRef.current.get(group.id);
+          if (savedSize) {
+            // 크기 복원
+            if (group.api.width !== savedSize.width) {
+              group.api.setSize({ width: savedSize.width });
+            }
+            if (group.api.height !== savedSize.height) {
+              group.api.setSize({ height: savedSize.height });
+            }
+          }
+        });
+      }, 100);
     });
 
     // 저장된 dockview 레이아웃 복원 시도
