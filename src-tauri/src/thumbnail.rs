@@ -571,3 +571,44 @@ fn extract_jpeg_dimensions(jpeg_data: &[u8]) -> Option<(u32, u32)> {
 
     None
 }
+
+/// HQ 썸네일이 이미 존재하는지 확인 (30KB 이상의 캐시)
+pub fn has_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> bool {
+    match get_file_mtime(file_path) {
+        Ok(mtime) => {
+            let cache_key = generate_cache_key(file_path, mtime);
+            match get_cache_path(app_handle, &cache_key) {
+                Ok(cache_path) => {
+                    if let Ok(metadata) = fs::metadata(&cache_path) {
+                        return metadata.len() >= 30_000;
+                    }
+                    false
+                }
+                Err(_) => false,
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+/// 이미지 경로 배열을 HQ 썸네일 존재 여부로 분류
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HqThumbnailClassification {
+    pub existing: Vec<String>,
+    pub missing: Vec<String>,
+}
+
+pub fn classify_hq_thumbnails(app_handle: &tauri::AppHandle, image_paths: Vec<String>) -> HqThumbnailClassification {
+    let mut existing = Vec::new();
+    let mut missing = Vec::new();
+
+    for path in image_paths {
+        if has_hq_thumbnail(app_handle, &path) {
+            existing.push(path);
+        } else {
+            missing.push(path);
+        }
+    }
+
+    HqThumbnailClassification { existing, missing }
+}

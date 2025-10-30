@@ -146,14 +146,39 @@ export function ThumbnailPanel() {
     const unlistenAllCompleted = listen('thumbnail-all-completed', async () => {
       setIsGenerating(false)
 
-      // EXIF 썸네일 생성 완료 후 고화질 DCT 썸네일 생성 시작 (항상 자동 시작)
+      // EXIF 썸네일 생성 완료 후 HQ 썸네일 처리
       try {
+        // 1. HQ 썸네일 분류 (기존/신규)
+        const classification = await invoke<{ existing: string[]; missing: string[] }>(
+          'classify_hq_thumbnails',
+          {
+            imagePaths: images,
+          }
+        )
+
+        console.log(
+          `HQ thumbnails: ${classification.existing.length} existing, ${classification.missing.length} missing`
+        )
+
         setIsGeneratingHq(true)
         setHqProgress({ completed: 0, total: images.length, current_path: '' })
 
-        await invoke('start_hq_thumbnail_generation', {
-          imagePaths: images,
-        })
+        // 2. 기존 HQ 썸네일 즉시 로드 (유휴 시간 없음)
+        if (classification.existing.length > 0) {
+          await invoke('load_existing_hq_thumbnails', {
+            imagePaths: classification.existing,
+          })
+        }
+
+        // 3. 신규 HQ 썸네일 생성 시작 (유휴 시간 대기)
+        if (classification.missing.length > 0) {
+          await invoke('start_hq_thumbnail_generation', {
+            imagePaths: classification.missing,
+          })
+        } else {
+          // 모두 기존 HQ라면 로드만 하면 됨
+          setIsGeneratingHq(false)
+        }
       } catch (error) {
         console.error('Failed to start HQ thumbnail generation:', error)
         setIsGeneratingHq(false)
@@ -181,6 +206,10 @@ export function ThumbnailPanel() {
       setIsGeneratingHq(false)
     })
 
+    const unlistenHqExistingLoaded = listen('thumbnail-hq-existing-loaded', () => {
+      console.log('Existing HQ thumbnails loaded')
+    })
+
     return () => {
       unlistenProgress.then((fn) => fn())
       unlistenCompleted.then((fn) => fn())
@@ -189,6 +218,7 @@ export function ThumbnailPanel() {
       unlistenHqCompleted.then((fn) => fn())
       unlistenHqAllCompleted.then((fn) => fn())
       unlistenHqCancelled.then((fn) => fn())
+      unlistenHqExistingLoaded.then((fn) => fn())
     }
   }, [images])
 

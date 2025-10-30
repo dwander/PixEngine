@@ -254,7 +254,61 @@ impl ThumbnailQueueManager {
     }
 }
 
-/// 고화질 DCT 썸네일 생성 워커 (병렬 처리)
+/// 기존 HQ 썸네일 즉시 로드 (유휴 시간 대기 없음)
+pub async fn load_existing_hq_thumbnails(app_handle: AppHandle, image_paths: Vec<String>) {
+    let total = image_paths.len();
+
+    tokio::spawn(async move {
+        let completed = Arc::new(AtomicUsize::new(0));
+        let semaphore = Arc::new(Semaphore::new(HQ_MAX_CONCURRENT));
+
+        let mut tasks = Vec::new();
+
+        for (_index, path) in image_paths.iter().enumerate() {
+            let app_handle = app_handle.clone();
+            let path = path.clone();
+            let completed = Arc::clone(&completed);
+            let semaphore = Arc::clone(&semaphore);
+
+            let task = tokio::spawn(async move {
+                // 세마포어 획득
+                let _permit = semaphore.acquire().await.unwrap();
+
+                // 기존 HQ 썸네일 로드 (유휴 시간 대기 없음)
+                match thumbnail::generate_hq_thumbnail(&app_handle, &path).await {
+                    Ok(result) => {
+                        let count = completed.fetch_add(1, Ordering::SeqCst) + 1;
+
+                        // 진행 상태 전송
+                        let progress = ThumbnailProgress {
+                            completed: count,
+                            total,
+                            current_path: path.clone(),
+                        };
+
+                        let _ = app_handle.emit("thumbnail-hq-progress", &progress);
+                        let _ = app_handle.emit("thumbnail-hq-completed", &result);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to load existing HQ thumbnail for {}: {}", path, e);
+                    }
+                }
+            });
+
+            tasks.push(task);
+        }
+
+        // 모든 작업 완료 대기
+        for task in tasks {
+            let _ = task.await;
+        }
+
+        // 완료 이벤트 전송
+        let _ = app_handle.emit("thumbnail-hq-existing-loaded", true);
+    });
+}
+
+/// 고화질 DCT 썸네일 생성 워커 (병렬 처리, 유휴 시간 대기)
 pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<String>) {
     let total = image_paths.len();
 

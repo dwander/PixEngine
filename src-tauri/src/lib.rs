@@ -415,7 +415,26 @@ async fn get_completed_thumbnails(
     Ok(queue.get_all_completed().await)
 }
 
-// 고화질 DCT 썸네일 생성 시작
+// HQ 썸네일 존재 여부로 이미지 분류
+#[tauri::command]
+fn classify_hq_thumbnails(
+    image_paths: Vec<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<thumbnail::HqThumbnailClassification, String> {
+    Ok(thumbnail::classify_hq_thumbnails(&app_handle, image_paths))
+}
+
+// 기존 HQ 썸네일 즉시 로드 (유휴 시간 대기 없음)
+#[tauri::command]
+async fn load_existing_hq_thumbnails(
+    image_paths: Vec<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    thumbnail_queue::load_existing_hq_thumbnails(app_handle, image_paths).await;
+    Ok(())
+}
+
+// 신규 HQ 썸네일 생성 시작 (유휴 시간 대기)
 #[tauri::command]
 async fn start_hq_thumbnail_generation(
     image_paths: Vec<String>,
@@ -522,6 +541,8 @@ pub fn run() {
             pause_thumbnail_generation,
             resume_thumbnail_generation,
             get_completed_thumbnails,
+            classify_hq_thumbnails,
+            load_existing_hq_thumbnails,
             start_hq_thumbnail_generation,
             cancel_hq_thumbnail_generation,
             get_image_info
