@@ -100,6 +100,7 @@ pub fn get_cache_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 /// 메타데이터 디렉토리 가져오기
+#[allow(dead_code)]
 pub fn get_metadata_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     let app_data = app_handle.path().app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
@@ -117,6 +118,7 @@ pub fn get_cache_path(app_handle: &tauri::AppHandle, cache_key: &str) -> Result<
 }
 
 /// 메타데이터 파일 경로 가져오기 (폴더별)
+#[allow(dead_code)]
 pub fn get_metadata_path(app_handle: &tauri::AppHandle, folder_path: &str) -> Result<PathBuf, String> {
     let metadata_dir = get_metadata_dir(app_handle)?;
     fs::create_dir_all(&metadata_dir)
@@ -443,6 +445,7 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
 }
 
 /// 폴더별 EXIF 메타데이터 저장
+#[allow(dead_code)]
 pub fn save_folder_metadata(
     app_handle: &tauri::AppHandle,
     folder_path: &str,
@@ -460,6 +463,7 @@ pub fn save_folder_metadata(
 }
 
 /// 폴더별 EXIF 메타데이터 로드
+#[allow(dead_code)]
 pub fn load_folder_metadata(app_handle: &tauri::AppHandle, folder_path: &str) -> Result<HashMap<String, ExifMetadata>, String> {
     let metadata_path = get_metadata_path(app_handle, folder_path)?;
 
@@ -477,6 +481,7 @@ pub fn load_folder_metadata(app_handle: &tauri::AppHandle, folder_path: &str) ->
 }
 
 /// 개별 파일 EXIF 메타데이터 캐시에서 로드
+#[allow(dead_code)]
 fn load_cached_exif_metadata(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ExifMetadata, String> {
     let parent_dir = Path::new(file_path)
         .parent()

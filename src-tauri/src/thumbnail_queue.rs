@@ -22,8 +22,6 @@ lazy_static! {
 const HQ_MAX_CONCURRENT: usize = 3;
 /// 유휴 시간 감지 임계값 (밀리초)
 const IDLE_THRESHOLD_MS: u64 = 3000;
-/// 유휴 상태 재확인 간격 (밀리초)
-const IDLE_CHECK_INTERVAL_MS: u64 = 500;
 
 /// 썸네일 생성 요청
 #[derive(Debug, Clone)]
@@ -129,16 +127,19 @@ impl ThumbnailQueueManager {
     }
 
     /// 일시정지 상태 확인
+    #[allow(dead_code)]
     pub async fn is_paused(&self) -> bool {
         *self.paused.read().await
     }
 
     /// 진행 중인지 확인
+    #[allow(dead_code)]
     pub async fn is_processing(&self) -> bool {
         *self.is_processing.read().await
     }
 
     /// 완료된 썸네일 가져오기
+    #[allow(dead_code)]
     pub async fn get_completed(&self, path: &str) -> Option<ThumbnailResult> {
         let completed = self.completed.read().await;
         completed.get(path).cloned()
@@ -151,6 +152,7 @@ impl ThumbnailQueueManager {
     }
 
     /// 큐에서 다음 작업 가져오기
+    #[allow(dead_code)]
     async fn pop_next(&self) -> Option<ThumbnailRequest> {
         let mut queue = self.queue.lock().await;
         queue.pop_front()
