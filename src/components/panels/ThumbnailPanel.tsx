@@ -93,6 +93,59 @@ export function ThumbnailPanel() {
     }
   }, [isVertical])
 
+  // 스크롤 시 뷰포트 계산 및 업데이트
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current
+    if (!scrollArea) return
+
+    let timeoutId: NodeJS.Timeout
+
+    const handleScroll = () => {
+      // 디바운스: 100ms 후에 처리
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        const container = scrollArea.querySelector('div')
+        if (!container) return
+
+        const items = container.querySelectorAll('div[data-index]')
+        if (items.length === 0) return
+
+        const visibleIndices: number[] = []
+        const rect = scrollArea.getBoundingClientRect()
+
+        items.forEach((item) => {
+          const itemRect = item.getBoundingClientRect()
+          const isVisible =
+            itemRect.top < rect.bottom &&
+            itemRect.bottom > rect.top &&
+            itemRect.left < rect.right &&
+            itemRect.right > rect.left
+
+          if (isVisible) {
+            const index = parseInt(item.getAttribute('data-index') || '0', 10)
+            visibleIndices.push(index)
+          }
+        })
+
+        if (visibleIndices.length > 0) {
+          // HQ 생성 중이면 뷰포트 업데이트
+          if (isGeneratingHq) {
+            invoke('update_hq_viewport_indices', { indices: visibleIndices }).catch(console.error)
+          }
+        }
+      }, 100)
+    }
+
+    scrollArea.addEventListener('scroll', handleScroll, { passive: true })
+    // 초기 뷰포트 계산
+    handleScroll()
+
+    return () => {
+      clearTimeout(timeoutId)
+      scrollArea.removeEventListener('scroll', handleScroll)
+    }
+  }, [isGeneratingHq])
+
   // 썸네일 생성 시작
   useEffect(() => {
     // 폴더 변경 시 스크롤 위치 초기화
@@ -228,23 +281,29 @@ export function ThumbnailPanel() {
     }
   }, [images])
 
-  // 뷰포트 내 이미지 우선순위 업데이트
+  // 뷰포트 내 이미지 우선순위 업데이트 (EXIF + HQ)
   const handleVisibleRangeChange = useCallback(
     async (visibleRange: { startIndex: number; endIndex: number }) => {
-      if (!isGenerating) return
-
       const visibleIndices: number[] = []
       for (let i = visibleRange.startIndex; i <= visibleRange.endIndex; i++) {
         visibleIndices.push(i)
       }
 
       try {
-        await invoke('update_thumbnail_priorities', { visibleIndices })
+        // EXIF 썸네일 생성 중이면 우선순위 업데이트
+        if (isGenerating) {
+          await invoke('update_thumbnail_priorities', { visibleIndices })
+        }
+
+        // HQ 썸네일 생성 중이면 뷰포트 인덱스 업데이트
+        if (isGeneratingHq) {
+          await invoke('update_hq_viewport_indices', { indices: visibleIndices })
+        }
       } catch (error) {
-        console.error('Failed to update priorities:', error)
+        console.error('Failed to update viewport:', error)
       }
     },
-    [isGenerating]
+    [isGenerating, isGeneratingHq]
   )
 
   // 이미지가 없을 때
@@ -300,6 +359,7 @@ export function ThumbnailPanel() {
             return (
               <div
                 key={imagePath}
+                data-index={index}
                 className={isVertical ? 'w-full aspect-square' : 'h-full aspect-square flex-shrink-0'}
                 onClick={() => {
                   setSelectedImage(imagePath)

@@ -451,6 +451,13 @@ fn cancel_hq_thumbnail_generation() -> Result<(), String> {
     Ok(())
 }
 
+// HQ 생성 뷰포트 인덱스 업데이트
+#[tauri::command]
+async fn update_hq_viewport_indices(indices: Vec<usize>) -> Result<(), String> {
+    thumbnail_queue::update_hq_viewport_indices(indices).await;
+    Ok(())
+}
+
 // 이미지 정보 가져오기
 #[derive(Serialize)]
 struct ImageInfo {
@@ -545,6 +552,7 @@ pub fn run() {
             load_existing_hq_thumbnails,
             start_hq_thumbnail_generation,
             cancel_hq_thumbnail_generation,
+            update_hq_viewport_indices,
             get_image_info
         ])
         .run(tauri::generate_context!())

@@ -32,6 +32,9 @@ tokio = { version = "1", features = ["full"] }
 # 윈도우 핸들 접근
 raw-window-handle = "0.6"
 
+# 전역 상태 관리
+lazy_static = "1.5"
+
 # 이미지 처리
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 jpeg-decoder = "0.3"           # DCT 스케일링 지원

@@ -4,12 +4,18 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, Duration};
 use tauri::{AppHandle, Emitter};
+use lazy_static::lazy_static;
 
 use crate::thumbnail::{self, ThumbnailResult};
 use crate::idle_detector;
 
 /// 고화질 썸네일 생성 취소 플래그 (전역)
 static HQ_GENERATION_CANCELLED: AtomicBool = AtomicBool::new(false);
+
+lazy_static! {
+    /// HQ 생성 뷰포트 인덱스 (전역)
+    static ref HQ_VIEWPORT_INDICES: Arc<RwLock<HashSet<usize>>> = Arc::new(RwLock::new(HashSet::new()));
+}
 
 // HQ 썸네일 생성 상수
 /// HQ 썸네일 최대 동시 생성 개수
@@ -303,7 +309,6 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
 
     tokio::spawn(async move {
         let completed = Arc::new(AtomicUsize::new(0));
-        let viewport_indices = Arc::new(RwLock::new(HashSet::<usize>::new()));
 
         // 이미지 경로와 인덱스를 함께 관리
         let mut remaining: Vec<(usize, String)> = image_paths.into_iter().enumerate().collect();
@@ -355,7 +360,7 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
                 }
             } else {
                 // 비유휴 상태: 뷰포트에 있는 것 우선, 1개씩 순차 처리
-                let viewport = viewport_indices.read().await;
+                let viewport = HQ_VIEWPORT_INDICES.read().await;
 
                 // 뷰포트에 있는 항목 찾기
                 let viewport_item_idx = remaining.iter().position(|(idx, _)| viewport.contains(idx));
@@ -406,4 +411,11 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
 /// 고화질 썸네일 생성 취소
 pub fn cancel_hq_thumbnail_generation() {
     HQ_GENERATION_CANCELLED.store(true, Ordering::SeqCst);
+}
+
+/// HQ 생성 뷰포트 인덱스 업데이트
+pub async fn update_hq_viewport_indices(indices: Vec<usize>) {
+    let mut viewport = HQ_VIEWPORT_INDICES.write().await;
+    viewport.clear();
+    viewport.extend(indices);
 }
