@@ -42,7 +42,7 @@ export function ThumbnailPanel() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [hqProgress, setHqProgress] = useState<ThumbnailProgress | null>(null)
   const [isGeneratingHq, setIsGeneratingHq] = useState(false)
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  // const [selectedImage, setSelectedImage] = useState<string | null>(null) // 임시 비활성화
   const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
@@ -50,6 +50,7 @@ export function ThumbnailPanel() {
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const horizontalContentRef = useRef<HTMLDivElement>(null) // 가로 모드 내부 컨테이너
+  const [focusedIndex, setFocusedIndex] = useState(0) // 키보드 포커스 인덱스
 
   // 패널 방향 및 크기 감지
   useEffect(() => {
@@ -235,6 +236,46 @@ export function ThumbnailPanel() {
       scrollArea.removeEventListener('scroll', updateViewportIndices)
     }
   }, [isGeneratingHq, isVertical, columnCount, images.length])
+
+  // focusedIndex 변경 시 자동 스크롤
+  useEffect(() => {
+    if (focusedIndex < 0 || focusedIndex >= images.length) return
+
+    if (isVertical) {
+      // 세로 모드: 행으로 스크롤
+      const rowIndex = Math.floor(focusedIndex / columnCount)
+      rowVirtualizer.scrollToIndex(rowIndex, {
+        align: 'auto', // 뷰포트 내에 있으면 스크롤 안함
+        behavior: 'smooth',
+      })
+    } else {
+      // 가로 모드: 개별 항목으로 스크롤
+      horizontalVirtualizer.scrollToIndex(focusedIndex, {
+        align: 'auto',
+        behavior: 'smooth',
+      })
+    }
+  }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
+
+  // 키보드 네비게이션 - 좌우만 (단순 버전)
+  useEffect(() => {
+    if (images.length === 0) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setFocusedIndex(prev => Math.max(0, prev - 1))
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        setFocusedIndex(prev => Math.min(images.length - 1, prev + 1))
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [images.length])
 
   // 썸네일 생성 시작
   useEffect(() => {
@@ -437,7 +478,8 @@ export function ThumbnailPanel() {
                       const transform = thumbnail?.exif_metadata
                         ? getOrientationTransform(thumbnail.exif_metadata.orientation)
                         : ''
-                      const isSelected = selectedImage === imagePath
+                      // const isSelected = selectedImage === imagePath
+                      const isFocused = focusedIndex === index
 
                       return (
                         <div
@@ -445,13 +487,14 @@ export function ThumbnailPanel() {
                           data-index={index}
                           className="w-full aspect-square"
                           onClick={() => {
-                            setSelectedImage(imagePath)
+                            // setSelectedImage(imagePath) // 임시 비활성화
+                            setFocusedIndex(index)
                             loadImage(imagePath)
                           }}
                         >
                           <div
-                            className={`group relative w-full h-full cursor-pointer overflow-hidden ${
-                              isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''
+                            className={`group relative w-full h-full cursor-pointer overflow-hidden rounded-lg ${
+                              isFocused ? 'ring-2 ring-blue-500' : ''
                             } hover:bg-neutral-800/50 transition-colors`}
                           >
                             {thumbnail ? (
@@ -498,7 +541,8 @@ export function ThumbnailPanel() {
               const transform = thumbnail?.exif_metadata
                 ? getOrientationTransform(thumbnail.exif_metadata.orientation)
                 : ''
-              const isSelected = selectedImage === imagePath
+              // const isSelected = selectedImage === imagePath
+              const isFocused = focusedIndex === virtualItem.index
 
               return (
                 <div
@@ -509,13 +553,14 @@ export function ThumbnailPanel() {
                     marginRight: virtualItem.index < images.length - 1 ? '0.5rem' : '0',
                   }}
                   onClick={() => {
-                    setSelectedImage(imagePath)
+                    // setSelectedImage(imagePath) // 임시 비활성화
+                    setFocusedIndex(virtualItem.index)
                     loadImage(imagePath)
                   }}
                 >
                   <div
-                    className={`group relative w-full h-full cursor-pointer overflow-hidden ${
-                      isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''
+                    className={`group relative w-full h-full cursor-pointer overflow-hidden rounded-lg ${
+                      isFocused ? 'ring-2 ring-blue-500' : ''
                     } hover:bg-neutral-800/50 transition-colors`}
                   >
                     {thumbnail ? (

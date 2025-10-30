@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { convertFileSrc } from '@tauri-apps/api/core'
+// import { invoke } from '@tauri-apps/api/core'
+// import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
 
 interface ImageInfo {
@@ -21,6 +21,7 @@ export function ImageViewerPanel() {
   const isProcessingRef = useRef(false)
   const currentImageRef = useRef<HTMLImageElement | null>(null)
 
+  // 임시로 이미지 로딩 비활성화 - 썸네일 포커스 테스트용
   useEffect(() => {
     if (!currentPath) {
       setImageUrl(null)
@@ -29,26 +30,26 @@ export function ImageViewerPanel() {
       return
     }
 
-    async function loadImage() {
-      setImageLoaded(false)
+    // async function loadImage() {
+    //   setImageLoaded(false)
 
-      try {
-        // 1. 이미지 정보 가져오기
-        const info = await invoke<ImageInfo>('get_image_info', {
-          filePath: currentPath,
-        })
+    //   try {
+    //     // 1. 이미지 정보 가져오기
+    //     const info = await invoke<ImageInfo>('get_image_info', {
+    //       filePath: currentPath,
+    //     })
 
-        setImageInfo(info)
+    //     setImageInfo(info)
 
-        // 2. convertFileSrc로 asset URL 생성
-        const assetUrl = convertFileSrc(currentPath!)
-        setImageUrl(assetUrl)
-      } catch (err) {
-        console.error('Failed to load image:', err)
-      }
-    }
+    //     // 2. convertFileSrc로 asset URL 생성
+    //     const assetUrl = convertFileSrc(currentPath!)
+    //     setImageUrl(assetUrl)
+    //   } catch (err) {
+    //     console.error('Failed to load image:', err)
+    //   }
+    // }
 
-    loadImage()
+    // loadImage()
   }, [currentPath])
 
   // Canvas에 이미지 렌더링 함수
