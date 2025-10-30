@@ -255,7 +255,7 @@ export function ThumbnailPanel() {
     }
   }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
 
-  // 키보드 네비게이션 - 좌우만 (단순 버전)
+  // 키보드 네비게이션 (4방향 + Home/End + PageUp/PageDown)
   useEffect(() => {
     if (images.length === 0) return
 
@@ -266,6 +266,58 @@ export function ThumbnailPanel() {
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
         setFocusedIndex(prev => Math.min(images.length - 1, prev + 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        if (isVertical) {
+          // 세로 모드: columnCount만큼 위로 이동
+          setFocusedIndex(prev => Math.max(0, prev - columnCount))
+        }
+        // 가로 모드에서는 위아래 키 무시
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        if (isVertical) {
+          // 세로 모드: columnCount만큼 아래로 이동
+          setFocusedIndex(prev => Math.min(images.length - 1, prev + columnCount))
+        }
+        // 가로 모드에서는 위아래 키 무시
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        setFocusedIndex(0) // 첫 번째 이미지로
+      } else if (e.key === 'End') {
+        e.preventDefault()
+        setFocusedIndex(images.length - 1) // 마지막 이미지로
+      } else if (e.key === 'PageUp') {
+        e.preventDefault()
+        // 현재 뷰포트의 첫 번째 보이는 항목으로 이동
+        if (isVertical) {
+          const virtualRows = rowVirtualizer.getVirtualItems()
+          if (virtualRows.length > 0) {
+            const firstRowIndex = virtualRows[0].index
+            const firstVisibleIndex = firstRowIndex * columnCount
+            setFocusedIndex(Math.max(0, firstVisibleIndex))
+          }
+        } else {
+          const virtualItems = horizontalVirtualizer.getVirtualItems()
+          if (virtualItems.length > 0) {
+            setFocusedIndex(virtualItems[0].index)
+          }
+        }
+      } else if (e.key === 'PageDown') {
+        e.preventDefault()
+        // 현재 뷰포트의 마지막 보이는 항목으로 이동
+        if (isVertical) {
+          const virtualRows = rowVirtualizer.getVirtualItems()
+          if (virtualRows.length > 0) {
+            const lastRowIndex = virtualRows[virtualRows.length - 1].index
+            const lastVisibleIndex = Math.min(images.length - 1, (lastRowIndex + 1) * columnCount - 1)
+            setFocusedIndex(lastVisibleIndex)
+          }
+        } else {
+          const virtualItems = horizontalVirtualizer.getVirtualItems()
+          if (virtualItems.length > 0) {
+            setFocusedIndex(virtualItems[virtualItems.length - 1].index)
+          }
+        }
       }
     }
 
@@ -273,7 +325,7 @@ export function ThumbnailPanel() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [images.length])
+  }, [images.length, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer])
 
   // 썸네일 생성 시작
   useEffect(() => {
