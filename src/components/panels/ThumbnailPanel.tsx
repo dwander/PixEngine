@@ -49,6 +49,7 @@ export function ThumbnailPanel() {
   const [containerHeight, setContainerHeight] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const horizontalContentRef = useRef<HTMLDivElement>(null) // 가로 모드 내부 컨테이너
 
   // 패널 방향 및 크기 감지
   useEffect(() => {
@@ -136,15 +137,19 @@ export function ThumbnailPanel() {
     enabled: isVertical,
   })
 
-  // 가로 모드 아이템 크기 계산 (높이 기준)
+  // 가로 모드 아이템 크기 계산 (내부 컨테이너 높이 기반)
   const horizontalItemSize = useMemo(() => {
-    if (isVertical || containerHeight === 0) return thumbnailSize + 8
-    // 가로 모드에서는 컨테이너 높이 기준
-    // aspect-square이므로 너비 = 높이
-    const gap = 8 // 0.5rem
-    // 하단 상태바 높이 제외 (세로 모드에서만 표시되므로 전체 높이 사용)
-    return containerHeight + gap
-  }, [isVertical, containerHeight, thumbnailSize])
+    if (isVertical) return 150 + 8
+
+    // horizontalContentRef의 높이를 직접 사용
+    const contentContainer = horizontalContentRef.current
+    if (!contentContainer) return 150 + 8
+
+    const contentHeight = contentContainer.getBoundingClientRect().height
+    const gap = 8 // marginRight 0.5rem
+
+    return contentHeight + gap
+  }, [isVertical, containerHeight]) // containerHeight 변경 시 재계산
 
   // 가상화 설정 (가로 모드 - 수평 스크롤)
   const horizontalVirtualizer = useVirtualizer({
@@ -155,6 +160,13 @@ export function ThumbnailPanel() {
     overscan: 5,
     enabled: !isVertical,
   })
+
+  // horizontalItemSize 변경 시 가상화 재측정
+  useEffect(() => {
+    if (!isVertical) {
+      horizontalVirtualizer.measure()
+    }
+  }, [horizontalItemSize, isVertical])
 
   // 스크롤 시 뷰포트 계산 및 업데이트
   useEffect(() => {
@@ -455,6 +467,7 @@ export function ThumbnailPanel() {
         ) : (
           /* 가로형: 가상화된 한 줄 가로 스크롤 */
           <div
+            ref={horizontalContentRef}
             className="flex flex-nowrap h-full items-center"
             style={{
               paddingLeft: `${horizontalVirtualizer.getVirtualItems()[0]?.start ?? 0}px`,
