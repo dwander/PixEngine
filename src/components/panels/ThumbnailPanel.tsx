@@ -309,10 +309,20 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     if (!continuousPlayState.isActive) return
     if (continuousPlayRef.current.animationFrameId === null) return
 
-    // 이미지 로딩 완료 대기 시간 (캐시 히트 시 빠르게, 미스 시 충분한 시간 확보)
+    const MIN_FRAME_INTERVAL = 83 // 약 83ms (= 최대 12fps)
+
+    // 이전 프레임 시간과 현재 시간 비교하여 최소 간격 보장
+    const now = performance.now()
+    const elapsed = now - continuousPlayRef.current.lastFrameTime
+
+    // 이미지 로딩 완료 대기 시간 (캐시 미스 시 추가 대기)
     const imagePath = images[focusedIndex]
     const cachedImage = getCachedImage(imagePath)
-    const waitTime = cachedImage ? 10 : 100 // 캐시 히트: 10ms, 미스: 100ms
+    const loadWaitTime = cachedImage ? 0 : 50 // 캐시 미스 시 50ms 추가 대기
+
+    // 최소 프레임 간격을 보장하기 위한 대기 시간 계산
+    const frameWaitTime = Math.max(0, MIN_FRAME_INTERVAL - elapsed)
+    const totalWaitTime = frameWaitTime + loadWaitTime
 
     const timer = setTimeout(() => {
       if (!continuousPlayState.isActive) return
@@ -336,9 +346,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         return
       }
 
+      // 마지막 프레임 시간 업데이트
+      continuousPlayRef.current.lastFrameTime = performance.now()
+
       // 다음 이미지로 이동
       setFocusedIndex(nextIndex)
-    }, waitTime)
+    }, totalWaitTime)
 
     return () => clearTimeout(timer)
   }, [focusedIndex, continuousPlayState, images, isVertical, columnCount, getCachedImage, stopContinuousPlay])
