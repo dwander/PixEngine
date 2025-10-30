@@ -46,6 +46,7 @@ export function ThumbnailPanel() {
   const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
+  const [containerHeight, setContainerHeight] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
@@ -57,6 +58,7 @@ export function ThumbnailPanel() {
         // 세로형: 높이가 너비보다 큼
         setIsVertical(height > width)
         setContainerWidth(width)
+        setContainerHeight(height)
       }
     }
 
@@ -81,8 +83,8 @@ export function ThumbnailPanel() {
     if (!scrollArea || isVertical) return
 
     const handleWheel = (e: WheelEvent) => {
-      // 가로 스크롤이 가능한 경우에만 처리
-      if (scrollArea.scrollWidth > scrollArea.clientWidth) {
+      // 가로 모드에서는 항상 가로 스크롤 처리
+      if (!isVertical) {
         e.preventDefault()
         scrollArea.scrollLeft += e.deltaY
       }
@@ -93,7 +95,7 @@ export function ThumbnailPanel() {
     return () => {
       scrollArea.removeEventListener('wheel', handleWheel)
     }
-  }, [isVertical])
+  }, [isVertical, images.length])
 
   // 그리드 컬럼 수 계산 (세로 모드)
   const columnCount = useMemo(() => {
@@ -132,6 +134,26 @@ export function ThumbnailPanel() {
     estimateSize: () => rowHeight,
     overscan: 5,
     enabled: isVertical,
+  })
+
+  // 가로 모드 아이템 크기 계산 (높이 기준)
+  const horizontalItemSize = useMemo(() => {
+    if (isVertical || containerHeight === 0) return thumbnailSize + 8
+    // 가로 모드에서는 컨테이너 높이 기준
+    // aspect-square이므로 너비 = 높이
+    const gap = 8 // 0.5rem
+    // 하단 상태바 높이 제외 (세로 모드에서만 표시되므로 전체 높이 사용)
+    return containerHeight + gap
+  }, [isVertical, containerHeight, thumbnailSize])
+
+  // 가상화 설정 (가로 모드 - 수평 스크롤)
+  const horizontalVirtualizer = useVirtualizer({
+    horizontal: true,
+    count: images.length,
+    getScrollElement: () => scrollAreaRef.current,
+    estimateSize: () => horizontalItemSize,
+    overscan: 5,
+    enabled: !isVertical,
   })
 
   // 스크롤 시 뷰포트 계산 및 업데이트
@@ -431,52 +453,62 @@ export function ThumbnailPanel() {
             })}
           </div>
         ) : (
-          /* 가로형: 한 줄 가로 스크롤 */
-          <div className="flex flex-nowrap gap-2 h-full items-center px-2">
-            {images.map((imagePath, index) => {
+          /* 가로형: 가상화된 한 줄 가로 스크롤 */
+          <div
+            className="flex flex-nowrap h-full items-center"
+            style={{
+              paddingLeft: `${horizontalVirtualizer.getVirtualItems()[0]?.start ?? 0}px`,
+              paddingRight: `${
+                horizontalVirtualizer.getTotalSize() -
+                (horizontalVirtualizer.getVirtualItems()[horizontalVirtualizer.getVirtualItems().length - 1]?.end ?? 0)
+              }px`,
+            }}
+          >
+            {horizontalVirtualizer.getVirtualItems().map((virtualItem) => {
+              const imagePath = images[virtualItem.index]
               const thumbnail = thumbnails.get(imagePath)
               const transform = thumbnail?.exif_metadata
                 ? getOrientationTransform(thumbnail.exif_metadata.orientation)
                 : ''
-
               const isSelected = selectedImage === imagePath
 
               return (
                 <div
-                  key={imagePath}
-                  data-index={index}
+                  key={virtualItem.index}
+                  data-index={virtualItem.index}
                   className="h-full aspect-square flex-shrink-0"
+                  style={{
+                    marginRight: virtualItem.index < images.length - 1 ? '0.5rem' : '0',
+                  }}
                   onClick={() => {
                     setSelectedImage(imagePath)
                     loadImage(imagePath)
                   }}
                 >
-                <div
-                  className={`group relative w-full h-full cursor-pointer overflow-hidden ${
-                    isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''
-                  } hover:bg-neutral-800/50 transition-colors`}
-                >
-                  {thumbnail ? (
-                    <img
-                      src={`data:image/jpeg;base64,${thumbnail.thumbnail_base64}`}
-                      alt={imagePath}
-                      className="h-full w-full object-contain"
-                      style={{ transform }}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
+                  <div
+                    className={`group relative w-full h-full cursor-pointer overflow-hidden ${
+                      isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''
+                    } hover:bg-neutral-800/50 transition-colors`}
+                  >
+                    {thumbnail ? (
+                      <img
+                        src={`data:image/jpeg;base64,${thumbnail.thumbnail_base64}`}
+                        alt={imagePath}
+                        className="h-full w-full object-contain"
+                        style={{ transform }}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                      <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
                     </div>
-                  )}
-
-                  {/* 호버 시 파일명 표시 */}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                    <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
                   </div>
                 </div>
-              </div>
-            )
+              )
             })}
           </div>
         )}
