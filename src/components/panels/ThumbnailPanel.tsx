@@ -255,6 +255,15 @@ export function ThumbnailPanel() {
     }
   }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
 
+  // focusedIndex 변경 시 이미지 자동 로드
+  useEffect(() => {
+    if (focusedIndex >= 0 && focusedIndex < images.length) {
+      const imagePath = images[focusedIndex]
+      loadImage(imagePath)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedIndex])
+
   // 키보드 네비게이션 (4방향 + Home/End + PageUp/PageDown + 검색)
   useEffect(() => {
     if (images.length === 0) return

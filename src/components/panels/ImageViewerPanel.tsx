@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-// import { invoke } from '@tauri-apps/api/core'
-// import { convertFileSrc } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
 
 interface ImageInfo {
@@ -21,7 +21,7 @@ export function ImageViewerPanel() {
   const isProcessingRef = useRef(false)
   const currentImageRef = useRef<HTMLImageElement | null>(null)
 
-  // 임시로 이미지 로딩 비활성화 - 썸네일 포커스 테스트용
+  // 이미지 로딩
   useEffect(() => {
     if (!currentPath) {
       setImageUrl(null)
@@ -30,26 +30,26 @@ export function ImageViewerPanel() {
       return
     }
 
-    // async function loadImage() {
-    //   setImageLoaded(false)
+    async function loadImage() {
+      setImageLoaded(false)
 
-    //   try {
-    //     // 1. 이미지 정보 가져오기
-    //     const info = await invoke<ImageInfo>('get_image_info', {
-    //       filePath: currentPath,
-    //     })
+      try {
+        // 1. 이미지 정보 가져오기
+        const info = await invoke<ImageInfo>('get_image_info', {
+          filePath: currentPath,
+        })
 
-    //     setImageInfo(info)
+        setImageInfo(info)
 
-    //     // 2. convertFileSrc로 asset URL 생성
-    //     const assetUrl = convertFileSrc(currentPath!)
-    //     setImageUrl(assetUrl)
-    //   } catch (err) {
-    //     console.error('Failed to load image:', err)
-    //   }
-    // }
+        // 2. convertFileSrc로 asset URL 생성
+        const assetUrl = convertFileSrc(currentPath!)
+        setImageUrl(assetUrl)
+      } catch (err) {
+        console.error('Failed to load image:', err)
+      }
+    }
 
-    // loadImage()
+    loadImage()
   }, [currentPath])
 
   // Canvas에 이미지 렌더링 함수
@@ -142,60 +142,60 @@ export function ImageViewerPanel() {
     }
   }, [imageLoaded, goToIndex])
 
-  // 키보드 네비게이션 - 큐에 추가
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (imageList.length === 0) return
+  // 키보드 네비게이션 비활성화 - ThumbnailPanel에서 focusedIndex로 제어
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => {
+  //     if (imageList.length === 0) return
 
-      let targetIndex: number | null = null
+  //     let targetIndex: number | null = null
 
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        // 이전 이미지
-        const currentOrLast = navigationQueueRef.current.length > 0
-          ? navigationQueueRef.current[navigationQueueRef.current.length - 1]
-          : currentIndex
-        targetIndex = currentOrLast > 0 ? currentOrLast - 1 : imageList.length - 1
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        // 다음 이미지
-        const currentOrLast = navigationQueueRef.current.length > 0
-          ? navigationQueueRef.current[navigationQueueRef.current.length - 1]
-          : currentIndex
-        targetIndex = currentOrLast < imageList.length - 1 ? currentOrLast + 1 : 0
-      }
+  //     if (e.key === 'ArrowLeft') {
+  //       e.preventDefault()
+  //       // 이전 이미지
+  //       const currentOrLast = navigationQueueRef.current.length > 0
+  //         ? navigationQueueRef.current[navigationQueueRef.current.length - 1]
+  //         : currentIndex
+  //       targetIndex = currentOrLast > 0 ? currentOrLast - 1 : imageList.length - 1
+  //     } else if (e.key === 'ArrowRight') {
+  //       e.preventDefault()
+  //       // 다음 이미지
+  //       const currentOrLast = navigationQueueRef.current.length > 0
+  //         ? navigationQueueRef.current[navigationQueueRef.current.length - 1]
+  //         : currentIndex
+  //       targetIndex = currentOrLast < imageList.length - 1 ? currentOrLast + 1 : 0
+  //     }
 
-      if (targetIndex !== null) {
-        if (!isProcessingRef.current) {
-          // 처리 중이 아니면 즉시 이동
-          isProcessingRef.current = true
-          goToIndex(targetIndex)
-        } else {
-          // 처리 중이면 큐에 추가
-          navigationQueueRef.current.push(targetIndex)
-        }
-      }
-    }
+  //     if (targetIndex !== null) {
+  //       if (!isProcessingRef.current) {
+  //         // 처리 중이 아니면 즉시 이동
+  //         isProcessingRef.current = true
+  //         goToIndex(targetIndex)
+  //       } else {
+  //         // 처리 중이면 큐에 추가
+  //         navigationQueueRef.current.push(targetIndex)
+  //       }
+  //     }
+  //   }
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        // 키를 떼면 즉시 큐 비우기
-        navigationQueueRef.current = []
-      }
-    }
+  //   const handleKeyUp = (e: KeyboardEvent) => {
+  //     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+  //       // 키를 떼면 즉시 큐 비우기
+  //       navigationQueueRef.current = []
+  //     }
+  //   }
 
-    // containerRef에 포커스를 주어야 키보드 이벤트를 받을 수 있음
-    if (containerRef.current) {
-      containerRef.current.focus()
-    }
+  //   // containerRef에 포커스를 주어야 키보드 이벤트를 받을 수 있음
+  //   if (containerRef.current) {
+  //     containerRef.current.focus()
+  //   }
 
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [imageList, currentIndex, goToIndex])
+  //   window.addEventListener('keydown', handleKeyDown)
+  //   window.addEventListener('keyup', handleKeyUp)
+  //   return () => {
+  //     window.removeEventListener('keydown', handleKeyDown)
+  //     window.removeEventListener('keyup', handleKeyUp)
+  //   }
+  // }, [imageList, currentIndex, goToIndex])
 
   return (
     <div
