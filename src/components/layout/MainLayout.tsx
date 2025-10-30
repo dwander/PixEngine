@@ -49,6 +49,15 @@ export function MainLayout() {
   const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;
 
+    // ImageViewerPanel 그룹으로의 드롭 방지
+    event.api.onWillShowOverlay((e) => {
+      // center 패널이 속한 그룹으로의 드롭을 막음
+      const centerPanel = event.api.getPanel("center");
+      if (centerPanel && (e as any).group?.id === centerPanel.group.id) {
+        e.preventDefault();
+      }
+    });
+
     // 저장된 dockview 레이아웃 복원 시도
     let layoutRestored = false;
     try {
