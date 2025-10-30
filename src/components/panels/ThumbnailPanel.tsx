@@ -114,11 +114,22 @@ export function ThumbnailPanel() {
     return result
   }, [images, columnCount, isVertical])
 
+  // 실제 행 높이 계산 (aspect-square를 고려)
+  const rowHeight = useMemo(() => {
+    if (!isVertical || containerWidth === 0 || columnCount === 0) return thumbnailSize + 8
+    const gap = 8
+    const padding = 16
+    const availableWidth = containerWidth - padding
+    const itemWidth = (availableWidth - gap * (columnCount - 1)) / columnCount
+    // aspect-square이므로 높이 = 너비
+    return itemWidth + gap
+  }, [isVertical, containerWidth, columnCount, thumbnailSize])
+
   // 가상화 설정 (세로 모드)
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollAreaRef.current,
-    estimateSize: () => thumbnailSize + 8, // thumbnail + gap
+    estimateSize: () => rowHeight,
     overscan: 5,
     enabled: isVertical,
   })
@@ -369,7 +380,6 @@ export function ThumbnailPanel() {
                     className="grid gap-2"
                     style={{
                       gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
-                      height: `${thumbnailSize}px`,
                     }}
                   >
                     {rowImages.map((imagePath, colIndex) => {
