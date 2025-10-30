@@ -255,11 +255,12 @@ export function ThumbnailPanel() {
     }
   }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
 
-  // 키보드 네비게이션 (4방향 + Home/End + PageUp/PageDown)
+  // 키보드 네비게이션 (4방향 + Home/End + PageUp/PageDown + 검색)
   useEffect(() => {
     if (images.length === 0) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 네비게이션 키들
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
         setFocusedIndex(prev => Math.max(0, prev - 1))
@@ -269,26 +270,21 @@ export function ThumbnailPanel() {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         if (isVertical) {
-          // 세로 모드: columnCount만큼 위로 이동
           setFocusedIndex(prev => Math.max(0, prev - columnCount))
         }
-        // 가로 모드에서는 위아래 키 무시
       } else if (e.key === 'ArrowDown') {
         e.preventDefault()
         if (isVertical) {
-          // 세로 모드: columnCount만큼 아래로 이동
           setFocusedIndex(prev => Math.min(images.length - 1, prev + columnCount))
         }
-        // 가로 모드에서는 위아래 키 무시
       } else if (e.key === 'Home') {
         e.preventDefault()
-        setFocusedIndex(0) // 첫 번째 이미지로
+        setFocusedIndex(0)
       } else if (e.key === 'End') {
         e.preventDefault()
-        setFocusedIndex(images.length - 1) // 마지막 이미지로
+        setFocusedIndex(images.length - 1)
       } else if (e.key === 'PageUp') {
         e.preventDefault()
-        // 현재 뷰포트의 첫 번째 보이는 항목으로 이동
         if (isVertical) {
           const virtualRows = rowVirtualizer.getVirtualItems()
           if (virtualRows.length > 0) {
@@ -304,7 +300,6 @@ export function ThumbnailPanel() {
         }
       } else if (e.key === 'PageDown') {
         e.preventDefault()
-        // 현재 뷰포트의 마지막 보이는 항목으로 이동
         if (isVertical) {
           const virtualRows = rowVirtualizer.getVirtualItems()
           if (virtualRows.length > 0) {
@@ -318,6 +313,41 @@ export function ThumbnailPanel() {
             setFocusedIndex(virtualItems[virtualItems.length - 1].index)
           }
         }
+      } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
+        // 알파벳/숫자 키: 단일 문자로 시작하는 다음 파일 검색
+        e.preventDefault()
+
+        const searchChar = e.key.toLowerCase()
+
+        // 파일명에서 basename 추출
+        const getBasename = (path: string) => {
+          const parts = path.split(/[/\\]/)
+          return parts[parts.length - 1].toLowerCase()
+        }
+
+        // 현재 위치 다음부터 검색
+        let foundIndex = -1
+        for (let i = focusedIndex + 1; i < images.length; i++) {
+          if (getBasename(images[i]).startsWith(searchChar)) {
+            foundIndex = i
+            break
+          }
+        }
+
+        // 못 찾으면 처음부터 현재 위치까지 검색 (순환)
+        if (foundIndex === -1) {
+          for (let i = 0; i <= focusedIndex; i++) {
+            if (getBasename(images[i]).startsWith(searchChar)) {
+              foundIndex = i
+              break
+            }
+          }
+        }
+
+        // 찾았으면 이동
+        if (foundIndex !== -1) {
+          setFocusedIndex(foundIndex)
+        }
       }
     }
 
@@ -325,7 +355,7 @@ export function ThumbnailPanel() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [images.length, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer])
+  }, [images, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer])
 
   // 썸네일 생성 시작
   useEffect(() => {
