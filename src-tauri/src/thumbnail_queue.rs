@@ -13,8 +13,8 @@ use crate::idle_detector;
 static HQ_GENERATION_CANCELLED: AtomicBool = AtomicBool::new(false);
 
 lazy_static! {
-    /// HQ 생성 뷰포트 인덱스 (전역)
-    static ref HQ_VIEWPORT_INDICES: Arc<RwLock<HashSet<usize>>> = Arc::new(RwLock::new(HashSet::new()));
+    /// HQ 생성 뷰포트 경로 (전역)
+    static ref HQ_VIEWPORT_PATHS: Arc<RwLock<HashSet<String>>> = Arc::new(RwLock::new(HashSet::new()));
 }
 
 // HQ 썸네일 생성 상수
@@ -324,9 +324,28 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
             let is_idle = idle_detector::should_generate_hq(IDLE_THRESHOLD_MS);
 
             if is_idle {
-                // 유휴 상태: 인덱스 순서로 최대 3개 병렬 처리
+                // 유휴 상태: 뷰포트 항목 우선, 최대 3개 병렬 처리
+                let viewport = HQ_VIEWPORT_PATHS.read().await;
                 let batch_size = HQ_MAX_CONCURRENT.min(remaining.len());
-                let batch: Vec<_> = remaining.drain(..batch_size).collect();
+
+                let mut batch = Vec::new();
+
+                // 1. 먼저 뷰포트에 있는 항목들을 배치에 추가 (경로 기반)
+                let mut i = 0;
+                while i < remaining.len() && batch.len() < batch_size {
+                    if viewport.contains(&remaining[i].1) {
+                        batch.push(remaining.remove(i));
+                    } else {
+                        i += 1;
+                    }
+                }
+
+                // 2. 배치가 아직 안 찼으면 나머지를 앞에서부터 채움
+                while batch.len() < batch_size && !remaining.is_empty() {
+                    batch.push(remaining.remove(0));
+                }
+
+                drop(viewport); // RwLock 해제
 
                 let mut tasks = Vec::new();
                 for (_index, path) in batch {
@@ -360,20 +379,20 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
                 }
             } else {
                 // 비유휴 상태: 뷰포트에 있는 것 우선, 1개씩 순차 처리
-                let viewport = HQ_VIEWPORT_INDICES.read().await;
+                let viewport = HQ_VIEWPORT_PATHS.read().await;
 
-                // 뷰포트에 있는 항목 찾기
-                let viewport_item_idx = remaining.iter().position(|(idx, _)| viewport.contains(idx));
-
-                let item = if let Some(pos) = viewport_item_idx {
-                    // 뷰포트 항목 우선
-                    remaining.remove(pos)
-                } else {
-                    // 없으면 첫 번째 항목
-                    remaining.remove(0)
-                };
+                // 뷰포트에 있는 항목 찾기 (경로 기반)
+                let viewport_item_pos = remaining.iter().position(|(_idx, path)| viewport.contains(path));
 
                 drop(viewport); // RwLock 해제
+
+                let item = if let Some(pos) = viewport_item_pos {
+                    // 뷰포트 항목 발견 - 우선 처리
+                    remaining.remove(pos)
+                } else {
+                    // 뷰포트 항목이 remaining에 없음 -> 순차 처리
+                    remaining.remove(0)
+                };
 
                 let (_index, path) = item;
 
@@ -413,9 +432,9 @@ pub fn cancel_hq_thumbnail_generation() {
     HQ_GENERATION_CANCELLED.store(true, Ordering::SeqCst);
 }
 
-/// HQ 생성 뷰포트 인덱스 업데이트
-pub async fn update_hq_viewport_indices(indices: Vec<usize>) {
-    let mut viewport = HQ_VIEWPORT_INDICES.write().await;
+/// HQ 생성 뷰포트 경로 업데이트
+pub async fn update_hq_viewport_paths(paths: Vec<String>) {
+    let mut viewport = HQ_VIEWPORT_PATHS.write().await;
     viewport.clear();
-    viewport.extend(indices);
+    viewport.extend(paths.iter().cloned());
 }

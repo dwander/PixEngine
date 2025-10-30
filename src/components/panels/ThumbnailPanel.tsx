@@ -178,58 +178,56 @@ export function ThumbnailPanel() {
     }
   }, [horizontalItemSize, isVertical])
 
-  // 스크롤 시 뷰포트 계산 및 업데이트
+  // 뷰포트 내 이미지 인덱스 추적 및 HQ 생성 우선순위 업데이트
   useEffect(() => {
+    if (!isGeneratingHq) return
+
     const scrollArea = scrollAreaRef.current
     if (!scrollArea) return
 
     let timeoutId: number
 
-    const handleScroll = () => {
-      // 디바운스: 100ms 후에 처리
+    const updateViewportIndices = () => {
       clearTimeout(timeoutId)
       timeoutId = setTimeout(() => {
-        const container = scrollArea.querySelector('div')
-        if (!container) return
-
-        const items = container.querySelectorAll('div[data-index]')
-        if (items.length === 0) return
-
         const visibleIndices: number[] = []
-        const rect = scrollArea.getBoundingClientRect()
 
-        items.forEach((item) => {
-          const itemRect = item.getBoundingClientRect()
-          const isVisible =
-            itemRect.top < rect.bottom &&
-            itemRect.bottom > rect.top &&
-            itemRect.left < rect.right &&
-            itemRect.right > rect.left
-
-          if (isVisible) {
-            const index = parseInt(item.getAttribute('data-index') || '0', 10)
-            visibleIndices.push(index)
-          }
-        })
+        if (isVertical) {
+          // 세로 모드: 행 기반 가상화
+          const virtualRows = rowVirtualizer.getVirtualItems()
+          virtualRows.forEach((virtualRow) => {
+            const startIndex = virtualRow.index * columnCount
+            const endIndex = Math.min(startIndex + columnCount, images.length)
+            for (let i = startIndex; i < endIndex; i++) {
+              visibleIndices.push(i)
+            }
+          })
+        } else {
+          // 가로 모드: 수평 가상화
+          const virtualItems = horizontalVirtualizer.getVirtualItems()
+          virtualItems.forEach((item) => {
+            visibleIndices.push(item.index)
+          })
+        }
 
         if (visibleIndices.length > 0) {
-          // HQ 생성 중이면 뷰포트 업데이트
-          if (isGeneratingHq) {
-            invoke('update_hq_viewport_indices', { indices: visibleIndices }).catch(console.error)
-          }
+          // 뷰포트 내 썸네일의 전체 경로 추출
+          const visiblePaths = visibleIndices.map(i => images[i]).filter(Boolean)
+
+          invoke('update_hq_viewport_paths', { paths: visiblePaths }).catch(console.error)
         }
       }, 100)
     }
 
-    scrollArea.addEventListener('scroll', handleScroll, { passive: true })
+    scrollArea.addEventListener('scroll', updateViewportIndices, { passive: true })
     // 초기 뷰포트 계산
-    handleScroll()
+    updateViewportIndices()
 
     return () => {
       clearTimeout(timeoutId)
-      scrollArea.removeEventListener('scroll', handleScroll)
+      scrollArea.removeEventListener('scroll', updateViewportIndices)
     }
-  }, [isGeneratingHq])
+  }, [isGeneratingHq, isVertical, columnCount, images.length])
 
   // 썸네일 생성 시작
   useEffect(() => {

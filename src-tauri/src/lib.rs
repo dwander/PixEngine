@@ -451,10 +451,10 @@ fn cancel_hq_thumbnail_generation() -> Result<(), String> {
     Ok(())
 }
 
-// HQ 생성 뷰포트 인덱스 업데이트
+// HQ 생성 뷰포트 경로 업데이트
 #[tauri::command]
-async fn update_hq_viewport_indices(indices: Vec<usize>) -> Result<(), String> {
-    thumbnail_queue::update_hq_viewport_indices(indices).await;
+async fn update_hq_viewport_paths(paths: Vec<String>) -> Result<(), String> {
+    thumbnail_queue::update_hq_viewport_paths(paths).await;
     Ok(())
 }
 
@@ -552,7 +552,7 @@ pub fn run() {
             load_existing_hq_thumbnails,
             start_hq_thumbnail_generation,
             cancel_hq_thumbnail_generation,
-            update_hq_viewport_indices,
+            update_hq_viewport_paths,
             get_image_info
         ])
         .run(tauri::generate_context!())
