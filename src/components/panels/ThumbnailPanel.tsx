@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { Virtuoso } from 'react-virtuoso'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Loader2 } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 
@@ -45,16 +45,18 @@ export function ThumbnailPanel() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px
   const [isVertical, setIsVertical] = useState(true)
+  const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
-  // 패널 방향 감지
+  // 패널 방향 및 크기 감지
   useEffect(() => {
     const checkOrientation = () => {
       if (containerRef.current) {
-        const { width, height } = containerRef.current.getBoundingClientRect()
+        const { width, height} = containerRef.current.getBoundingClientRect()
         // 세로형: 높이가 너비보다 큼
         setIsVertical(height > width)
+        setContainerWidth(width)
       }
     }
 
@@ -93,12 +95,40 @@ export function ThumbnailPanel() {
     }
   }, [isVertical])
 
+  // 그리드 컬럼 수 계산 (세로 모드)
+  const columnCount = useMemo(() => {
+    if (!isVertical || containerWidth === 0) return 1
+    const gap = 8 // 0.5rem = 8px
+    const padding = 16 // p-2 = 0.5rem * 2 = 16px
+    const availableWidth = containerWidth - padding
+    return Math.max(1, Math.floor((availableWidth + gap) / (thumbnailSize + gap)))
+  }, [isVertical, containerWidth, thumbnailSize])
+
+  // 행별로 이미지 그룹화 (세로 모드)
+  const rows = useMemo(() => {
+    if (!isVertical) return []
+    const result: string[][] = []
+    for (let i = 0; i < images.length; i += columnCount) {
+      result.push(images.slice(i, i + columnCount))
+    }
+    return result
+  }, [images, columnCount, isVertical])
+
+  // 가상화 설정 (세로 모드)
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollAreaRef.current,
+    estimateSize: () => thumbnailSize + 8, // thumbnail + gap
+    overscan: 5,
+    enabled: isVertical,
+  })
+
   // 스크롤 시 뷰포트 계산 및 업데이트
   useEffect(() => {
     const scrollArea = scrollAreaRef.current
     if (!scrollArea) return
 
-    let timeoutId: NodeJS.Timeout
+    let timeoutId: number
 
     const handleScroll = () => {
       // 디바운스: 100ms 후에 처리
@@ -281,31 +311,6 @@ export function ThumbnailPanel() {
     }
   }, [images])
 
-  // 뷰포트 내 이미지 우선순위 업데이트 (EXIF + HQ)
-  const handleVisibleRangeChange = useCallback(
-    async (visibleRange: { startIndex: number; endIndex: number }) => {
-      const visibleIndices: number[] = []
-      for (let i = visibleRange.startIndex; i <= visibleRange.endIndex; i++) {
-        visibleIndices.push(i)
-      }
-
-      try {
-        // EXIF 썸네일 생성 중이면 우선순위 업데이트
-        if (isGenerating) {
-          await invoke('update_thumbnail_priorities', { visibleIndices })
-        }
-
-        // HQ 썸네일 생성 중이면 뷰포트 인덱스 업데이트
-        if (isGeneratingHq) {
-          await invoke('update_hq_viewport_indices', { indices: visibleIndices })
-        }
-      } catch (error) {
-        console.error('Failed to update viewport:', error)
-      }
-    },
-    [isGenerating, isGeneratingHq]
-  )
-
   // 이미지가 없을 때
   if (images.length === 0) {
     return (
@@ -337,35 +342,105 @@ export function ThumbnailPanel() {
         ref={scrollAreaRef}
         className={isVertical ? 'flex-1 overflow-auto p-2' : 'flex-1 overflow-x-auto overflow-y-hidden py-2'}
       >
-        {/* 세로형: 그리드, 가로형: 한 줄 가로 스크롤 */}
-        <div
-          className={isVertical ? 'grid gap-2' : 'flex flex-nowrap gap-2 h-full items-center px-2'}
-          style={
-            isVertical
-              ? {
-                  gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))`,
-                }
-              : undefined
-          }
-        >
-          {images.map((imagePath, index) => {
-            const thumbnail = thumbnails.get(imagePath)
-            const transform = thumbnail?.exif_metadata
-              ? getOrientationTransform(thumbnail.exif_metadata.orientation)
-              : ''
+        {isVertical ? (
+          /* 세로형: 가상화된 그리드 */
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const rowImages = rows[virtualRow.index]
+              return (
+                <div
+                  key={virtualRow.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div
+                    className="grid gap-2"
+                    style={{
+                      gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+                      height: `${thumbnailSize}px`,
+                    }}
+                  >
+                    {rowImages.map((imagePath, colIndex) => {
+                      const index = virtualRow.index * columnCount + colIndex
+                      const thumbnail = thumbnails.get(imagePath)
+                      const transform = thumbnail?.exif_metadata
+                        ? getOrientationTransform(thumbnail.exif_metadata.orientation)
+                        : ''
+                      const isSelected = selectedImage === imagePath
 
-            const isSelected = selectedImage === imagePath
+                      return (
+                        <div
+                          key={imagePath}
+                          data-index={index}
+                          className="w-full aspect-square"
+                          onClick={() => {
+                            setSelectedImage(imagePath)
+                            loadImage(imagePath)
+                          }}
+                        >
+                          <div
+                            className={`group relative w-full h-full cursor-pointer overflow-hidden ${
+                              isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''
+                            } hover:bg-neutral-800/50 transition-colors`}
+                          >
+                            {thumbnail ? (
+                              <img
+                                src={`data:image/jpeg;base64,${thumbnail.thumbnail_base64}`}
+                                alt={imagePath}
+                                className="h-full w-full object-contain"
+                                style={{ transform }}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center">
+                                <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
+                              </div>
+                            )}
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                              <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          /* 가로형: 한 줄 가로 스크롤 */
+          <div className="flex flex-nowrap gap-2 h-full items-center px-2">
+            {images.map((imagePath, index) => {
+              const thumbnail = thumbnails.get(imagePath)
+              const transform = thumbnail?.exif_metadata
+                ? getOrientationTransform(thumbnail.exif_metadata.orientation)
+                : ''
 
-            return (
-              <div
-                key={imagePath}
-                data-index={index}
-                className={isVertical ? 'w-full aspect-square' : 'h-full aspect-square flex-shrink-0'}
-                onClick={() => {
-                  setSelectedImage(imagePath)
-                  loadImage(imagePath)
-                }}
-              >
+              const isSelected = selectedImage === imagePath
+
+              return (
+                <div
+                  key={imagePath}
+                  data-index={index}
+                  className="h-full aspect-square flex-shrink-0"
+                  onClick={() => {
+                    setSelectedImage(imagePath)
+                    loadImage(imagePath)
+                  }}
+                >
                 <div
                   className={`group relative w-full h-full cursor-pointer overflow-hidden ${
                     isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''
@@ -392,8 +467,9 @@ export function ThumbnailPanel() {
                 </div>
               </div>
             )
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
 
       {/* 하단 상태 표시 - 세로 모드일 때만 표시 */}
