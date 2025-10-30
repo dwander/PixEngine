@@ -246,13 +246,11 @@ export function ThumbnailPanel() {
       const rowIndex = Math.floor(focusedIndex / columnCount)
       rowVirtualizer.scrollToIndex(rowIndex, {
         align: 'auto', // 뷰포트 내에 있으면 스크롤 안함
-        behavior: 'smooth',
       })
     } else {
       // 가로 모드: 개별 항목으로 스크롤
       horizontalVirtualizer.scrollToIndex(focusedIndex, {
         align: 'auto',
-        behavior: 'smooth',
       })
     }
   }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
