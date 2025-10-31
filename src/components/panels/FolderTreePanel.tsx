@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
 import { useFolderContext } from "../../contexts/FolderContext";
 import { useImageContext } from "../../contexts/ImageContext";
+import { normalizePath } from "../../lib/pathUtils";
 
 interface FolderNode {
   name: string;
@@ -272,7 +273,7 @@ function FolderTreeItem({
   useEffect(() => {
     if (hasSubdirs === false && isOpen && currentFolder) {
       const normalizePathForComparison = (path: string) => {
-        return path.toLowerCase().replace(/\\/g, '/').replace(/^\\\\\?\\/, '');
+        return normalizePath(path).toLowerCase().replace(/^\\\\\?\\/, '');
       };
       const isCurrentFolder = normalizePathForComparison(node.path) === normalizePathForComparison(currentFolder);
 
@@ -317,12 +318,12 @@ function FolderTreeItem({
       }
 
       // 경로 정규화
-      const normalizePath = (path: string) => {
-        return path.toLowerCase().replace(/^\\\\\?\\/, '').replace(/\\/g, '/').replace(/\/+$/, '');
+      const normalizePathForComparison = (path: string) => {
+        return normalizePath(path).toLowerCase().replace(/^\\\\\?\\/, '').replace(/\/+$/, '');
       };
 
-      const normalizedNodePath = normalizePath(node.path);
-      const normalizedLastPath = normalizePath(lastAccessed.path);
+      const normalizedNodePath = normalizePathForComparison(node.path);
+      const normalizedLastPath = normalizePathForComparison(lastAccessed.path);
 
       // 현재 노드가 마지막 접근 경로의 부모이거나 정확히 일치하는지 확인
       const isMatch = normalizedNodePath === normalizedLastPath || normalizedLastPath.startsWith(normalizedNodePath + '/');
@@ -490,7 +491,7 @@ function FolderTreeItem({
 
   // 현재 폴더인지 확인 (경로 정규화)
   const normalizePathForComparison = (path: string) => {
-    return path.toLowerCase().replace(/\\/g, '/').replace(/^\\\\\?\\/, '');
+    return normalizePath(path).toLowerCase().replace(/^\\\\\?\\/, '');
   };
   const isCurrentFolder = currentFolder && normalizePathForComparison(node.path) === normalizePathForComparison(currentFolder);
 
