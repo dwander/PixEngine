@@ -199,7 +199,13 @@ impl ThumbnailQueueManager {
 
                 match request {
                     Some(req) => {
-                        let permit = semaphore.clone().acquire_owned().await.unwrap();
+                        let permit = match semaphore.clone().acquire_owned().await {
+                            Ok(p) => p,
+                            Err(e) => {
+                                eprintln!("Failed to acquire semaphore: {}", e);
+                                continue;
+                            }
+                        };
                         let completed_clone = Arc::clone(&completed);
                         let total_clone = Arc::clone(&total);
                         let app_handle_clone = app_handle.clone();

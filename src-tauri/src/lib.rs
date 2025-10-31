@@ -11,6 +11,22 @@ mod idle_detector;
 
 use thumbnail_queue::ThumbnailQueueManager;
 
+// 경로 검증 함수
+fn validate_path(path: &str) -> Result<PathBuf, String> {
+    let path_buf = PathBuf::from(path);
+
+    // 경로가 존재하는지 확인
+    if !path_buf.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+
+    // 경로를 정규화하여 상대 경로 공격 방지
+    match path_buf.canonicalize() {
+        Ok(canonical_path) => Ok(canonical_path),
+        Err(e) => Err(format!("Failed to canonicalize path: {}", e))
+    }
+}
+
 #[derive(Serialize)]
 struct DriveInfo {
     name: String,
@@ -40,32 +56,32 @@ struct LayoutState {
 }
 
 // 윈도우 상태 파일 경로 가져오기
-fn get_window_state_path(app: &tauri::AppHandle) -> PathBuf {
+fn get_window_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
-        .expect("Failed to get app data dir")
-        .join("window-state.json")
+        .map(|p| p.join("window-state.json"))
+        .map_err(|e| format!("Failed to get app data dir: {}", e))
 }
 
 // 레이아웃 상태 파일 경로 가져오기
-fn get_layout_state_path(app: &tauri::AppHandle) -> PathBuf {
+fn get_layout_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
-        .expect("Failed to get app data dir")
-        .join("layout-state.json")
+        .map(|p| p.join("layout-state.json"))
+        .map_err(|e| format!("Failed to get app data dir: {}", e))
 }
 
 // dockview 레이아웃 파일 경로 가져오기
-fn get_dockview_layout_path(app: &tauri::AppHandle) -> PathBuf {
+fn get_dockview_layout_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
-        .expect("Failed to get app data dir")
-        .join("dockview-layout.json")
+        .map(|p| p.join("dockview-layout.json"))
+        .map_err(|e| format!("Failed to get app data dir: {}", e))
 }
 
 // 저장된 윈도우 상태 로드
 fn load_window_state(app: &tauri::AppHandle) -> Option<WindowState> {
-    let path = get_window_state_path(app);
+    let path = get_window_state_path(app).ok()?;
     if path.exists() {
         let content = fs::read_to_string(path).ok()?;
         serde_json::from_str(&content).ok()
@@ -92,7 +108,7 @@ fn save_window_state(
         maximized,
     };
 
-    let path = get_window_state_path(&app);
+    let path = get_window_state_path(&app)?;
 
     // 디렉토리가 없으면 생성
     if let Some(parent) = path.parent() {
@@ -126,7 +142,7 @@ fn save_layout_state(
         thumbnail_width,
     };
 
-    let path = get_layout_state_path(&app);
+    let path = get_layout_state_path(&app)?;
 
     // 디렉토리가 없으면 생성
     if let Some(parent) = path.parent() {
@@ -142,7 +158,7 @@ fn save_layout_state(
 // 레이아웃 상태 로드
 #[tauri::command]
 fn load_layout_state(app: tauri::AppHandle) -> Result<Option<LayoutState>, String> {
-    let path = get_layout_state_path(&app);
+    let path = get_layout_state_path(&app)?;
     if path.exists() {
         let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
         let state: LayoutState = serde_json::from_str(&content).map_err(|e| e.to_string())?;
@@ -155,7 +171,7 @@ fn load_layout_state(app: tauri::AppHandle) -> Result<Option<LayoutState>, Strin
 // dockview 레이아웃 저장
 #[tauri::command]
 fn save_dockview_layout(app: tauri::AppHandle, layout: serde_json::Value) -> Result<(), String> {
-    let path = get_dockview_layout_path(&app);
+    let path = get_dockview_layout_path(&app)?;
 
     // 디렉토리가 없으면 생성
     if let Some(parent) = path.parent() {
@@ -171,7 +187,7 @@ fn save_dockview_layout(app: tauri::AppHandle, layout: serde_json::Value) -> Res
 // dockview 레이아웃 로드
 #[tauri::command]
 fn load_dockview_layout(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
-    let path = get_dockview_layout_path(&app);
+    let path = get_dockview_layout_path(&app)?;
     if path.exists() {
         let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
         let layout: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
@@ -251,8 +267,11 @@ fn get_drives() -> Vec<DriveInfo> {
 
 // 서브디렉토리 존재 여부 확인
 #[tauri::command]
-fn has_subdirectories(path: &str) -> bool {
-    if let Ok(entries) = fs::read_dir(path) {
+fn has_subdirectories(path: &str) -> Result<bool, String> {
+    // 경로 검증
+    let validated_path = validate_path(path)?;
+
+    if let Ok(entries) = fs::read_dir(validated_path) {
         for entry in entries.flatten() {
             let entry_path = entry.path();
 
@@ -263,12 +282,12 @@ fn has_subdirectories(path: &str) -> bool {
             // 실제 경로의 메타데이터로 디렉토리 확인
             if let Ok(metadata) = fs::metadata(&real_path) {
                 if metadata.is_dir() {
-                    return true;
+                    return Ok(true);
                 }
             }
         }
     }
-    false
+    Ok(false)
 }
 
 // 사진 폴더 가져오기
@@ -308,7 +327,10 @@ fn get_desktop_folder() -> Option<FolderInfo> {
 // 디렉토리 내용 읽기
 #[tauri::command]
 fn read_directory_contents(path: &str) -> Result<Vec<serde_json::Value>, String> {
-    let entries = fs::read_dir(path)
+    // 경로 검증
+    let validated_path = validate_path(path)?;
+
+    let entries = fs::read_dir(validated_path)
         .map_err(|e| format!("Failed to read directory: {}", e))?;
 
     let mut results = Vec::new();
@@ -499,7 +521,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
+            let window = app.get_webview_window("main")
+                .ok_or("Failed to get main window")?;
 
             // 윈도우 핸들을 idle_detector에 설정 (Windows만)
             #[cfg(target_os = "windows")]
