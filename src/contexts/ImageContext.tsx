@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from "react";
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { logError } from '../lib/errorHandler';
+import { IMAGE_CACHE_SIZE, PRELOAD_PREVIOUS_COUNT, PRELOAD_NEXT_COUNT } from '../lib/constants';
 
 interface ImageCacheEntry {
   imageElement: HTMLImageElement;
@@ -19,8 +21,6 @@ interface ImageContextType {
 }
 
 const ImageContext = createContext<ImageContextType | undefined>(undefined);
-
-const MAX_CACHE_SIZE = 20; // 최대 20개 이미지 캐싱
 
 export function ImageProvider({ children }: { children: ReactNode }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         await new Promise<void>((resolve, reject) => {
           img.onload = () => {
             // 캐시 크기 제한
-            if (cache.size >= MAX_CACHE_SIZE) {
+            if (cache.size >= IMAGE_CACHE_SIZE) {
               // 가장 오래된 항목 제거 (LRU)
               let oldestKey: string | null = null;
               let oldestTime = Date.now();
@@ -97,7 +97,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
           img.src = assetUrl;
         });
       } catch (error) {
-        console.error(`Failed to preload image: ${path}`, error);
+        logError(error, `Preload image: ${path}`);
       }
     }
   }, []);
@@ -116,18 +116,18 @@ export function ImageProvider({ children }: { children: ReactNode }) {
     if (index !== -1) {
       const preloadPaths: string[] = [];
 
-      // 앞 2개
-      for (let i = Math.max(0, index - 2); i < index; i++) {
+      // 이전 이미지들
+      for (let i = Math.max(0, index - PRELOAD_PREVIOUS_COUNT); i < index; i++) {
         if (imageList[i]) preloadPaths.push(imageList[i]);
       }
 
-      // 뒤 3개 (현재 + 뒤 2개)
-      for (let i = index; i < Math.min(imageList.length, index + 3); i++) {
+      // 다음 이미지들 (현재 포함)
+      for (let i = index; i < Math.min(imageList.length, index + PRELOAD_NEXT_COUNT); i++) {
         if (imageList[i]) preloadPaths.push(imageList[i]);
       }
 
       // 백그라운드에서 프리로딩 (await 하지 않음)
-      preloadImages(preloadPaths).catch(console.error);
+      preloadImages(preloadPaths).catch((error) => logError(error, 'Load image preloading'));
     }
   }, [imageList, preloadImages]);
 

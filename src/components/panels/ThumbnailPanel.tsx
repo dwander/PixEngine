@@ -6,6 +6,15 @@ import { Loader2 } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { Store } from '@tauri-apps/plugin-store'
+import { logError } from '../../lib/errorHandler'
+import {
+  THUMBNAIL_SIZE_DEFAULT,
+  THUMBNAIL_SIZE_MIN,
+  THUMBNAIL_SIZE_MAX,
+  THUMBNAIL_GAP,
+  DEBOUNCE_FOCUS_INDEX,
+  VIRTUAL_SCROLL_OVERSCAN
+} from '../../lib/constants'
 
 interface ThumbnailResult {
   path: string
@@ -45,7 +54,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [hqProgress, setHqProgress] = useState<ThumbnailProgress | null>(null)
   const [isGeneratingHq, setIsGeneratingHq] = useState(false)
   // const [selectedImage, setSelectedImage] = useState<string | null>(null) // 임시 비활성화
-  const [thumbnailSize, setThumbnailSize] = useState(150) // 75-320px (store에서 로드)
+  const [thumbnailSize, setThumbnailSize] = useState(THUMBNAIL_SIZE_DEFAULT)
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
   const [containerHeight, setContainerHeight] = useState(0)
@@ -196,12 +205,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     count: rows.length,
     getScrollElement: () => scrollAreaRef.current,
     estimateSize: () => rowHeight,
-    overscan: 5,
+    overscan: VIRTUAL_SCROLL_OVERSCAN,
     enabled: isVertical,
   })
 
   // 가로 모드 아이템 크기 상태
-  const [horizontalItemSize, setHorizontalItemSize] = useState(150 + 8)
+  const [horizontalItemSize, setHorizontalItemSize] = useState(THUMBNAIL_SIZE_DEFAULT + THUMBNAIL_GAP)
 
   // 가로 모드 아이템 크기 측정
   useEffect(() => {
@@ -230,7 +239,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     count: images.length,
     getScrollElement: () => scrollAreaRef.current,
     estimateSize: () => horizontalItemSize,
-    overscan: 5,
+    overscan: VIRTUAL_SCROLL_OVERSCAN,
     enabled: !isVertical,
   })
 
@@ -284,7 +293,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           // 뷰포트 내 썸네일의 전체 경로 추출
           const visiblePaths = visibleIndices.map(i => images[i]).filter(Boolean)
 
-          invoke('update_hq_viewport_paths', { paths: visiblePaths }).catch(console.error)
+          invoke('update_hq_viewport_paths', { paths: visiblePaths }).catch((error) =>
+            logError(error, 'Update HQ viewport paths')
+          )
         }
       }, 100)
     }
@@ -320,7 +331,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // focusedIndex를 디바운싱 (연속 재생 모드일 때는 0ms로 즉시 적용)
   const debouncedFocusedIndex = useDebounce(
     focusedIndex,
-    continuousPlayState.isActive ? 0 : 150
+    continuousPlayState.isActive ? 0 : DEBOUNCE_FOCUS_INDEX
   )
 
   // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드
@@ -557,7 +568,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       setHqProgress(null)
       setIsGeneratingHq(false)
       // HQ 작업 취소
-      invoke('cancel_hq_thumbnail_generation').catch(console.error)
+      invoke('cancel_hq_thumbnail_generation').catch((error) =>
+        logError(error, 'Cancel HQ thumbnail generation')
+      )
       return
     }
 
@@ -883,8 +896,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
               </span>
               <input
                 type="range"
-                min="75"
-                max="320"
+                min={THUMBNAIL_SIZE_MIN}
+                max={THUMBNAIL_SIZE_MAX}
                 value={thumbnailSize}
                 onChange={(e) => setThumbnailSize(Number(e.target.value))}
                 className="h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer"

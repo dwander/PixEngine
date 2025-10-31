@@ -158,61 +158,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
     }
   }, [imageLoaded, goToIndex])
 
-  // 키보드 네비게이션 비활성화 - ThumbnailPanel에서 focusedIndex로 제어
-  // useEffect(() => {
-  //   const handleKeyDown = (e: KeyboardEvent) => {
-  //     if (imageList.length === 0) return
-
-  //     let targetIndex: number | null = null
-
-  //     if (e.key === 'ArrowLeft') {
-  //       e.preventDefault()
-  //       // 이전 이미지
-  //       const currentOrLast = navigationQueueRef.current.length > 0
-  //         ? navigationQueueRef.current[navigationQueueRef.current.length - 1]
-  //         : currentIndex
-  //       targetIndex = currentOrLast > 0 ? currentOrLast - 1 : imageList.length - 1
-  //     } else if (e.key === 'ArrowRight') {
-  //       e.preventDefault()
-  //       // 다음 이미지
-  //       const currentOrLast = navigationQueueRef.current.length > 0
-  //         ? navigationQueueRef.current[navigationQueueRef.current.length - 1]
-  //         : currentIndex
-  //       targetIndex = currentOrLast < imageList.length - 1 ? currentOrLast + 1 : 0
-  //     }
-
-  //     if (targetIndex !== null) {
-  //       if (!isProcessingRef.current) {
-  //         // 처리 중이 아니면 즉시 이동
-  //         isProcessingRef.current = true
-  //         goToIndex(targetIndex)
-  //       } else {
-  //         // 처리 중이면 큐에 추가
-  //         navigationQueueRef.current.push(targetIndex)
-  //       }
-  //     }
-  //   }
-
-  //   const handleKeyUp = (e: KeyboardEvent) => {
-  //     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-  //       // 키를 떼면 즉시 큐 비우기
-  //       navigationQueueRef.current = []
-  //     }
-  //   }
-
-  //   // containerRef에 포커스를 주어야 키보드 이벤트를 받을 수 있음
-  //   if (containerRef.current) {
-  //     containerRef.current.focus()
-  //   }
-
-  //   window.addEventListener('keydown', handleKeyDown)
-  //   window.addEventListener('keyup', handleKeyUp)
-  //   return () => {
-  //     window.removeEventListener('keydown', handleKeyDown)
-  //     window.removeEventListener('keyup', handleKeyUp)
-  //   }
-  // }, [imageList, currentIndex, goToIndex])
-
   return (
     <div
       ref={containerRef}

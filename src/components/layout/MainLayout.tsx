@@ -115,7 +115,8 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayou
     event.api.onWillShowOverlay((e) => {
       // center 패널이 속한 그룹으로의 드롭을 막음
       const centerPanel = event.api.getPanel("center");
-      if (centerPanel && (e as any).group?.id === centerPanel.group.id) {
+      const overlayEvent = e as { group?: { id: string }; preventDefault: () => void };
+      if (centerPanel && overlayEvent.group?.id === centerPanel.group.id) {
         e.preventDefault();
       }
     });
