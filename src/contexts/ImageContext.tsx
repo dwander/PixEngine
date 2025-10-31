@@ -12,6 +12,7 @@ interface ImageContextType {
   currentPath: string | null;
   imageList: string[];
   currentIndex: number;
+  isLoading: boolean;
   loadImageList: (paths: string[]) => Promise<void>;
   loadImage: (path: string) => Promise<void>;
   goToIndex: (index: number) => Promise<void>;
@@ -26,6 +27,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [imageList, setImageList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
+  const [isLoading, setIsLoading] = useState(false);
 
   // 각 인스턴스별 캐시 (메모리 누수 방지)
   const imageCacheRef = useRef<Map<string, ImageCacheEntry>>(new Map());
@@ -103,14 +105,16 @@ export function ImageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadImage = useCallback(async (path: string) => {
-    // 이미지 리스트에서 현재 인덱스 찾기
-    const index = imageList.indexOf(path);
+    setIsLoading(true);
+    try {
+      // 이미지 리스트에서 현재 인덱스 찾기
+      const index = imageList.indexOf(path);
 
-    // 상태 업데이트 (React 18의 자동 배칭 활용)
-    setCurrentPath(path);
-    if (index !== -1) {
-      setCurrentIndex(index);
-    }
+      // 상태 업데이트 (React 18의 자동 배칭 활용)
+      setCurrentPath(path);
+      if (index !== -1) {
+        setCurrentIndex(index);
+      }
 
     // 주변 이미지 프리로딩 (백그라운드)
     if (index !== -1) {
@@ -126,8 +130,11 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         if (imageList[i]) preloadPaths.push(imageList[i]);
       }
 
-      // 백그라운드에서 프리로딩 (await 하지 않음)
-      preloadImages(preloadPaths).catch((error) => logError(error, 'Load image preloading'));
+        // 백그라운드에서 프리로딩 (await 하지 않음)
+        preloadImages(preloadPaths).catch((error) => logError(error, 'Load image preloading'));
+      }
+    } finally {
+      setIsLoading(false);
     }
   }, [imageList, preloadImages]);
 
@@ -167,6 +174,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         currentPath,
         imageList,
         currentIndex,
+        isLoading,
         loadImage,
         loadImageList,
         goToIndex,
