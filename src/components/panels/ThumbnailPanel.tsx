@@ -555,11 +555,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 썸네일 생성 시작
   useEffect(() => {
-    // 폴더 변경 시 스크롤 위치 초기화
+    // 폴더 변경 시 스크롤 위치 및 포커스 초기화
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = 0
       scrollAreaRef.current.scrollLeft = 0
     }
+    setFocusedIndex(0) // 포커스를 첫 번째 썸네일로 초기화
 
     if (images.length === 0) {
       setThumbnails(new Map())

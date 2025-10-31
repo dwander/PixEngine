@@ -156,7 +156,7 @@ export function FolderTreePanel() {
             path: desktopInfo.path,
             isOpen: false,
             children: undefined,
-            treeId: 'main',
+            treeId: 'desktop', // 독립적인 트리 ID
           });
         }
       } catch (error) {
@@ -172,7 +172,7 @@ export function FolderTreePanel() {
             path: pictureInfo.path,
             isOpen: false,
             children: undefined,
-            treeId: 'main',
+            treeId: 'pictures', // 독립적인 트리 ID
           });
         }
       } catch (error) {
@@ -408,6 +408,13 @@ function FolderTreeItem({
       setChildren(folderNodes);
       setImagePaths(imageFiles);
 
+      // 이전 폴더의 모든 백그라운드 작업 즉시 취소
+      try {
+        await invoke("cancel_hq_thumbnail_generation");
+      } catch (error) {
+        // 취소 실패는 무시 (이미 완료되었거나 실행 중이 아닐 수 있음)
+      }
+
       // ImageContext와 FolderContext 업데이트
       if (imageFiles.length > 0) {
         // 총 용량 계산
@@ -458,10 +465,25 @@ function FolderTreeItem({
       await loadFolderContents();
       setIsOpen(true);
     } else {
+      // 서브폴더가 없는 폴더는 닫히지 않도록 처리
+      // (실제로 펼쳐지지 않았으므로 닫는 동작이 불필요)
+      if (!newIsOpen && hasSubdirs === false) {
+        // 이미 열려있고 서브폴더가 없으면 Context만 업데이트 (닫지 않음)
+        // 즉, 아무것도 하지 않음 (클릭만으로 Context 업데이트는 이미 됨)
+        return;
+      }
+
       setIsOpen(newIsOpen);
 
       // 이미 로드된 데이터가 있으면 다시 Context 업데이트
       if (newIsOpen) {
+        // 이전 폴더의 모든 백그라운드 작업 즉시 취소
+        try {
+          await invoke("cancel_hq_thumbnail_generation");
+        } catch (error) {
+          // 취소 실패는 무시 (이미 완료되었거나 실행 중이 아닐 수 있음)
+        }
+
         if (imagePaths.length > 0) {
           let totalSize = 0;
           try {
@@ -573,22 +595,30 @@ function FolderTreeItem({
         <span className={`text-xs flex-1 truncate ${isCurrentFolder ? 'text-blue-300 font-semibold' : 'text-gray-200'}`}>
           {node.name}
         </span>
-        {node.isFavorite && <Star className="h-2.5 w-2.5 text-yellow-400 fill-yellow-400" />}
       </div>
       {isOpen && (
         <div>
-          {children.map((child) => (
-            <FolderTreeItem
-              key={child.path}
-              node={child}
-              level={level + 1}
-              lastAccessed={lastAccessed}
-              onFolderClick={onFolderClick}
-              onAddFavorite={onAddFavorite}
-              onRemoveFavorite={onRemoveFavorite}
-              isFavorite={checkIsFavorite}
-            />
-          ))}
+          {children.length === 0 && node.icon === 'star' ? (
+            <div
+              className="px-2 py-2 text-xs text-gray-400 italic"
+              style={{ paddingLeft: `${(level + 1) * 14 + 6}px` }}
+            >
+              폴더에 우클릭하여 즐겨찾기에 추가할 수 있습니다
+            </div>
+          ) : (
+            children.map((child) => (
+              <FolderTreeItem
+                key={child.path}
+                node={child}
+                level={level + 1}
+                lastAccessed={lastAccessed}
+                onFolderClick={onFolderClick}
+                onAddFavorite={onAddFavorite}
+                onRemoveFavorite={onRemoveFavorite}
+                isFavorite={checkIsFavorite}
+              />
+            ))
+          )}
         </div>
       )}
       {contextMenu && (

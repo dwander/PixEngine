@@ -27,6 +27,61 @@ fn validate_path(path: &str) -> Result<PathBuf, String> {
     }
 }
 
+// 디렉토리가 숨김/시스템 디렉토리인지 확인
+fn is_hidden_or_system_dir(name: &str) -> bool {
+    // 숨김 파일/폴더 (점으로 시작)
+    if name.starts_with('.') {
+        return true;
+    }
+
+    // Windows 시스템 디렉토리
+    #[cfg(target_os = "windows")]
+    {
+        let system_dirs = [
+            "$Recycle.Bin",
+            "System Volume Information",
+            "Recovery",
+            "ProgramData",
+            "Windows",
+            "Program Files",
+            "Program Files (x86)",
+            "Boot",
+            "Config.Msi",
+            "PerfLogs",
+            "msdia80.dll",
+        ];
+
+        if system_dirs.iter().any(|&dir| name.eq_ignore_ascii_case(dir)) {
+            return true;
+        }
+    }
+
+    // macOS/Linux 시스템 디렉토리
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let system_dirs = [
+            "proc",
+            "sys",
+            "dev",
+            "run",
+            "tmp",
+            "var",
+            "bin",
+            "sbin",
+            "lib",
+            "lib64",
+            "boot",
+            "lost+found",
+        ];
+
+        if system_dirs.contains(&name) {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[derive(Serialize)]
 struct DriveInfo {
     name: String,
@@ -337,6 +392,12 @@ fn read_directory_contents(path: &str) -> Result<Vec<serde_json::Value>, String>
 
     for entry in entries.flatten() {
         let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // 숨김/시스템 디렉토리 필터링
+        if is_hidden_or_system_dir(&name) {
+            continue;
+        }
 
         // canonicalize로 심볼릭 링크/junction 해결
         let real_path = fs::canonicalize(&path)
@@ -344,7 +405,6 @@ fn read_directory_contents(path: &str) -> Result<Vec<serde_json::Value>, String>
 
         // 실제 경로의 메타데이터 확인
         if let Ok(metadata) = fs::metadata(&real_path) {
-            let name = entry.file_name().to_string_lossy().to_string();
             let is_dir = metadata.is_dir();
 
             results.push(serde_json::json!({
