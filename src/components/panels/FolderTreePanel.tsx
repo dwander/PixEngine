@@ -65,8 +65,35 @@ export function FolderTreePanel() {
     try {
       const store = await load("settings.json");
       const stored = await store.get<LastAccessed>("lastAccessed");
-      if (stored) {
-        setLastAccessed(stored);
+
+      // 저장된 경로가 있고 유효한 경우
+      if (stored && stored.path) {
+        // 경로가 실제로 존재하는지 확인
+        try {
+          await invoke("read_directory_contents", { path: stored.path });
+          setLastAccessed(stored);
+          return;
+        } catch (error) {
+          // 경로가 존재하지 않으면 기본값으로 설정
+          console.warn("Last accessed path does not exist:", stored.path);
+        }
+      }
+
+      // 저장된 값이 없거나 경로가 유효하지 않은 경우 사진 폴더를 기본값으로 설정
+      try {
+        const pictureInfo = await invoke<FolderInfo | null>("get_picture_folder");
+        if (pictureInfo) {
+          const defaultAccess: LastAccessed = {
+            path: pictureInfo.path,
+            treeId: 'pictures'
+          };
+          setLastAccessed(defaultAccess);
+          // 기본값을 저장
+          await store.set("lastAccessed", defaultAccess);
+          await store.save();
+        }
+      } catch (error) {
+        console.error("Failed to set default picture folder:", error);
       }
     } catch (error) {
       console.error("Failed to load last accessed:", error);
