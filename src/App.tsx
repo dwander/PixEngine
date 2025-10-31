@@ -5,6 +5,7 @@ import { useWindowState } from "./hooks/useWindowState";
 import { theme } from "./lib/theme";
 import { FolderProvider } from "./contexts/FolderContext";
 import { ImageProvider } from "./contexts/ImageContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function App() {
   // 윈도우 상태 저장/복원
@@ -33,30 +34,32 @@ function App() {
   }, []);
 
   return (
-    <FolderProvider>
-      <ImageProvider>
-        <div className={`flex flex-col h-screen ${theme.background.primary}`}>
-          {/* 커스텀 타이틀바 */}
-          <TitleBar
-            onTogglePanel={handleTogglePanel}
-            visiblePanels={visiblePanels}
-          />
-
-          {/* 메인 레이아웃 (dockview) */}
-          <main className="flex-1 overflow-hidden">
-            <MainLayout
-              onPanelVisibilityChange={handlePanelVisibilityChange}
-              togglePanelId={togglePanelId}
+    <ErrorBoundary>
+      <FolderProvider>
+        <ImageProvider>
+          <div className={`flex flex-col h-screen ${theme.background.primary}`}>
+            {/* 커스텀 타이틀바 */}
+            <TitleBar
+              onTogglePanel={handleTogglePanel}
+              visiblePanels={visiblePanels}
             />
-          </main>
 
-          {/* 상태 표시 영역 */}
-          <footer className={`${theme.layout.statusBarHeight} ${theme.background.primary} flex items-center px-4 text-xs ${theme.text.quaternary} border-t border-neutral-800`}>
-            <span>준비 완료</span>
-          </footer>
-        </div>
-      </ImageProvider>
-    </FolderProvider>
+            {/* 메인 레이아웃 (dockview) */}
+            <main className="flex-1 overflow-hidden">
+              <MainLayout
+                onPanelVisibilityChange={handlePanelVisibilityChange}
+                togglePanelId={togglePanelId}
+              />
+            </main>
+
+            {/* 상태 표시 영역 */}
+            <footer className={`${theme.layout.statusBarHeight} ${theme.background.primary} flex items-center px-4 text-xs ${theme.text.quaternary} border-t border-neutral-800`}>
+              <span>준비 완료</span>
+            </footer>
+          </div>
+        </ImageProvider>
+      </FolderProvider>
+    </ErrorBoundary>
   );
 }
 
