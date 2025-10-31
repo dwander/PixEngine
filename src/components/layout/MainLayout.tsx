@@ -56,6 +56,9 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayou
   const saveTimeoutRef = useRef<number | undefined>(undefined);
   const panelSizesBeforeDragRef = useRef<Map<string, { width: number; height: number }>>(new Map());
 
+  // 패널 고정 크기 저장 (픽셀 단위)
+  const fixedPanelSizesRef = useRef<Map<string, { width: number; height: number }>>(new Map());
+
   // 패널 가시성 체크 및 콜백 호출
   const updatePanelVisibility = useCallback(() => {
     if (!api.current) return;
@@ -134,7 +137,7 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayou
       });
     });
 
-    // 패널 드롭 후 ImageViewer 외 패널들의 크기 복원
+      // 패널 드롭 후 ImageViewer 외 패널들의 크기 복원
     event.api.onDidMovePanel(() => {
       // 약간의 딜레이 후 크기 복원 (레이아웃 재계산 후)
       setTimeout(() => {
@@ -148,16 +151,40 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayou
 
           const savedSize = panelSizesBeforeDragRef.current.get(group.id);
           if (savedSize) {
-            // 크기 복원
+            // 크기 복원 및 고정 크기로 저장
             if (group.api.width !== savedSize.width) {
               group.api.setSize({ width: savedSize.width });
             }
             if (group.api.height !== savedSize.height) {
               group.api.setSize({ height: savedSize.height });
             }
+
+            // 고정 크기로 저장
+            fixedPanelSizesRef.current.set(group.id, {
+              width: savedSize.width,
+              height: savedSize.height,
+            });
           }
         });
       }, 100);
+    });
+
+    // 패널 크기 변경 시 고정 크기 업데이트 (수동 리사이즈 시)
+    event.api.onDidLayoutChange(() => {
+      const centerPanel = event.api.getPanel("center");
+
+      event.api.groups.forEach((group) => {
+        // ImageViewer 그룹은 제외
+        if (centerPanel && group.id === centerPanel.group.id) {
+          return;
+        }
+
+        // 현재 크기를 고정 크기로 저장
+        fixedPanelSizesRef.current.set(group.id, {
+          width: group.width,
+          height: group.height,
+        });
+      });
     });
 
     // 저장된 dockview 레이아웃 복원 시도
@@ -249,9 +276,58 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayou
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-  };
 
-  // dockview가 레이아웃을 자동으로 관리하므로 별도의 resize 로직 불필요
+    // 창 리사이즈 시 패널 크기 복원
+    const handleWindowResize = () => {
+      if (!api.current) return;
+
+      const centerPanel = event.api.getPanel("center");
+
+      event.api.groups.forEach((group) => {
+        // ImageViewer 그룹은 제외 (비율로 조정됨)
+        if (centerPanel && group.id === centerPanel.group.id) {
+          return;
+        }
+
+        const fixedSize = fixedPanelSizesRef.current.get(group.id);
+        if (!fixedSize) return;
+
+        // 패널 비율 계산 (너비 vs 높이)
+        const aspectRatio = group.width / group.height;
+
+        // 너비가 높이보다 크면 가로형 배치 → 높이값 복원
+        // 높이가 너비보다 크면 세로형 배치 → 너비값 복원
+        if (aspectRatio > 1) {
+          // 가로형: 높이 고정
+          if (Math.abs(group.height - fixedSize.height) > 1) {
+            group.api.setSize({ height: fixedSize.height });
+          }
+        } else {
+          // 세로형: 너비 고정
+          if (Math.abs(group.width - fixedSize.width) > 1) {
+            group.api.setSize({ width: fixedSize.width });
+          }
+        }
+      });
+    };
+
+    // 리사이즈 이벤트 리스너 등록 (디바운스 적용)
+    let resizeTimeout: number | undefined;
+    const debouncedResize = () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(handleWindowResize, 100);
+    };
+
+    window.addEventListener('resize', debouncedResize);
+
+    // 클린업
+    return () => {
+      window.removeEventListener('resize', debouncedResize);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  };
 
   return (
     <DockviewReact
