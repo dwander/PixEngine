@@ -1,0 +1,22 @@
+# Build outputs
+dist
+dist-ssr
+build
+*.local
+
+# Dependencies
+node_modules
+
+# Tauri
+src-tauri/target
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
