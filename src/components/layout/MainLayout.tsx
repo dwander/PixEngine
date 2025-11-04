@@ -9,6 +9,7 @@ import "../../styles/dockview-theme-dark.css";
 import { FolderTreePanel } from "../panels/FolderTreePanel";
 import { ThumbnailPanel as ThumbnailPanelComponent } from "../panels/ThumbnailPanel";
 import { ImageViewerPanel as ImageViewerPanelComponent } from "../panels/ImageViewerPanel";
+import { MetadataPanel as MetadataPanelComponent } from "../panels/MetadataPanel";
 
 // 패널 래퍼 컴포넌트
 function ImageViewerPanelWrapper(_props: IDockviewPanelProps) {
@@ -19,15 +20,8 @@ function FolderTreePanelWrapper(_props: IDockviewPanelProps) {
   return <FolderTreePanel />;
 }
 
-function MetadataPanel(_props: IDockviewPanelProps) {
-  return (
-    <div className="flex items-center justify-center h-full bg-neutral-900 text-gray-400">
-      <div className="text-center">
-        <p className="text-lg font-bold mb-2">Metadata</p>
-        <p className="text-xs">메타데이터 패널</p>
-      </div>
-    </div>
-  );
+function MetadataPanelWrapper(_props: IDockviewPanelProps) {
+  return <MetadataPanelComponent />;
 }
 
 function ThumbnailPanelWrapper(_props: IDockviewPanelProps) {
@@ -38,7 +32,7 @@ function ThumbnailPanelWrapper(_props: IDockviewPanelProps) {
 const components = {
   imageViewer: ImageViewerPanelWrapper,
   folderTree: FolderTreePanelWrapper,
-  metadata: MetadataPanel,
+  metadata: MetadataPanelWrapper,
   thumbnails: ThumbnailPanelWrapper,
 };
 

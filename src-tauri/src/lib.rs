@@ -631,6 +631,195 @@ fn extract_date_taken(file_path: &str) -> Option<String> {
     None
 }
 
+// 상세 EXIF 메타데이터 구조체
+#[derive(Serialize)]
+struct ExifMetadata {
+    // 카메라 정보
+    camera_make: Option<String>,
+    camera_model: Option<String>,
+    lens_model: Option<String>,
+
+    // 촬영 설정
+    iso: Option<String>,
+    aperture: Option<String>,
+    shutter_speed: Option<String>,
+    focal_length: Option<String>,
+    exposure_bias: Option<String>,
+    flash: Option<String>,
+
+    // 날짜/시간
+    date_time_original: Option<String>,
+    date_time_digitized: Option<String>,
+
+    // 이미지 정보
+    image_width: Option<u32>,
+    image_height: Option<u32>,
+    orientation: Option<String>,
+    color_space: Option<String>,
+
+    // GPS 정보
+    gps_latitude: Option<String>,
+    gps_longitude: Option<String>,
+    gps_altitude: Option<String>,
+
+    // 소프트웨어
+    software: Option<String>,
+
+    // 저작권
+    copyright: Option<String>,
+    artist: Option<String>,
+}
+
+// EXIF 메타데이터 추출
+#[tauri::command]
+async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
+    use std::io::BufReader;
+
+    let file = fs::File::open(&file_path)
+        .map_err(|e| format!("Failed to open file: {}", e))?;
+    let mut reader = BufReader::new(file);
+
+    let exif_reader = exif::Reader::new();
+    let exif_data = exif_reader
+        .read_from_container(&mut reader)
+        .map_err(|e| format!("Failed to read EXIF data: {}", e))?;
+
+    // EXIF 필드 읽기 헬퍼 함수
+    let get_field_string = |tag: exif::Tag| -> Option<String> {
+        exif_data.get_field(tag, exif::In::PRIMARY)
+            .map(|field| field.display_value().to_string())
+    };
+
+    let get_field_ascii = |tag: exif::Tag| -> Option<String> {
+        exif_data.get_field(tag, exif::In::PRIMARY)
+            .and_then(|field| {
+                if let exif::Value::Ascii(ref vec) = field.value {
+                    vec.first().and_then(|bytes| {
+                        std::str::from_utf8(bytes).ok().map(|s| s.trim().to_string())
+                    })
+                } else {
+                    None
+                }
+            })
+    };
+
+    // 날짜 형식 변환 헬퍼
+    let format_exif_date = |date_str: &str| -> Option<String> {
+        if let Some((date_part, time_part)) = date_str.split_once(' ') {
+            let formatted_date = date_part.replace(':', "-");
+            Some(format!("{} {}", formatted_date, time_part))
+        } else {
+            None
+        }
+    };
+
+    // GPS 좌표 변환
+    let format_gps_coord = |degrees: &[exif::Rational], ref_val: &str| -> Option<String> {
+        if degrees.len() >= 3 {
+            let d = degrees[0].to_f64();
+            let m = degrees[1].to_f64();
+            let s = degrees[2].to_f64();
+            let decimal = d + m / 60.0 + s / 3600.0;
+            Some(format!("{:.6}° {}", decimal, ref_val))
+        } else {
+            None
+        }
+    };
+
+    // GPS 정보 추출
+    let gps_latitude = exif_data.get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
+        .and_then(|field| {
+            if let exif::Value::Rational(ref coords) = field.value {
+                let lat_ref = get_field_ascii(exif::Tag::GPSLatitudeRef)?;
+                format_gps_coord(coords, &lat_ref)
+            } else {
+                None
+            }
+        });
+
+    let gps_longitude = exif_data.get_field(exif::Tag::GPSLongitude, exif::In::PRIMARY)
+        .and_then(|field| {
+            if let exif::Value::Rational(ref coords) = field.value {
+                let lon_ref = get_field_ascii(exif::Tag::GPSLongitudeRef)?;
+                format_gps_coord(coords, &lon_ref)
+            } else {
+                None
+            }
+        });
+
+    let gps_altitude = exif_data.get_field(exif::Tag::GPSAltitude, exif::In::PRIMARY)
+        .and_then(|field| {
+            if let exif::Value::Rational(ref alt) = field.value {
+                alt.first().map(|r| format!("{:.1}m", r.to_f64()))
+            } else {
+                None
+            }
+        });
+
+    // 날짜 정보 포매팅
+    let date_time_original = get_field_ascii(exif::Tag::DateTimeOriginal)
+        .and_then(|s| format_exif_date(&s));
+
+    let date_time_digitized = get_field_ascii(exif::Tag::DateTimeDigitized)
+        .and_then(|s| format_exif_date(&s));
+
+    // Orientation 값을 문자열로 변환
+    let orientation = exif_data.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
+        .map(|field| {
+            match field.value {
+                exif::Value::Short(ref v) if !v.is_empty() => {
+                    match v[0] {
+                        1 => "Normal",
+                        3 => "Rotate 180°",
+                        6 => "Rotate 90° CW",
+                        8 => "Rotate 270° CW",
+                        _ => "Unknown",
+                    }.to_string()
+                },
+                _ => field.display_value().to_string(),
+            }
+        });
+
+    Ok(ExifMetadata {
+        // 카메라 정보
+        camera_make: get_field_ascii(exif::Tag::Make),
+        camera_model: get_field_ascii(exif::Tag::Model),
+        lens_model: get_field_ascii(exif::Tag::LensModel),
+
+        // 촬영 설정
+        iso: get_field_string(exif::Tag::PhotographicSensitivity),
+        aperture: get_field_string(exif::Tag::FNumber),
+        shutter_speed: get_field_string(exif::Tag::ExposureTime),
+        focal_length: get_field_string(exif::Tag::FocalLength),
+        exposure_bias: get_field_string(exif::Tag::ExposureBiasValue),
+        flash: get_field_string(exif::Tag::Flash),
+
+        // 날짜/시간
+        date_time_original,
+        date_time_digitized,
+
+        // 이미지 정보
+        image_width: exif_data.get_field(exif::Tag::PixelXDimension, exif::In::PRIMARY)
+            .and_then(|f| f.value.get_uint(0)),
+        image_height: exif_data.get_field(exif::Tag::PixelYDimension, exif::In::PRIMARY)
+            .and_then(|f| f.value.get_uint(0)),
+        orientation,
+        color_space: get_field_string(exif::Tag::ColorSpace),
+
+        // GPS 정보
+        gps_latitude,
+        gps_longitude,
+        gps_altitude,
+
+        // 소프트웨어
+        software: get_field_ascii(exif::Tag::Software),
+
+        // 저작권
+        copyright: get_field_ascii(exif::Tag::Copyright),
+        artist: get_field_ascii(exif::Tag::Artist),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -692,7 +881,8 @@ pub fn run() {
             start_hq_thumbnail_generation,
             cancel_hq_thumbnail_generation,
             update_hq_viewport_paths,
-            get_image_info
+            get_image_info,
+            get_exif_metadata
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
