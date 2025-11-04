@@ -51,7 +51,7 @@ interface ThumbnailProgress {
 }
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
-  const { imageList: images, loadImage, getCachedImage, metadata } = useImageContext()
+  const { imageList: images, loadImage, getCachedImage } = useImageContext()
   const { lightMetadataMap, setSortedIndex } = useFolderContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)

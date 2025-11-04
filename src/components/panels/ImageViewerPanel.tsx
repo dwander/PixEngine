@@ -1,17 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
 import { Check } from 'lucide-react'
-
-interface ImageInfo {
-  path: string
-  width: number
-  height: number
-  file_size: number
-  modified_time?: string
-  date_taken?: string
-}
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -92,7 +82,6 @@ interface HistogramData {
 export const ImageViewerPanel = memo(function ImageViewerPanel() {
   const { currentPath, imageList, currentIndex, goToIndex, getCachedImage, metadata } = useImageContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
-  const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -318,7 +307,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
   useEffect(() => {
     if (!currentPath) {
       setImageUrl(null)
-      setImageInfo(null)
       setImageLoaded(false)
       return
     }
@@ -332,14 +320,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
         // 캐시에서 이미지 확인
         const cachedImg = getCachedImage(currentPath);
 
-        // 1. 이미지 정보 가져오기
-        const info = await invoke<ImageInfo>('get_image_info', {
-          filePath: currentPath,
-        })
-
-        setImageInfo(info)
-
-        // 2. 캐시된 이미지가 있으면 즉시 렌더링
+        // 캐시된 이미지가 있으면 즉시 렌더링
         if (cachedImg) {
           currentImageRef.current = cachedImg
 
