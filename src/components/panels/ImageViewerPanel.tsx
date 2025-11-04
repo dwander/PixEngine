@@ -8,6 +8,8 @@ interface ImageInfo {
   width: number
   height: number
   file_size: number
+  modified_time?: string
+  date_taken?: string
 }
 
 export const ImageViewerPanel = memo(function ImageViewerPanel() {

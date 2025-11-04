@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { TitleBar } from "./components/layout/TitleBar";
 import { MainLayout } from "./components/layout/MainLayout";
+import { StatusBar } from "./components/layout/StatusBar";
 import { useWindowState } from "./hooks/useWindowState";
 import { theme } from "./lib/theme";
 import { FolderProvider } from "./contexts/FolderContext";
@@ -53,9 +54,7 @@ function App() {
             </main>
 
             {/* 상태 표시 영역 */}
-            <footer className={`${theme.layout.statusBarHeight} ${theme.background.primary} flex items-center px-4 text-xs ${theme.text.quaternary} border-t border-neutral-800`}>
-              <span>준비 완료</span>
-            </footer>
+            <StatusBar />
           </div>
         </ImageProvider>
       </FolderProvider>

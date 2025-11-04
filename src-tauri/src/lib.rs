@@ -547,11 +547,14 @@ struct ImageInfo {
     width: u32,
     height: u32,
     file_size: u64,
+    modified_time: Option<String>, // 파일 수정 시간
+    date_taken: Option<String>,    // EXIF 촬영 날짜 (DateTimeOriginal)
 }
 
 #[tauri::command]
 async fn get_image_info(file_path: String) -> Result<ImageInfo, String> {
     use image::ImageReader;
+    use std::time::SystemTime;
 
     // ImageReader로 메타데이터만 빠르게 읽기 (디코딩 안함!)
     let reader = ImageReader::open(&file_path)
@@ -563,16 +566,69 @@ async fn get_image_info(file_path: String) -> Result<ImageInfo, String> {
         .into_dimensions()
         .map_err(|e| format!("Failed to get dimensions: {}", e))?;
 
-    let file_size = fs::metadata(&file_path)
-        .map_err(|e| format!("Failed to get file size: {}", e))?
-        .len();
+    let metadata = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to get file metadata: {}", e))?;
+
+    let file_size = metadata.len();
+
+    // 수정 시간 가져오기
+    let modified_time = metadata.modified()
+        .ok()
+        .and_then(|time| {
+            time.duration_since(SystemTime::UNIX_EPOCH).ok()
+        })
+        .map(|duration| {
+            use chrono::{DateTime, Local};
+            let datetime = DateTime::from_timestamp(duration.as_secs() as i64, 0)?;
+            let local_time: DateTime<Local> = datetime.into();
+            Some(local_time.format("%Y-%m-%d %H:%M:%S").to_string())
+        })
+        .flatten();
+
+    // EXIF에서 촬영 날짜 가져오기
+    let date_taken = extract_date_taken(&file_path);
 
     Ok(ImageInfo {
         path: file_path,
         width,
         height,
         file_size,
+        modified_time,
+        date_taken,
     })
+}
+
+// EXIF에서 촬영 날짜 추출 (DateTimeOriginal 또는 DateTime)
+fn extract_date_taken(file_path: &str) -> Option<String> {
+    use std::io::BufReader;
+
+    let file = fs::File::open(file_path).ok()?;
+    let mut reader = BufReader::new(file);
+
+    let exif_reader = exif::Reader::new();
+    let exif_data = exif_reader.read_from_container(&mut reader).ok()?;
+
+    // 우선순위: DateTimeOriginal (촬영일시) -> DateTime (파일 생성일시)
+    let date_field = exif_data
+        .get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY)
+        .or_else(|| exif_data.get_field(exif::Tag::DateTime, exif::In::PRIMARY))?;
+
+    // EXIF 날짜 형식: "YYYY:MM:DD HH:MM:SS"를 "YYYY-MM-DD HH:MM:SS"로 변환
+    if let exif::Value::Ascii(ref vec) = date_field.value {
+        if let Some(bytes) = vec.first() {
+            if let Ok(date_str) = std::str::from_utf8(bytes) {
+                let trimmed = date_str.trim();
+                // 공백으로 날짜와 시간 분리
+                if let Some((date_part, time_part)) = trimmed.split_once(' ') {
+                    // 날짜 부분의 ':'를 '-'로 변환 (YYYY:MM:DD -> YYYY-MM-DD)
+                    let formatted_date = date_part.replace(':', "-");
+                    return Some(format!("{} {}", formatted_date, time_part));
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

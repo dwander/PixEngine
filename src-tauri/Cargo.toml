@@ -55,6 +55,9 @@ walkdir = "2"
 # 메타데이터
 kamadak-exif = "0.5"
 
+# 시간 처리
+chrono = "0.4"
+
 # 인코딩
 base64 = "0.22"                # Base64 인코딩
 
