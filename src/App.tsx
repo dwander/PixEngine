@@ -33,6 +33,12 @@ function App() {
 
   const [togglePanelId, setTogglePanelId] = useState<string | null>(null);
 
+  // 격자선 상태 관리
+  const [gridType, setGridType] = useState<'none' | '3div' | '6div'>(() => {
+    const saved = localStorage.getItem('imageViewer.gridType');
+    return (saved as 'none' | '3div' | '6div') || 'none';
+  });
+
   const handleTogglePanel = useCallback((panelId: string) => {
     setTogglePanelId(panelId);
     // 상태 즉시 업데이트 (낙관적 업데이트)
@@ -47,6 +53,17 @@ function App() {
     setTogglePanelId(null);
   }, []);
 
+  // 격자선 토글 핸들러
+  const handleToggleGrid = useCallback((newGridType: 'none' | '3div' | '6div') => {
+    setGridType(newGridType);
+    localStorage.setItem('imageViewer.gridType', newGridType);
+  }, []);
+
+  // 격자선 상태 저장
+  useEffect(() => {
+    localStorage.setItem('imageViewer.gridType', gridType);
+  }, [gridType]);
+
   return (
     <ErrorBoundary>
       <FolderProvider>
@@ -56,6 +73,8 @@ function App() {
             <TitleBar
               onTogglePanel={handleTogglePanel}
               visiblePanels={visiblePanels}
+              onToggleGrid={handleToggleGrid}
+              activeGrid={gridType}
             />
 
             {/* 메인 레이아웃 (dockview) */}
@@ -63,6 +82,7 @@ function App() {
               <MainLayout
                 onPanelVisibilityChange={handlePanelVisibilityChange}
                 togglePanelId={togglePanelId}
+                gridType={gridType}
               />
             </main>
 

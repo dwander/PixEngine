@@ -12,13 +12,18 @@ interface TitleBarProps {
     metadata: boolean;
     thumbnails: boolean;
   };
+  onToggleGrid?: (gridType: 'none' | '3div' | '6div') => void;
+  activeGrid?: 'none' | '3div' | '6div';
 }
 
-export function TitleBar({ onTogglePanel, visiblePanels }: TitleBarProps) {
+export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGrid = 'none' }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFocused, setIsFocused] = useState(true);
   const [isPanelMenuOpen, setIsPanelMenuOpen] = useState(false);
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const [isAnyMenuOpen, setIsAnyMenuOpen] = useState(false); // 메뉴가 한 번이라도 열렸는지 추적
   const panelMenuRef = useRef<HTMLDivElement>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // 윈도우 상태 감지
@@ -61,22 +66,34 @@ export function TitleBar({ onTogglePanel, visiblePanels }: TitleBarProps) {
     };
   }, []);
 
+  // 메뉴 열림 상태 추적
+  useEffect(() => {
+    if (isPanelMenuOpen || isViewMenuOpen) {
+      setIsAnyMenuOpen(true);
+    } else {
+      setIsAnyMenuOpen(false);
+    }
+  }, [isPanelMenuOpen, isViewMenuOpen]);
+
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (panelMenuRef.current && !panelMenuRef.current.contains(event.target as Node)) {
         setIsPanelMenuOpen(false);
       }
+      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
+        setIsViewMenuOpen(false);
+      }
     };
 
-    if (isPanelMenuOpen) {
+    if (isPanelMenuOpen || isViewMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isPanelMenuOpen]);
+  }, [isPanelMenuOpen, isViewMenuOpen]);
 
   const handleMinimize = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -125,9 +142,57 @@ export function TitleBar({ onTogglePanel, visiblePanels }: TitleBarProps) {
           <button className={colors.menuButton}>
             편집
           </button>
-          <button className={colors.menuButton}>
-            보기
-          </button>
+
+          {/* 보기 메뉴 (드롭다운) */}
+          <div className="relative" ref={viewMenuRef}>
+            <button
+              className={colors.menuButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsViewMenuOpen(!isViewMenuOpen);
+                setIsPanelMenuOpen(false);
+              }}
+              onMouseEnter={() => {
+                if (isAnyMenuOpen) {
+                  setIsViewMenuOpen(true);
+                  setIsPanelMenuOpen(false);
+                }
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              보기
+            </button>
+
+            {isViewMenuOpen && (
+              <div
+                className="absolute top-full left-0 mt-1 bg-neutral-800 border border-neutral-700 rounded shadow-lg py-1 min-w-[160px] z-50"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  className="w-full px-3 py-2 text-left hover:bg-neutral-700 flex items-center justify-between"
+                  style={{ fontSize: '1rem' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleGrid?.(activeGrid === '3div' ? 'none' : '3div');
+                  }}
+                >
+                  <span>3분할 격자선</span>
+                  <span className="text-neutral-500">{activeGrid === '3div' ? '✓' : ''}</span>
+                </button>
+                <button
+                  className="w-full px-3 py-2 text-left hover:bg-neutral-700 flex items-center justify-between"
+                  style={{ fontSize: '1rem' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleGrid?.(activeGrid === '6div' ? 'none' : '6div');
+                  }}
+                >
+                  <span>6분할 격자선</span>
+                  <span className="text-neutral-500">{activeGrid === '6div' ? '✓' : ''}</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* 패널 메뉴 (드롭다운) */}
           <div className="relative" ref={panelMenuRef}>
@@ -136,6 +201,13 @@ export function TitleBar({ onTogglePanel, visiblePanels }: TitleBarProps) {
               onClick={(e) => {
                 e.stopPropagation();
                 setIsPanelMenuOpen(!isPanelMenuOpen);
+                setIsViewMenuOpen(false);
+              }}
+              onMouseEnter={() => {
+                if (isAnyMenuOpen) {
+                  setIsPanelMenuOpen(true);
+                  setIsViewMenuOpen(false);
+                }
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -190,8 +262,8 @@ export function TitleBar({ onTogglePanel, visiblePanels }: TitleBarProps) {
         </nav>
       </div>
 
-      {/* 중앙: 빈 공간 (드래그 가능) */}
-      <div className="flex-1" />
+      {/* 중앙: 빈 공간 */}
+      <div className="flex-1"></div>
 
       {/* 오른쪽: 윈도우 컨트롤 버튼 */}
       <div className="flex items-center gap-0">

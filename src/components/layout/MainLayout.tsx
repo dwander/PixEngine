@@ -12,8 +12,8 @@ import { ImageViewerPanel as ImageViewerPanelComponent } from "../panels/ImageVi
 import { MetadataPanel as MetadataPanelComponent } from "../panels/MetadataPanel";
 
 // 패널 래퍼 컴포넌트
-function ImageViewerPanelWrapper(_props: IDockviewPanelProps) {
-  return <ImageViewerPanelComponent />;
+function ImageViewerPanelWrapper(props: IDockviewPanelProps<{ gridType?: 'none' | '3div' | '6div' }>) {
+  return <ImageViewerPanelComponent gridType={props.params?.gridType} />;
 }
 
 function FolderTreePanelWrapper(_props: IDockviewPanelProps) {
@@ -43,9 +43,10 @@ interface MainLayoutProps {
     thumbnails: boolean;
   }) => void;
   togglePanelId?: string | null;
+  gridType?: 'none' | '3div' | '6div';
 }
 
-export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayoutProps) {
+export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 'none' }: MainLayoutProps) {
   const api = useRef<DockviewReadyEvent | null>(null);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
   const panelSizesBeforeDragRef = useRef<Map<string, { width: number; height: number }>>(new Map());
@@ -104,6 +105,16 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId }: MainLayou
       togglePanel(togglePanelId);
     }
   }, [togglePanelId, togglePanel]);
+
+  // gridType 변경 시 ImageViewer 패널 업데이트
+  useEffect(() => {
+    if (!api.current) return;
+
+    const centerPanel = api.current.api.getPanel('center');
+    if (centerPanel) {
+      centerPanel.api.updateParameters({ gridType });
+    }
+  }, [gridType]);
 
   const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;

@@ -79,7 +79,11 @@ interface HistogramData {
   luminance: number[]
 }
 
-export const ImageViewerPanel = memo(function ImageViewerPanel() {
+interface ImageViewerPanelProps {
+  gridType?: 'none' | '3div' | '6div';
+}
+
+export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'none' }: ImageViewerPanelProps) {
   const { currentPath, imageList, currentIndex, goToIndex, getCachedImage, metadata } = useImageContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
@@ -296,12 +300,81 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight)
   }, [])
 
+  // 격자선 그리기 함수 (별도 분리) - useRef로 현재 gridType 참조
+  const gridTypeRef = useRef(gridType)
+  useEffect(() => {
+    gridTypeRef.current = gridType
+  }, [gridType])
+
+  const drawGridLines = useCallback(() => {
+    const canvas = canvasRef.current
+    const currentGridType = gridTypeRef.current
+    if (!canvas || currentGridType === 'none') return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const displayWidth = canvas.width / (window.devicePixelRatio || 1)
+    const displayHeight = canvas.height / (window.devicePixelRatio || 1)
+
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'
+    ctx.lineWidth = 2
+
+    if (currentGridType === '3div') {
+      // 3분할 격자선 (Rule of Thirds)
+      // 수직선 2개
+      ctx.beginPath()
+      ctx.moveTo(displayWidth / 3, 0)
+      ctx.lineTo(displayWidth / 3, displayHeight)
+      ctx.moveTo((displayWidth * 2) / 3, 0)
+      ctx.lineTo((displayWidth * 2) / 3, displayHeight)
+      // 수평선 2개
+      ctx.moveTo(0, displayHeight / 3)
+      ctx.lineTo(displayWidth, displayHeight / 3)
+      ctx.moveTo(0, (displayHeight * 2) / 3)
+      ctx.lineTo(displayWidth, (displayHeight * 2) / 3)
+      ctx.stroke()
+    } else if (currentGridType === '6div') {
+      // 6분할 격자선 (긴 축: 6분할, 짧은 축: 3분할)
+      const isLandscape = displayWidth > displayHeight
+      ctx.beginPath()
+
+      if (isLandscape) {
+        // 가로모드: 가로 6분할 (세로선 5개), 세로 3분할 (가로선 2개)
+        for (let i = 1; i <= 5; i++) {
+          const x = (displayWidth * i) / 6
+          ctx.moveTo(x, 0)
+          ctx.lineTo(x, displayHeight)
+        }
+        for (let i = 1; i <= 2; i++) {
+          const y = (displayHeight * i) / 3
+          ctx.moveTo(0, y)
+          ctx.lineTo(displayWidth, y)
+        }
+      } else {
+        // 세로모드: 세로 6분할 (가로선 5개), 가로 3분할 (세로선 2개)
+        for (let i = 1; i <= 5; i++) {
+          const y = (displayHeight * i) / 6
+          ctx.moveTo(0, y)
+          ctx.lineTo(displayWidth, y)
+        }
+        for (let i = 1; i <= 2; i++) {
+          const x = (displayWidth * i) / 3
+          ctx.moveTo(x, 0)
+          ctx.lineTo(x, displayHeight)
+        }
+      }
+      ctx.stroke()
+    }
+  }, [])
+
   // 컨테이너 리사이즈 핸들러 (ResizeObserver용)
   const handleResize = useCallback(() => {
     if (currentImageRef.current) {
       renderImageToCanvas()
+      drawGridLines()
     }
-  }, [renderImageToCanvas])
+  }, [renderImageToCanvas, drawGridLines])
 
   // 이미지 로딩 (캐시 우선)
   useEffect(() => {
@@ -331,6 +404,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
           // 다음 프레임에서 렌더링 (DOM 업데이트 후)
           requestAnimationFrame(() => {
             renderImageToCanvas()
+            drawGridLines()
             setImageLoaded(true)
           })
         } else {
@@ -362,13 +436,23 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
       setHistogramData(histogram)
 
       renderImageToCanvas()
+      drawGridLines()
       setImageLoaded(true)
     }
     img.onerror = () => {
       console.error('Failed to load image:', imageUrl)
     }
     img.src = imageUrl
-  }, [imageUrl, renderImageToCanvas, calculateHistogram])
+  }, [imageUrl, renderImageToCanvas, calculateHistogram, drawGridLines])
+
+  // gridType 변경 시 격자선만 다시 그리기
+  useEffect(() => {
+    if (currentImageRef.current && canvasRef.current) {
+      // 이미지를 다시 그린 후 격자선 추가
+      renderImageToCanvas()
+      drawGridLines()
+    }
+  }, [gridType, renderImageToCanvas, drawGridLines])
 
   // 히스토그램 데이터 변경 시 렌더링
   useEffect(() => {

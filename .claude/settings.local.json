@@ -1,4 +1,5 @@
 {
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
       "Bash(git for-each-ref:*)",
@@ -6,12 +7,12 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(npm run check:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []
   },
-  "includeCoAuthoredBy": false,
   "hooks": {
     "SessionStart": [
       {
