@@ -63,6 +63,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
   const [containerHeight, setContainerHeight] = useState(0)
+  const [showProgressIndicator, setShowProgressIndicator] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const horizontalContentRef = useRef<HTMLDivElement>(null) // 가로 모드 내부 컨테이너
@@ -652,6 +653,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       setIsGenerating(false)
       setHqProgress(null)
       setIsGeneratingHq(false)
+      setShowProgressIndicator(true)
       // HQ 작업 취소
       invoke('cancel_hq_thumbnail_generation').catch((error) =>
         logError(error, 'Cancel HQ thumbnail generation')
@@ -667,6 +669,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setHqProgress(null)
 
         setIsGenerating(true)
+        setShowProgressIndicator(true)
         setProgress({ completed: 0, total: images.length, current_path: '' })
 
         // 배치 생성 시작
@@ -731,6 +734,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         } else {
           // 모두 기존 HQ라면 로드만 하면 됨
           setIsGeneratingHq(false)
+          // 로딩 완료 후 2초 뒤에 progress indicator 숨김
+          setTimeout(() => {
+            setShowProgressIndicator(false)
+            setProgress(null)
+            setHqProgress(null)
+          }, 2000)
         }
       } catch (error) {
         console.error('Failed to start HQ thumbnail generation:', error)
@@ -753,6 +762,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
     const unlistenHqAllCompleted = listen('thumbnail-hq-all-completed', () => {
       setIsGeneratingHq(false)
+      // 로딩 완료 후 2초 뒤에 progress indicator 숨김
+      setTimeout(() => {
+        setShowProgressIndicator(false)
+        setProgress(null)
+        setHqProgress(null)
+      }, 2000)
     })
 
     const unlistenHqCancelled = listen('thumbnail-hq-cancelled', () => {
@@ -1062,20 +1077,18 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           <div className="flex items-center justify-between gap-3">
             {/* 진행 상태 - 통합 표시 */}
             <div className="flex items-center gap-2">
-              {/* 진행률: HQ 생성 중이면 숫자만 파란색, 아니면 회색 */}
-              {(progress || hqProgress) && (
+              {/* 진행률: showProgressIndicator가 true이고 progress가 있을 때만 표시 */}
+              {showProgressIndicator && (progress || hqProgress) && (
                 <>
-                  <span className="text-xs whitespace-nowrap">
-                    <span className={isGeneratingHq ? 'text-blue-400' : 'text-gray-400'}>
-                      {isGeneratingHq ? hqProgress?.completed : progress?.completed}
-                    </span>
-                    <span className="text-gray-400">
-                      /{isGeneratingHq ? hqProgress?.total : progress?.total}
-                    </span>
-                  </span>
                   {(isGenerating || isGeneratingHq) && (
                     <Loader2 className={`h-3.5 w-3.5 animate-spin ${isGeneratingHq ? 'text-blue-500' : 'text-gray-400'}`} />
                   )}
+                  <span className={`text-xs whitespace-nowrap ${isGeneratingHq ? 'text-blue-400' : 'text-gray-400'}`}>
+                    {isGeneratingHq
+                      ? `${Math.round((hqProgress?.completed ?? 0) / (hqProgress?.total ?? 1) * 100)}%`
+                      : `${Math.round((progress?.completed ?? 0) / (progress?.total ?? 1) * 100)}%`
+                    }
+                  </span>
                 </>
               )}
             </div>
