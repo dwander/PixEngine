@@ -268,10 +268,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // 컨테이너 크기 (패딩 없음, 촬영 정보 바 높이 고려)
-    const infoBarHeight = showShootingInfo ? 48 : 0
-    const containerWidth = container.clientWidth
-    const containerHeight = container.clientHeight - infoBarHeight
+    // 컨테이너 크기 (10px 패딩 적용)
+    const padding = 10
+    const containerWidth = container.clientWidth - (padding * 2)
+    const containerHeight = container.clientHeight - (padding * 2)
 
     // 이미지 원본 크기
     const imgWidth = img.width
@@ -305,7 +305,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
     // 이미지 그리기
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight)
-  }, [showShootingInfo])
+  }, [])
 
   // 컨테이너 리사이즈 핸들러 (ResizeObserver용)
   const handleResize = useCallback(() => {
@@ -435,7 +435,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
         onContextMenu={handleContextMenu}
       >
         {/* 이미지 정보 오버레이 (상단) */}
-        <div className="absolute top-0 left-0 right-0 z-10 m-2.5 text-sm text-neutral-300 flex justify-between items-start" style={{ textShadow: '0 0 8px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.9), 2px 2px 4px rgba(0,0,0,0.8)' }}>
+        <div className="absolute top-0 left-0 right-0 z-10 px-[20px] py-2.5 text-sm text-neutral-300 flex justify-between items-start" style={{ textShadow: '1px 1px 0 rgb(0,0,0)' }}>
           {/* 좌측: 카메라 + 렌즈 정보 */}
           {metadata && (
             <div className="flex items-center gap-2">
@@ -503,7 +503,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
           {/* 좌측: 히스토그램 (위로 올라가는 구조) */}
           <div className="flex items-center">
             {showHistogram && (
-              <div className="absolute bottom-0 left-4 w-64 rounded-lg p-2" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', height: '80px' }}>
+              <div className="absolute left-4 w-64 rounded-lg border border-neutral-700 overflow-hidden" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', height: '80px', bottom: '8px' }}>
                 <canvas
                   ref={histogramCanvasRef}
                   width={256}
