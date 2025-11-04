@@ -26,8 +26,8 @@ function getMeteringModeIcon(mode: string | undefined): string {
   if (lowerMode.includes('spot')) {
     return '/icons/meterring_spot.svg'
   }
-  if (lowerMode.includes('average')) {
-    return '/icons/meterring_average.svg'
+  if (lowerMode.includes('pattern')) {
+    return '/icons/meterring_pattern.svg'
   }
   return ''
 }
@@ -377,7 +377,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
           <div className="flex items-center gap-2 text-gray-300">
             {/* 셔터 속도 */}
             {metadata.shutter_speed && (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '90px' }} title="셔터 속도">
+              <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="셔터 속도">
                 <img src="/icons/shutter.svg" alt="shutter" className="w-10 h-10 opacity-60 invert" />
                 <span>{metadata.shutter_speed}</span>
               </div>
@@ -385,7 +385,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
             {/* 조리개 */}
             {metadata.aperture && (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '90px' }} title="조리개">
+              <div className="flex items-center gap-0.5" style={{ width: '90px', paddingLeft: '15px' }} title="조리개">
                 <img src="/icons/iris.svg" alt="aperture" className="w-10 h-10 opacity-60 invert" />
                 <span>{metadata.aperture}</span>
               </div>
@@ -393,7 +393,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
             {/* ISO */}
             {metadata.iso && (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '90px' }} title="ISO">
+              <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="ISO">
                 <img src="/icons/iso.svg" alt="ISO" className="w-10 h-10 opacity-60 invert" />
                 <span>{metadata.iso}</span>
               </div>
@@ -401,7 +401,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
             {/* 초점 거리 */}
             {metadata.focal_length && (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '90px' }} title="초점 거리">
+              <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="초점 거리">
                 <img src="/icons/focal_length.svg" alt="focal length" style={{ width: '30px', height: '30px' }} className="opacity-60 invert" />
                 <span>{metadata.focal_length}</span>
               </div>
@@ -409,7 +409,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
             {/* 노출 보정 */}
             {metadata.exposure_bias && (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '90px' }} title="노출 보정">
+              <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="노출 보정">
                 <img src="/icons/expose.svg" alt="exposure" className="w-10 h-10 opacity-60 invert" />
                 <span>{metadata.exposure_bias}</span>
               </div>
@@ -417,33 +417,33 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
             {/* 플래시 */}
             {metadata.flash && getFlashIcon(metadata.flash) ? (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '50px' }} title={metadata.flash}>
+              <div className="flex items-center gap-0.5" style={{ width: '50px', marginLeft: '20px' }} title={metadata.flash}>
                 <img src={getFlashIcon(metadata.flash)} alt="flash" className="w-10 h-10 opacity-60 invert" />
               </div>
             ) : metadata.flash ? (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '50px' }} title={metadata.flash}>
+              <div className="flex items-center gap-0.5" style={{ width: '50px', marginLeft: '20px' }} title={metadata.flash}>
                 <span>--</span>
               </div>
             ) : null}
 
             {/* 측광 모드 */}
             {metadata.metering_mode && getMeteringModeIcon(metadata.metering_mode) ? (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '50px' }} title={metadata.metering_mode}>
+              <div className="flex items-center gap-0.5" style={{ width: '50px' }} title={metadata.metering_mode}>
                 <img src={getMeteringModeIcon(metadata.metering_mode)} alt="metering" className="w-10 h-10 opacity-60 invert" />
               </div>
             ) : metadata.metering_mode ? (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '50px' }} title={metadata.metering_mode}>
+              <div className="flex items-center gap-0.5" style={{ width: '50px' }} title={metadata.metering_mode}>
                 <span>--</span>
               </div>
             ) : null}
 
             {/* 화이트밸런스 */}
             {metadata.white_balance && getWhiteBalanceIcon(metadata.white_balance) ? (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '50px' }} title={metadata.white_balance}>
+              <div className="flex items-center gap-0.5" style={{ width: '50px' }} title={metadata.white_balance}>
                 <img src={getWhiteBalanceIcon(metadata.white_balance)} alt="white balance" className="w-10 h-10 opacity-60 invert" />
               </div>
             ) : metadata.white_balance ? (
-              <div className="flex items-center gap-0.5 justify-center" style={{ width: '50px' }} title={metadata.white_balance}>
+              <div className="flex items-center gap-0.5" style={{ width: '50px' }} title={metadata.white_balance}>
                 <span>--</span>
               </div>
             ) : null}
