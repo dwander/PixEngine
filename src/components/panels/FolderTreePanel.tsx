@@ -625,7 +625,10 @@ function FolderTreeItem({
             <span className="w-3.5" />
           )}
           {renderIcon()}
-          <span className={`text-xs flex-1 truncate ${isCurrentFolder ? 'text-blue-300 font-semibold' : 'text-gray-200'}`}>
+          <span
+            className={`text-xs flex-1 truncate ${isCurrentFolder ? 'text-blue-300 font-semibold' : 'text-gray-200'}`}
+            title={node.name}
+          >
             {node.name}
           </span>
         </div>
