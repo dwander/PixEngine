@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Check, ChevronDown } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { Store } from '@tauri-apps/plugin-store'
@@ -15,6 +15,9 @@ import {
   DEBOUNCE_FOCUS_INDEX,
   VIRTUAL_SCROLL_OVERSCAN
 } from '../../lib/constants'
+
+type SortField = 'filename' | 'filesize' | 'date_taken' | 'modified_time'
+type SortOrder = 'asc' | 'desc'
 
 interface ThumbnailResult {
   path: string
@@ -47,7 +50,7 @@ interface ThumbnailProgress {
 }
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
-  const { imageList: images, loadImage, getCachedImage } = useImageContext()
+  const { imageList: images, loadImage, getCachedImage, metadata } = useImageContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -63,6 +66,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const horizontalContentRef = useRef<HTMLDivElement>(null) // 가로 모드 내부 컨테이너
   const [focusedIndex, setFocusedIndex] = useState(0) // 키보드 포커스 인덱스
 
+  // 정렬 상태
+  const [sortField, setSortField] = useState<SortField>('filename')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
   // 연속 재생 모드 상태
   const [continuousPlayState, setContinuousPlayState] = useState<{
     isActive: boolean
@@ -75,23 +84,87 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     lastFrameTime: number
   }>({ animationFrameId: null, lastFrameTime: 0 })
 
-  // 썸네일 크기 store에서 로드 및 저장
+  // 드롭다운 외부 클릭 감지
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isDropdownOpen])
+
+  // 정렬된 이미지 리스트
+  const sortedImages = useMemo(() => {
+    const sorted = [...images]
+
+    sorted.sort((a, b) => {
+      let compareResult = 0
+
+      switch (sortField) {
+        case 'filename': {
+          const aName = a.split(/[/\\]/).pop()?.toLowerCase() || ''
+          const bName = b.split(/[/\\]/).pop()?.toLowerCase() || ''
+          compareResult = aName.localeCompare(bName)
+          break
+        }
+        case 'filesize': {
+          // metadata에서 file_size 가져오기 (현재 이미지의 metadata만 있음)
+          // TODO: 모든 이미지의 파일 크기를 가져와야 정확한 정렬 가능
+          compareResult = 0
+          break
+        }
+        case 'date_taken': {
+          // metadata에서 date_time_original 가져오기
+          // TODO: 모든 이미지의 촬영 날짜를 가져와야 정확한 정렬 가능
+          compareResult = 0
+          break
+        }
+        case 'modified_time': {
+          // TODO: 모든 이미지의 수정 시간을 가져와야 정확한 정렬 가능
+          compareResult = 0
+          break
+        }
+      }
+
+      return sortOrder === 'asc' ? compareResult : -compareResult
+    })
+
+    return sorted
+  }, [images, sortField, sortOrder])
+
+  // 썸네일 크기 및 정렬 설정 store에서 로드
   useEffect(() => {
     let store: Store | null = null
 
-    const loadThumbnailSize = async () => {
+    const loadSettings = async () => {
       try {
         store = await Store.load('settings.json')
         const savedSize = await store.get<number>('thumbnailSize')
         if (savedSize !== null && savedSize !== undefined) {
           setThumbnailSize(savedSize)
         }
+        const savedSortField = await store.get<SortField>('thumbnailSortField')
+        if (savedSortField) {
+          setSortField(savedSortField)
+        }
+        const savedSortOrder = await store.get<SortOrder>('thumbnailSortOrder')
+        if (savedSortOrder) {
+          setSortOrder(savedSortOrder)
+        }
       } catch (error) {
-        console.error('Failed to load thumbnail size:', error)
+        console.error('Failed to load thumbnail settings:', error)
       }
     }
 
-    loadThumbnailSize()
+    loadSettings()
 
     // cleanup
     return () => {
@@ -99,29 +172,31 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
   }, [])
 
-  // 썸네일 크기 변경 시 저장
+  // 썸네일 설정 변경 시 저장
   useEffect(() => {
     let store: Store | null = null
     let timeoutId: number | undefined
 
-    const saveThumbnailSize = async () => {
+    const saveSettings = async () => {
       try {
         store = await Store.load('settings.json')
         await store.set('thumbnailSize', thumbnailSize)
+        await store.set('thumbnailSortField', sortField)
+        await store.set('thumbnailSortOrder', sortOrder)
         await store.save()
       } catch (error) {
-        console.error('Failed to save thumbnail size:', error)
+        console.error('Failed to save thumbnail settings:', error)
       }
     }
 
     // 디바운스 (500ms 후 저장)
-    timeoutId = window.setTimeout(saveThumbnailSize, 500)
+    timeoutId = window.setTimeout(saveSettings, 500)
 
     return () => {
       if (timeoutId) clearTimeout(timeoutId)
       store = null
     }
-  }, [thumbnailSize])
+  }, [thumbnailSize, sortField, sortOrder])
 
   // 패널 방향 및 크기 감지
   useEffect(() => {
@@ -183,11 +258,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const rows = useMemo(() => {
     if (!isVertical) return []
     const result: string[][] = []
-    for (let i = 0; i < images.length; i += columnCount) {
-      result.push(images.slice(i, i + columnCount))
+    for (let i = 0; i < sortedImages.length; i += columnCount) {
+      result.push(sortedImages.slice(i, i + columnCount))
     }
     return result
-  }, [images, columnCount, isVertical])
+  }, [sortedImages, columnCount, isVertical])
 
   // 실제 행 높이 계산 (aspect-square를 고려)
   const rowHeight = useMemo(() => {
@@ -236,7 +311,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // 가상화 설정 (가로 모드 - 수평 스크롤)
   const horizontalVirtualizer = useVirtualizer({
     horizontal: true,
-    count: images.length,
+    count: sortedImages.length,
     getScrollElement: () => scrollAreaRef.current,
     estimateSize: () => horizontalItemSize,
     overscan: VIRTUAL_SCROLL_OVERSCAN,
@@ -276,7 +351,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           const virtualRows = rowVirtualizer.getVirtualItems()
           virtualRows.forEach((virtualRow) => {
             const startIndex = virtualRow.index * columnCount
-            const endIndex = Math.min(startIndex + columnCount, images.length)
+            const endIndex = Math.min(startIndex + columnCount, sortedImages.length)
             for (let i = startIndex; i < endIndex; i++) {
               visibleIndices.push(i)
             }
@@ -291,7 +366,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
         if (visibleIndices.length > 0) {
           // 뷰포트 내 썸네일의 전체 경로 추출
-          const visiblePaths = visibleIndices.map(i => images[i]).filter(Boolean)
+          const visiblePaths = visibleIndices.map(i => sortedImages[i]).filter(Boolean)
 
           invoke('update_hq_viewport_paths', { paths: visiblePaths }).catch((error) =>
             logError(error, 'Update HQ viewport paths')
@@ -312,7 +387,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // focusedIndex 변경 시 자동 스크롤
   useEffect(() => {
-    if (focusedIndex < 0 || focusedIndex >= images.length) return
+    if (focusedIndex < 0 || focusedIndex >= sortedImages.length) return
 
     if (isVertical) {
       // 세로 모드: 행으로 스크롤
@@ -326,7 +401,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         align: 'auto',
       })
     }
-  }, [focusedIndex, isVertical, columnCount, images.length, rowVirtualizer, horizontalVirtualizer])
+  }, [focusedIndex, isVertical, columnCount, sortedImages.length, rowVirtualizer, horizontalVirtualizer])
 
   // focusedIndex를 디바운싱 (연속 재생 모드일 때는 0ms로 즉시 적용)
   const debouncedFocusedIndex = useDebounce(
@@ -336,8 +411,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드
   useEffect(() => {
-    if (debouncedFocusedIndex >= 0 && debouncedFocusedIndex < images.length) {
-      const imagePath = images[debouncedFocusedIndex]
+    if (debouncedFocusedIndex >= 0 && debouncedFocusedIndex < sortedImages.length) {
+      const imagePath = sortedImages[debouncedFocusedIndex]
       loadImage(imagePath)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -376,7 +451,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     const elapsed = now - continuousPlayRef.current.lastFrameTime
 
     // 이미지 로딩 완료 대기 시간 (캐시 미스 시 추가 대기)
-    const imagePath = images[focusedIndex]
+    const imagePath = sortedImages[focusedIndex]
     const cachedImage = getCachedImage(imagePath)
     const loadWaitTime = cachedImage ? 0 : 50 // 캐시 미스 시 50ms 추가 대기
 
@@ -393,11 +468,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       if (continuousPlayState.direction === 'left') {
         nextIndex = Math.max(0, focusedIndex - 1)
       } else if (continuousPlayState.direction === 'right') {
-        nextIndex = Math.min(images.length - 1, focusedIndex + 1)
+        nextIndex = Math.min(sortedImages.length - 1, focusedIndex + 1)
       } else if (continuousPlayState.direction === 'up' && isVertical) {
         nextIndex = Math.max(0, focusedIndex - columnCount)
       } else if (continuousPlayState.direction === 'down' && isVertical) {
-        nextIndex = Math.min(images.length - 1, focusedIndex + columnCount)
+        nextIndex = Math.min(sortedImages.length - 1, focusedIndex + columnCount)
       }
 
       // 경계 체크: 더 이상 이동할 수 없으면 중지
@@ -414,7 +489,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }, totalWaitTime)
 
     return () => clearTimeout(timer)
-  }, [focusedIndex, continuousPlayState, images, isVertical, columnCount, getCachedImage, stopContinuousPlay])
+  }, [focusedIndex, continuousPlayState, sortedImages, isVertical, columnCount, getCachedImage, stopContinuousPlay])
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -431,11 +506,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         if (e.key === 'ArrowLeft') {
           setFocusedIndex(prev => Math.max(0, prev - 1))
         } else if (e.key === 'ArrowRight') {
-          setFocusedIndex(prev => Math.min(images.length - 1, prev + 1))
+          setFocusedIndex(prev => Math.min(sortedImages.length - 1, prev + 1))
         } else if (e.key === 'ArrowUp' && isVertical) {
           setFocusedIndex(prev => Math.max(0, prev - columnCount))
         } else if (e.key === 'ArrowDown' && isVertical) {
-          setFocusedIndex(prev => Math.min(images.length - 1, prev + columnCount))
+          setFocusedIndex(prev => Math.min(sortedImages.length - 1, prev + columnCount))
         }
       }
       // 연속 재생: e.repeat === true
@@ -456,7 +531,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       setFocusedIndex(0)
     } else if (e.key === 'End') {
       e.preventDefault()
-      setFocusedIndex(images.length - 1)
+      setFocusedIndex(sortedImages.length - 1)
     } else if (e.key === 'PageUp') {
       e.preventDefault()
       if (isVertical) {
@@ -478,7 +553,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         const virtualRows = rowVirtualizer.getVirtualItems()
         if (virtualRows.length > 0) {
           const lastRowIndex = virtualRows[virtualRows.length - 1].index
-          const lastVisibleIndex = Math.min(images.length - 1, (lastRowIndex + 1) * columnCount - 1)
+          const lastVisibleIndex = Math.min(sortedImages.length - 1, (lastRowIndex + 1) * columnCount - 1)
           setFocusedIndex(lastVisibleIndex)
         }
       } else {
@@ -501,8 +576,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       // 현재 위치 다음부터 검색
       let foundIndex = -1
-      for (let i = focusedIndex + 1; i < images.length; i++) {
-        if (getBasename(images[i]).startsWith(searchChar)) {
+      for (let i = focusedIndex + 1; i < sortedImages.length; i++) {
+        if (getBasename(sortedImages[i]).startsWith(searchChar)) {
           foundIndex = i
           break
         }
@@ -511,7 +586,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       // 못 찾으면 처음부터 현재 위치까지 검색 (순환)
       if (foundIndex === -1) {
         for (let i = 0; i <= focusedIndex; i++) {
-          if (getBasename(images[i]).startsWith(searchChar)) {
+          if (getBasename(sortedImages[i]).startsWith(searchChar)) {
             foundIndex = i
             break
           }
@@ -523,7 +598,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [images.length, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay])
+  }, [sortedImages.length, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -534,7 +609,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 네비게이션 (방향키 + Home/End + PageUp/PageDown + 검색)
   useEffect(() => {
-    if (images.length === 0) return
+    if (sortedImages.length === 0) return
 
     // 포커스 손실 시 연속 재생 중지
     const handleBlur = () => {
@@ -551,7 +626,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       window.removeEventListener('blur', handleBlur)
       stopContinuousPlay() // 클린업 시 연속 재생 중지
     }
-  }, [images.length, handleKeyDown, handleKeyUp, stopContinuousPlay])
+  }, [sortedImages.length, handleKeyDown, handleKeyUp, stopContinuousPlay])
 
   // 썸네일 생성 시작
   useEffect(() => {
@@ -717,6 +792,112 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   return (
     <div ref={containerRef} className="flex h-full flex-col bg-neutral-900">
+      {/* 정렬 드롭다운 */}
+      <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-300 hover:bg-neutral-800"
+          >
+            <span>
+              {sortField === 'filename' && '파일명'}
+              {sortField === 'filesize' && '파일크기'}
+              {sortField === 'date_taken' && '촬영날짜'}
+              {sortField === 'modified_time' && '수정시간'}
+            </span>
+            <span className="text-gray-500">
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </span>
+            <ChevronDown className="h-4 w-4" />
+          </button>
+
+          {isDropdownOpen && (
+            <div className="absolute left-0 top-full z-10 mt-1 w-48 rounded-md border border-neutral-700 bg-neutral-800 shadow-lg">
+              <div className="py-1">
+                {/* 정렬 기준 */}
+                <button
+                  onClick={() => {
+                    setSortField('filename')
+                    setIsDropdownOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                >
+                  <div className="w-4">
+                    {sortField === 'filename' && <Check className="h-4 w-4" />}
+                  </div>
+                  <span>파일명</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSortField('filesize')
+                    setIsDropdownOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                >
+                  <div className="w-4">
+                    {sortField === 'filesize' && <Check className="h-4 w-4" />}
+                  </div>
+                  <span>파일크기</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSortField('date_taken')
+                    setIsDropdownOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                >
+                  <div className="w-4">
+                    {sortField === 'date_taken' && <Check className="h-4 w-4" />}
+                  </div>
+                  <span>촬영날짜</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSortField('modified_time')
+                    setIsDropdownOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                >
+                  <div className="w-4">
+                    {sortField === 'modified_time' && <Check className="h-4 w-4" />}
+                  </div>
+                  <span>수정시간</span>
+                </button>
+
+                {/* 구분선 */}
+                <div className="my-1 h-px bg-neutral-700" />
+
+                {/* 정렬 순서 */}
+                <button
+                  onClick={() => {
+                    setSortOrder('asc')
+                    setIsDropdownOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                >
+                  <div className="w-4">
+                    {sortOrder === 'asc' && <Check className="h-4 w-4" />}
+                  </div>
+                  <span>오름차순</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSortOrder('desc')
+                    setIsDropdownOpen(false)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                >
+                  <div className="w-4">
+                    {sortOrder === 'desc' && <Check className="h-4 w-4" />}
+                  </div>
+                  <span>내림차순</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* 썸네일 영역 */}
       <div
         ref={scrollAreaRef}
