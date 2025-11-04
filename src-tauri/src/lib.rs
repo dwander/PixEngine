@@ -780,18 +780,77 @@ async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
             }
         });
 
+    // 포맷팅 헬퍼 함수들
+    let format_shutter_speed = |speed_str: String| -> String {
+        // "1/250 s" -> "1/250s", "1/250" -> "1/250s"
+        let trimmed = speed_str.trim();
+        if trimmed.ends_with(" s") {
+            trimmed.replace(" s", "s")
+        } else if trimmed.ends_with('s') {
+            trimmed.to_string()
+        } else {
+            format!("{}s", trimmed)
+        }
+    };
+
+    let format_aperture = |aperture_str: String| -> String {
+        // "f/2.8" 형식 유지 또는 "F2.8" -> "f/2.8" 변환
+        let trimmed = aperture_str.trim();
+        if trimmed.starts_with('f') || trimmed.starts_with('F') {
+            trimmed.to_lowercase()
+        } else {
+            format!("f/{}", trimmed)
+        }
+    };
+
+    let format_focal_length = |focal_str: String| -> String {
+        // "85 mm" -> "85mm", "85" -> "85mm"
+        let trimmed = focal_str.trim();
+        if trimmed.ends_with(" mm") {
+            trimmed.replace(" mm", "mm")
+        } else if trimmed.ends_with("mm") {
+            trimmed.to_string()
+        } else {
+            format!("{}mm", trimmed)
+        }
+    };
+
+    let format_exposure_bias = |bias_str: String| -> String {
+        // "+0.33 EV" -> "+0.3eV", "+0.33" -> "+0.3eV"
+        let trimmed = bias_str.trim();
+
+        // EV 제거하고 숫자만 추출
+        let number_str = trimmed
+            .replace(" EV", "")
+            .replace(" eV", "")
+            .replace("EV", "")
+            .replace("eV", "");
+
+        // 숫자를 파싱하고 소수점 1자리로 포맷
+        if let Ok(value) = number_str.trim().parse::<f64>() {
+            format!("{:+.1}eV", value)
+        } else {
+            // 파싱 실패 시 원본 반환 (eV 추가)
+            if trimmed.ends_with("eV") || trimmed.ends_with("EV") {
+                trimmed.replace("EV", "eV")
+            } else {
+                format!("{}eV", trimmed)
+            }
+        }
+    };
+
     Ok(ExifMetadata {
         // 카메라 정보
         camera_make: get_field_ascii(exif::Tag::Make),
         camera_model: get_field_ascii(exif::Tag::Model),
         lens_model: get_field_ascii(exif::Tag::LensModel),
 
-        // 촬영 설정
+        // 촬영 설정 (포맷팅 적용)
         iso: get_field_string(exif::Tag::PhotographicSensitivity),
-        aperture: get_field_string(exif::Tag::FNumber),
-        shutter_speed: get_field_string(exif::Tag::ExposureTime),
-        focal_length: get_field_string(exif::Tag::FocalLength),
-        exposure_bias: get_field_string(exif::Tag::ExposureBiasValue),
+        aperture: get_field_string(exif::Tag::FNumber).map(format_aperture),
+        shutter_speed: get_field_string(exif::Tag::ExposureTime).map(format_shutter_speed),
+        focal_length: get_field_string(exif::Tag::FocalLength).map(format_focal_length),
+        exposure_bias: get_field_string(exif::Tag::ExposureBiasValue).map(format_exposure_bias),
         flash: get_field_string(exif::Tag::Flash),
 
         // 날짜/시간

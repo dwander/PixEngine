@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
-import { Info, Camera, Settings, MapPin, Calendar, User } from 'lucide-react'
+import { Info } from 'lucide-react'
 
 interface ExifMetadata {
   // 카메라 정보
@@ -40,10 +40,9 @@ interface ExifMetadata {
   artist?: string
 }
 
-interface MetadataSection {
-  title: string
-  icon: React.ReactNode
-  fields: { label: string; value: string | undefined }[]
+interface MetadataField {
+  label: string
+  value: string | undefined
 }
 
 export function MetadataPanel() {
@@ -91,15 +90,9 @@ export function MetadataPanel() {
     )
   }
 
+  // 로딩 중일 때는 빈 화면 표시 (깜빡임 방지)
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full bg-neutral-900 text-gray-400">
-        <div className="text-center">
-          <Info className="h-12 w-12 mx-auto mb-2 opacity-50 animate-pulse" />
-          <p className="text-sm">메타데이터 로딩 중...</p>
-        </div>
-      </div>
-    )
+    return <div className="h-full bg-neutral-900" />
   }
 
   if (error || !metadata) {
@@ -113,108 +106,76 @@ export function MetadataPanel() {
     )
   }
 
-  const sections: MetadataSection[] = [
+  // 모든 필드를 하나의 배열로
+  const fields: MetadataField[] = [
+    // 촬영 설정 (재정렬: 셔터속도, 조리개, ISO, 촛점거리, 노출보정)
+    { label: '셔터 속도', value: metadata.shutter_speed },
+    { label: '조리개', value: metadata.aperture },
+    { label: 'ISO', value: metadata.iso },
+    { label: '초점 거리', value: metadata.focal_length },
+    { label: '노출 보정', value: metadata.exposure_bias },
+    { label: '플래시', value: metadata.flash },
+
+    // 이미지 정보
     {
-      title: '카메라',
-      icon: <Camera className="h-4 w-4" />,
-      fields: [
-        { label: '제조사', value: metadata.camera_make },
-        { label: '모델', value: metadata.camera_model },
-        { label: '렌즈', value: metadata.lens_model },
-      ],
+      label: '해상도',
+      value:
+        metadata.image_width && metadata.image_height
+          ? `${metadata.image_width} x ${metadata.image_height}`
+          : undefined,
     },
-    {
-      title: '촬영 설정',
-      icon: <Settings className="h-4 w-4" />,
-      fields: [
-        { label: 'ISO', value: metadata.iso },
-        { label: '조리개', value: metadata.aperture },
-        { label: '셔터 속도', value: metadata.shutter_speed },
-        { label: '초점 거리', value: metadata.focal_length },
-        { label: '노출 보정', value: metadata.exposure_bias },
-        { label: '플래시', value: metadata.flash },
-      ],
-    },
-    {
-      title: '이미지 정보',
-      icon: <Info className="h-4 w-4" />,
-      fields: [
-        {
-          label: '해상도',
-          value:
-            metadata.image_width && metadata.image_height
-              ? `${metadata.image_width} x ${metadata.image_height}`
-              : undefined,
-        },
-        { label: '방향', value: metadata.orientation },
-        { label: '색공간', value: metadata.color_space },
-      ],
-    },
-    {
-      title: '날짜/시간',
-      icon: <Calendar className="h-4 w-4" />,
-      fields: [
-        { label: '촬영 일시', value: metadata.date_time_original },
-        { label: '디지털화 일시', value: metadata.date_time_digitized },
-      ],
-    },
-    {
-      title: 'GPS 위치',
-      icon: <MapPin className="h-4 w-4" />,
-      fields: [
-        { label: '위도', value: metadata.gps_latitude },
-        { label: '경도', value: metadata.gps_longitude },
-        { label: '고도', value: metadata.gps_altitude },
-      ],
-    },
-    {
-      title: '저작권',
-      icon: <User className="h-4 w-4" />,
-      fields: [
-        { label: '소프트웨어', value: metadata.software },
-        { label: '작가', value: metadata.artist },
-        { label: '저작권', value: metadata.copyright },
-      ],
-    },
+    { label: '방향', value: metadata.orientation },
+    { label: '색공간', value: metadata.color_space },
+
+    // 날짜/시간
+    { label: '촬영 일시', value: metadata.date_time_original },
+    { label: '디지털화 일시', value: metadata.date_time_digitized },
+
+    // GPS 위치
+    { label: 'GPS 위도', value: metadata.gps_latitude },
+    { label: 'GPS 경도', value: metadata.gps_longitude },
+    { label: 'GPS 고도', value: metadata.gps_altitude },
+
+    // 소프트웨어 & 저작권
+    { label: '소프트웨어', value: metadata.software },
+    { label: '작가', value: metadata.artist },
+    { label: '저작권', value: metadata.copyright },
+
+    // 카메라 정보 (맨 아래로 이동)
+    { label: '제조사', value: metadata.camera_make },
+    { label: '모델', value: metadata.camera_model },
+    { label: '렌즈', value: metadata.lens_model },
   ]
 
-  // 빈 섹션 필터링
-  const visibleSections = sections.filter((section) =>
-    section.fields.some((field) => field.value)
-  )
+  // 값이 있는 필드만 필터링
+  const visibleFields = fields.filter((field) => field.value)
 
   return (
     <div className="h-full bg-neutral-900 overflow-y-auto p-4">
-      <div className="space-y-4">
-        {visibleSections.length === 0 ? (
-          <div className="text-center text-gray-400 py-8">
-            <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">EXIF 정보가 없습니다</p>
-          </div>
-        ) : (
-          visibleSections.map((section) => (
-            <div key={section.title} className="border border-neutral-800 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-3 text-blue-400">
-                {section.icon}
-                <h3 className="text-sm font-semibold">{section.title}</h3>
-              </div>
-              <div className="space-y-2">
-                {section.fields.map(
-                  (field) =>
-                    field.value && (
-                      <div key={field.label} className="flex justify-between text-xs">
-                        <span className="text-gray-400">{field.label}</span>
-                        <span className="text-gray-200 text-right ml-4 break-all">
-                          {field.value}
-                        </span>
-                      </div>
-                    )
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      {visibleFields.length === 0 ? (
+        <div className="text-center text-gray-400 py-8">
+          <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">EXIF 정보가 없습니다</p>
+        </div>
+      ) : (
+        <table className="w-full text-xs">
+          <tbody>
+            {visibleFields.map((field, index) => (
+              <tr
+                key={index}
+                className="border-b border-neutral-800 hover:bg-neutral-800/50"
+              >
+                <td className="py-2 pr-4 text-gray-400 whitespace-nowrap align-top">
+                  {field.label}
+                </td>
+                <td className="py-2 text-gray-200 break-all">
+                  {field.value}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
