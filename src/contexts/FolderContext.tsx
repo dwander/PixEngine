@@ -16,9 +16,11 @@ interface FolderContextType {
   totalSize: number; // bytes 단위
   isLoading: boolean;
   lightMetadataMap: Map<string, LightMetadata>;
+  sortedIndex: number; // 정렬된 리스트에서의 인덱스
   setCurrentFolder: (path: string | null, count: number, size: number) => void;
   setLoading: (loading: boolean) => void;
   loadLightMetadata: (imagePaths: string[]) => Promise<void>;
+  setSortedIndex: (index: number) => void;
 }
 
 const FolderContext = createContext<FolderContextType | undefined>(undefined);
@@ -29,6 +31,7 @@ export function FolderProvider({ children }: { children: ReactNode }) {
   const [totalSize, setTotalSize] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [lightMetadataMap, setLightMetadataMap] = useState<Map<string, LightMetadata>>(new Map());
+  const [sortedIndex, setSortedIndex] = useState(0);
 
   const setCurrentFolder = (path: string | null, count: number, size: number) => {
     setCurrentFolderState(path);
@@ -70,9 +73,11 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       totalSize,
       isLoading,
       lightMetadataMap,
+      sortedIndex,
       setCurrentFolder,
       setLoading,
-      loadLightMetadata
+      loadLightMetadata,
+      setSortedIndex
     }}>
       {children}
     </FolderContext.Provider>

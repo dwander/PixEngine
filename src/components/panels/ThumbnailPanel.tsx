@@ -52,7 +52,7 @@ interface ThumbnailProgress {
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { imageList: images, loadImage, getCachedImage, metadata } = useImageContext()
-  const { lightMetadataMap } = useFolderContext()
+  const { lightMetadataMap, setSortedIndex } = useFolderContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -419,11 +419,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     continuousPlayState.isActive ? 0 : DEBOUNCE_FOCUS_INDEX
   )
 
-  // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드
+  // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드 및 sortedIndex 업데이트
   useEffect(() => {
     if (debouncedFocusedIndex >= 0 && debouncedFocusedIndex < sortedImages.length) {
       const imagePath = sortedImages[debouncedFocusedIndex]
       loadImage(imagePath)
+      // 정렬된 인덱스를 FolderContext에 업데이트
+      setSortedIndex(debouncedFocusedIndex)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedFocusedIndex])

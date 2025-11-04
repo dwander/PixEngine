@@ -23,8 +23,8 @@ function getFolderName(path: string | null): string {
 }
 
 export function StatusBar() {
-  const { currentFolder, imageCount, totalSize } = useFolderContext()
-  const { currentPath, currentIndex, imageList, metadata } = useImageContext()
+  const { currentFolder, imageCount, totalSize, sortedIndex } = useFolderContext()
+  const { currentPath, imageList, metadata } = useImageContext()
 
   if (!currentFolder || imageCount === 0) {
     return (
@@ -41,8 +41,8 @@ export function StatusBar() {
         {imageList.length > 0 && (
           <>
             <span className="flex items-center gap-1">
-              <span className="text-gray-400">
-                {currentIndex + 1}/{imageList.length}개
+              <span className="text-gray-300">
+                {sortedIndex + 1}<span className="text-gray-500">/</span>{imageList.length}<span className="text-gray-500">개</span>
               </span>
               <span className="text-gray-500">({formatBytes(totalSize)})</span>
             </span>
