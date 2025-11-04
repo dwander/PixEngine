@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { TitleBar } from "./components/layout/TitleBar";
 import { MainLayout } from "./components/layout/MainLayout";
 import { StatusBar } from "./components/layout/StatusBar";
@@ -11,6 +11,19 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 function App() {
   // 윈도우 상태 저장/복원
   useWindowState();
+
+  // 브라우저 기본 컨텍스트 메뉴 비활성화
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    window.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
 
   const [visiblePanels, setVisiblePanels] = useState({
     folders: true,
