@@ -114,6 +114,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         const assetUrl = convertFileSrc(path);
 
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         await new Promise<void>((resolve, reject) => {
           img.onload = () => {
             // 캐시 크기 제한

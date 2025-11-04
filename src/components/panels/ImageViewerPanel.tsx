@@ -82,6 +82,13 @@ function getFlashIcon(flash: string | undefined): string {
   return ''
 }
 
+interface HistogramData {
+  red: number[]
+  green: number[]
+  blue: number[]
+  luminance: number[]
+}
+
 export const ImageViewerPanel = memo(function ImageViewerPanel() {
   const { currentPath, imageList, currentIndex, goToIndex, getCachedImage, metadata } = useImageContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
@@ -92,6 +99,8 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
   const navigationQueueRef = useRef<number[]>([])
   const isProcessingRef = useRef(false)
   const currentImageRef = useRef<HTMLImageElement | null>(null)
+  const histogramCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [histogramData, setHistogramData] = useState<HistogramData | null>(null)
 
   // 컨텍스트 메뉴 및 표시 옵션
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
@@ -138,6 +147,115 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
   useEffect(() => {
     localStorage.setItem('imageViewer.showHistogram', JSON.stringify(showHistogram))
   }, [showHistogram])
+
+  // 히스토그램 계산 함수
+  const calculateHistogram = useCallback((img: HTMLImageElement): HistogramData => {
+    try {
+      // 임시 캔버스 생성하여 픽셀 데이터 추출
+      const tempCanvas = document.createElement('canvas')
+      const sampleSize = 400 // 성능을 위해 다운샘플링
+      const aspectRatio = img.width / img.height
+
+      tempCanvas.width = sampleSize
+      tempCanvas.height = Math.floor(sampleSize / aspectRatio)
+
+      const ctx = tempCanvas.getContext('2d', { willReadFrequently: true })
+      if (!ctx) {
+        return { red: [], green: [], blue: [], luminance: [] }
+      }
+
+      // CORS 이슈 방지: 이미지 그리기
+      ctx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height)
+
+      let imageData
+      try {
+        imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
+      } catch (error) {
+        console.warn('Cannot read image data (CORS), skipping histogram calculation')
+        return { red: [], green: [], blue: [], luminance: [] }
+      }
+
+      const data = imageData.data
+
+      // 히스토그램 초기화 (0-255 범위)
+      const red = new Array(256).fill(0)
+      const green = new Array(256).fill(0)
+      const blue = new Array(256).fill(0)
+      const luminance = new Array(256).fill(0)
+
+      // 픽셀 데이터 분석
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]
+        const g = data[i + 1]
+        const b = data[i + 2]
+
+        red[r]++
+        green[g]++
+        blue[b]++
+
+        // 밝기 계산 (ITU-R BT.709 표준)
+        const lum = Math.floor(0.2126 * r + 0.7152 * g + 0.0722 * b)
+        luminance[lum]++
+      }
+
+      return { red, green, blue, luminance }
+    } catch (error) {
+      console.error('Error calculating histogram:', error)
+      return { red: [], green: [], blue: [], luminance: [] }
+    }
+  }, [])
+
+  // 히스토그램 렌더링 함수
+  const renderHistogram = useCallback(() => {
+    const canvas = histogramCanvasRef.current
+    if (!canvas || !histogramData) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const width = canvas.width
+    const height = canvas.height
+
+    // 캔버스 초기화
+    ctx.clearRect(0, 0, width, height)
+
+    // 최대값 찾기 (정규화를 위해)
+    const maxRed = Math.max(...histogramData.red)
+    const maxGreen = Math.max(...histogramData.green)
+    const maxBlue = Math.max(...histogramData.blue)
+    const maxLum = Math.max(...histogramData.luminance)
+    const maxValue = Math.max(maxRed, maxGreen, maxBlue, maxLum)
+
+    // 히스토그램 그리기 함수
+    const drawChannel = (data: number[], color: string, alpha: number) => {
+      ctx.globalCompositeOperation = 'lighten'
+      ctx.fillStyle = color
+      ctx.globalAlpha = alpha
+
+      const barWidth = width / 256
+
+      for (let i = 0; i < 256; i++) {
+        const value = data[i]
+        const normalizedHeight = (value / maxValue) * height
+        const x = i * barWidth
+        const y = height - normalizedHeight
+
+        ctx.fillRect(x, y, barWidth, normalizedHeight)
+      }
+    }
+
+    // 밝기 (회색, 먼저 그림)
+    drawChannel(histogramData.luminance, '#ffffff', 0.5)
+
+    // RGB 채널 (블렌딩 모드로 겹쳐서 그림)
+    drawChannel(histogramData.red, '#ff0000', 0.7)
+    drawChannel(histogramData.green, '#00ff00', 0.7)
+    drawChannel(histogramData.blue, '#0000ff', 0.7)
+
+    // 리셋
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = 1.0
+  }, [histogramData])
 
   // Canvas에 이미지 렌더링 함수
   const renderImageToCanvas = useCallback(() => {
@@ -225,6 +343,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
         if (cachedImg) {
           currentImageRef.current = cachedImg
 
+          // 히스토그램 계산 (백그라운드)
+          const histogram = calculateHistogram(cachedImg)
+          setHistogramData(histogram)
+
           // 다음 프레임에서 렌더링 (DOM 업데이트 후)
           requestAnimationFrame(() => {
             renderImageToCanvas()
@@ -248,8 +370,16 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
     if (!imageUrl || !canvasRef.current || !containerRef.current) return
 
     const img = new Image()
+    // Tauri asset protocol은 CORS를 허용하므로 anonymous로 설정
+    img.crossOrigin = 'anonymous'
+
     img.onload = () => {
       currentImageRef.current = img
+
+      // 히스토그램 계산 (백그라운드)
+      const histogram = calculateHistogram(img)
+      setHistogramData(histogram)
+
       renderImageToCanvas()
       setImageLoaded(true)
     }
@@ -257,7 +387,14 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
       console.error('Failed to load image:', imageUrl)
     }
     img.src = imageUrl
-  }, [imageUrl, renderImageToCanvas])
+  }, [imageUrl, renderImageToCanvas, calculateHistogram])
+
+  // 히스토그램 데이터 변경 시 렌더링
+  useEffect(() => {
+    if (histogramData && showHistogram) {
+      renderHistogram()
+    }
+  }, [histogramData, showHistogram, renderHistogram])
 
   // 창 크기 변경 시 다시 렌더링 (ResizeObserver 사용)
   useEffect(() => {
@@ -330,16 +467,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
           <canvas ref={canvasRef} style={{ display: imageUrl ? 'block' : 'none' }} />
         </div>
 
-        {/* 히스토그램 오버레이 (우측 하단) */}
-        {showHistogram && (
-          <div className="absolute bottom-4 right-4 w-64 h-48 bg-neutral-800/90 border border-neutral-700 rounded-lg p-3 backdrop-blur-sm">
-            <div className="text-xs text-gray-400 mb-2">히스토그램</div>
-            <div className="flex items-end justify-center h-full text-gray-500 text-xs">
-              [구현 예정]
-            </div>
-          </div>
-        )}
-
         {/* 컨텍스트 메뉴 */}
         {contextMenu && (
           <div
@@ -370,10 +497,25 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
         )}
       </div>
 
-      {/* 촬영 정보 바 (하단 고정) */}
-      {showShootingInfo && metadata && (
-        <div className="h-12 px-4 flex items-center justify-center" style={{ fontSize: '16px' }}>
-          {/* 촬영 설정 (아이콘 + 값) */}
+      {/* 하단 정보 바 (히스토그램 + 촬영 정보) */}
+      {(showHistogram || (showShootingInfo && metadata)) && (
+        <div className="h-12 px-4 flex items-center justify-between relative" style={{ fontSize: '16px' }}>
+          {/* 좌측: 히스토그램 (위로 올라가는 구조) */}
+          <div className="flex items-center">
+            {showHistogram && (
+              <div className="absolute bottom-0 left-4 w-64 rounded-lg p-2" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', height: '80px' }}>
+                <canvas
+                  ref={histogramCanvasRef}
+                  width={256}
+                  height={64}
+                  className="w-full h-full"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* 우측: 촬영 설정 (아이콘 + 값) */}
+          {showShootingInfo && metadata && (
           <div className="flex items-center gap-2 text-gray-300">
             {/* 셔터 속도 */}
             {metadata.shutter_speed && (
@@ -448,6 +590,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
               </div>
             ) : null}
           </div>
+          )}
         </div>
       )}
     </div>
