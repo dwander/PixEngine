@@ -18,6 +18,8 @@ export function MetadataPanel() {
     { label: '초점 거리', value: metadata.focal_length },
     { label: '노출 보정', value: metadata.exposure_bias },
     { label: '플래시', value: metadata.flash },
+    { label: '측광 모드', value: metadata.metering_mode },
+    { label: '화이트밸런스', value: metadata.white_balance },
 
     // 이미지 정보
     {

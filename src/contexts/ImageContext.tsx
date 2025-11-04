@@ -22,6 +22,8 @@ export interface ExifMetadata {
   focal_length?: string;
   exposure_bias?: string;
   flash?: string;
+  metering_mode?: string;
+  white_balance?: string;
 
   // 날짜/시간
   date_time_original?: string;

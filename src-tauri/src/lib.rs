@@ -646,6 +646,8 @@ struct ExifMetadata {
     focal_length: Option<String>,
     exposure_bias: Option<String>,
     flash: Option<String>,
+    metering_mode: Option<String>,
+    white_balance: Option<String>,
 
     // 날짜/시간
     date_time_original: Option<String>,
@@ -798,12 +800,14 @@ async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
     };
 
     let format_aperture = |aperture_str: String| -> String {
-        // "f/2.8" 형식 유지 또는 "F2.8" -> "f/2.8" 변환
+        // "f/2.8" -> "2.8", "F2.8" -> "2.8", "2.8" -> "2.8"
         let trimmed = aperture_str.trim();
-        if trimmed.starts_with('f') || trimmed.starts_with('F') {
-            trimmed.to_lowercase()
+        if trimmed.starts_with("f/") || trimmed.starts_with("F/") {
+            trimmed[2..].to_string()
+        } else if trimmed.starts_with('f') || trimmed.starts_with('F') {
+            trimmed[1..].to_string()
         } else {
-            format!("f/{}", trimmed)
+            trimmed.to_string()
         }
     };
 
@@ -876,6 +880,8 @@ async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
         focal_length: get_field_string(exif::Tag::FocalLength).map(format_focal_length),
         exposure_bias: get_field_string(exif::Tag::ExposureBiasValue).map(format_exposure_bias),
         flash: get_field_string(exif::Tag::Flash),
+        metering_mode: get_field_string(exif::Tag::MeteringMode),
+        white_balance: get_field_string(exif::Tag::WhiteBalance),
 
         // 날짜/시간
         date_time_original,
