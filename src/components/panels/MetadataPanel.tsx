@@ -48,7 +48,6 @@ interface MetadataField {
 export function MetadataPanel() {
   const { currentPath } = useImageContext()
   const [metadata, setMetadata] = useState<ExifMetadata | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -59,7 +58,6 @@ export function MetadataPanel() {
     }
 
     const loadMetadata = async () => {
-      setIsLoading(true)
       setError(null)
 
       try {
@@ -71,43 +69,14 @@ export function MetadataPanel() {
         console.error('Failed to load EXIF metadata:', err)
         setError('EXIF 정보를 읽을 수 없습니다')
         setMetadata(null)
-      } finally {
-        setIsLoading(false)
       }
     }
 
     loadMetadata()
   }, [currentPath])
 
-  if (!currentPath) {
-    return (
-      <div className="flex items-center justify-center h-full bg-neutral-900 text-gray-400">
-        <div className="text-center">
-          <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">이미지를 선택하세요</p>
-        </div>
-      </div>
-    )
-  }
-
-  // 로딩 중일 때는 빈 화면 표시 (깜빡임 방지)
-  if (isLoading) {
-    return <div className="h-full bg-neutral-900" />
-  }
-
-  if (error || !metadata) {
-    return (
-      <div className="flex items-center justify-center h-full bg-neutral-900 text-gray-400">
-        <div className="text-center">
-          <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">{error || 'EXIF 정보 없음'}</p>
-        </div>
-      </div>
-    )
-  }
-
-  // 모든 필드를 하나의 배열로
-  const fields: MetadataField[] = [
+  // 모든 필드를 하나의 배열로 (metadata가 null이어도 빈 배열로 처리)
+  const fields: MetadataField[] = !metadata ? [] : [
     // 촬영 설정 (재정렬: 셔터속도, 조리개, ISO, 촛점거리, 노출보정)
     { label: '셔터 속도', value: metadata.shutter_speed },
     { label: '조리개', value: metadata.aperture },
@@ -150,32 +119,54 @@ export function MetadataPanel() {
   // 값이 있는 필드만 필터링
   const visibleFields = fields.filter((field) => field.value)
 
+  // 표시할 내용 결정
+  let content
+  if (!currentPath) {
+    content = (
+      <div className="text-center text-gray-400 py-8">
+        <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
+        <p className="text-sm">이미지를 선택하세요</p>
+      </div>
+    )
+  } else if (error) {
+    content = (
+      <div className="text-center text-gray-400 py-8">
+        <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
+        <p className="text-sm">{error}</p>
+      </div>
+    )
+  } else if (visibleFields.length === 0) {
+    content = (
+      <div className="text-center text-gray-400 py-8">
+        <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
+        <p className="text-sm">EXIF 정보가 없습니다</p>
+      </div>
+    )
+  } else {
+    content = (
+      <table className="w-full text-xs">
+        <tbody>
+          {visibleFields.map((field, index) => (
+            <tr
+              key={index}
+              className="border-b border-neutral-800 hover:bg-neutral-800/50"
+            >
+              <td className="py-2 pr-4 text-gray-400 whitespace-nowrap align-top">
+                {field.label}
+              </td>
+              <td className="py-2 text-gray-200 break-all">
+                {field.value}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+
   return (
     <div className="h-full bg-neutral-900 overflow-y-auto p-4">
-      {visibleFields.length === 0 ? (
-        <div className="text-center text-gray-400 py-8">
-          <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">EXIF 정보가 없습니다</p>
-        </div>
-      ) : (
-        <table className="w-full text-xs">
-          <tbody>
-            {visibleFields.map((field, index) => (
-              <tr
-                key={index}
-                className="border-b border-neutral-800 hover:bg-neutral-800/50"
-              >
-                <td className="py-2 pr-4 text-gray-400 whitespace-nowrap align-top">
-                  {field.label}
-                </td>
-                <td className="py-2 text-gray-200 break-all">
-                  {field.value}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {content}
     </div>
   )
 }
