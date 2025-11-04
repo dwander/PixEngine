@@ -215,7 +215,7 @@ export function FolderTreePanel() {
   };
 
   return (
-    <div className="h-full bg-neutral-900 overflow-auto p-2">
+    <div className="h-full bg-neutral-900 overflow-y-auto overflow-x-hidden py-2">
       {isLoading ? (
         <div className="flex flex-col items-center justify-center h-full text-gray-400">
           <HardDrive className="h-12 w-12 mb-2 opacity-50 animate-pulse" />
@@ -598,30 +598,37 @@ function FolderTreeItem({
   };
 
   return (
-    <div>
+    <div className="pr-1">
       <div
-        className={`flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer group ${
-          isCurrentFolder
-            ? 'bg-blue-900/30 border border-blue-500/50 hover:bg-blue-900/40'
-            : 'hover:bg-neutral-800'
-        }`}
-        style={{ paddingLeft: `${level * 14 + 6}px` }}
+        className="flex items-center cursor-pointer group"
         onClick={handleToggle}
         onContextMenu={handleContextMenu}
       >
-        {hasChildren ? (
-          isOpen ? (
-            <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ${isCurrentFolder ? 'text-blue-400' : ''}`} />
+        {/* 들여쓰기 공간 */}
+        <div style={{ width: `${level * 16}px` }} className="flex-shrink-0" />
+
+        {/* 실제 콘텐츠 영역 (선택 바가 여기서 시작) */}
+        <div
+          className={`flex items-center gap-1 pl-0.5 pr-1 py-0.5 rounded flex-1 min-w-0 ${
+            isCurrentFolder
+              ? 'bg-blue-900/30 border border-blue-500/50 hover:bg-blue-900/40'
+              : 'hover:bg-neutral-800'
+          }`}
+        >
+          {hasChildren ? (
+            isOpen ? (
+              <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ${isCurrentFolder ? 'text-blue-400' : ''}`} />
+            ) : (
+              <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ${isCurrentFolder ? 'text-blue-400' : ''}`} />
+            )
           ) : (
-            <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ${isCurrentFolder ? 'text-blue-400' : ''}`} />
-          )
-        ) : (
-          <span className="w-3.5" />
-        )}
-        {renderIcon()}
-        <span className={`text-xs flex-1 truncate ${isCurrentFolder ? 'text-blue-300 font-semibold' : 'text-gray-200'}`}>
-          {node.name}
-        </span>
+            <span className="w-3.5" />
+          )}
+          {renderIcon()}
+          <span className={`text-xs flex-1 truncate ${isCurrentFolder ? 'text-blue-300 font-semibold' : 'text-gray-200'}`}>
+            {node.name}
+          </span>
+        </div>
       </div>
       {isOpen && (
         <div>
