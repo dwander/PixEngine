@@ -60,12 +60,22 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
     canvas.style.width = `${displayWidth}px`
     canvas.style.height = `${displayHeight}px`
 
+    // 컨텍스트 초기화 (기존 transform 제거)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+
     // 고해상도 스케일 적용
     ctx.scale(dpr, dpr)
 
     // 이미지 그리기
     ctx.drawImage(img, 0, 0, displayWidth, displayHeight)
   }, [])
+
+  // 컨테이너 리사이즈 핸들러 (ResizeObserver용)
+  const handleResize = useCallback(() => {
+    if (currentImageRef.current) {
+      renderImageToCanvas()
+    }
+  }, [renderImageToCanvas])
 
   // 이미지 로딩 (캐시 우선)
   useEffect(() => {
@@ -132,19 +142,20 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
   // 창 크기 변경 시 다시 렌더링 (ResizeObserver 사용)
   useEffect(() => {
-    if (!currentImageRef.current || !containerRef.current) return
+    const container = containerRef.current
+    if (!container) return
 
     // ResizeObserver는 maximize/minimize를 포함한 모든 크기 변경을 감지
     const resizeObserver = new ResizeObserver(() => {
-      renderImageToCanvas()
+      handleResize()
     })
 
-    resizeObserver.observe(containerRef.current)
+    resizeObserver.observe(container)
 
     return () => {
       resizeObserver.disconnect()
     }
-  }, [renderImageToCanvas])
+  }, [handleResize])
 
   // 이미지 로드 완료 시 다음 큐 항목 처리
   useEffect(() => {
@@ -180,7 +191,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel() {
 
       {/* Canvas로 이미지 렌더링 - 완전 중앙 정렬 */}
       <div className="h-full flex items-center justify-center" style={{ padding: '5px' }}>
-        {imageUrl && <canvas ref={canvasRef} />}
+        <canvas ref={canvasRef} style={{ display: imageUrl ? 'block' : 'none' }} />
       </div>
     </div>
   )
