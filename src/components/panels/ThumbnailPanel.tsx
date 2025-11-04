@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Loader2, Check, ChevronDown } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
+import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
@@ -51,6 +52,7 @@ interface ThumbnailProgress {
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { imageList: images, loadImage, getCachedImage, metadata } = useImageContext()
+  const { lightMetadataMap } = useFolderContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -116,20 +118,27 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           break
         }
         case 'filesize': {
-          // metadata에서 file_size 가져오기 (현재 이미지의 metadata만 있음)
-          // TODO: 모든 이미지의 파일 크기를 가져와야 정확한 정렬 가능
-          compareResult = 0
+          const aMetadata = lightMetadataMap.get(a)
+          const bMetadata = lightMetadataMap.get(b)
+          const aSize = aMetadata?.file_size ?? 0
+          const bSize = bMetadata?.file_size ?? 0
+          compareResult = aSize - bSize
           break
         }
         case 'date_taken': {
-          // metadata에서 date_time_original 가져오기
-          // TODO: 모든 이미지의 촬영 날짜를 가져와야 정확한 정렬 가능
-          compareResult = 0
+          const aMetadata = lightMetadataMap.get(a)
+          const bMetadata = lightMetadataMap.get(b)
+          const aDate = aMetadata?.date_taken ?? ''
+          const bDate = bMetadata?.date_taken ?? ''
+          compareResult = aDate.localeCompare(bDate)
           break
         }
         case 'modified_time': {
-          // TODO: 모든 이미지의 수정 시간을 가져와야 정확한 정렬 가능
-          compareResult = 0
+          const aMetadata = lightMetadataMap.get(a)
+          const bMetadata = lightMetadataMap.get(b)
+          const aTime = aMetadata?.modified_time ?? ''
+          const bTime = bMetadata?.modified_time ?? ''
+          compareResult = aTime.localeCompare(bTime)
           break
         }
       }
@@ -138,7 +147,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     })
 
     return sorted
-  }, [images, sortField, sortOrder])
+  }, [images, sortField, sortOrder, lightMetadataMap])
 
   // 썸네일 크기 및 정렬 설정 store에서 로드
   useEffect(() => {

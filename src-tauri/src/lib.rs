@@ -907,6 +907,76 @@ async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
     })
 }
 
+// 경량 메타데이터 (정렬용)
+#[derive(Serialize)]
+struct LightMetadata {
+    path: String,
+    file_size: Option<u64>,
+    modified_time: Option<String>,
+    date_taken: Option<String>,
+}
+
+// 여러 이미지의 경량 메타데이터를 배치로 가져오기 (정렬용)
+#[tauri::command]
+async fn get_images_light_metadata(file_paths: Vec<String>) -> Result<Vec<LightMetadata>, String> {
+    use std::io::BufReader;
+    use rayon::prelude::*;
+
+    // 병렬로 메타데이터 추출 (Rayon 사용)
+    let results: Vec<LightMetadata> = file_paths
+        .par_iter()
+        .map(|path| {
+            // 파일 메타데이터 (크기, 수정시간)
+            let file_metadata = fs::metadata(path).ok();
+            let file_size = file_metadata.as_ref().map(|m| m.len());
+
+            let modified_time = file_metadata.as_ref().and_then(|m| {
+                m.modified().ok().and_then(|time| {
+                    use chrono::{DateTime, Utc};
+                    let datetime: DateTime<Utc> = time.into();
+                    Some(datetime.format("%Y-%m-%d %H:%M:%S").to_string())
+                })
+            });
+
+            // EXIF에서 촬영 날짜만 빠르게 추출
+            let date_taken = fs::File::open(path).ok().and_then(|file| {
+                let mut reader = BufReader::new(file);
+                let exif_reader = exif::Reader::new();
+                exif_reader.read_from_container(&mut reader).ok().and_then(|exif_data| {
+                    // DateTimeOriginal만 추출
+                    exif_data.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY)
+                        .and_then(|field| {
+                            if let exif::Value::Ascii(ref vec) = field.value {
+                                vec.first().and_then(|bytes| {
+                                    std::str::from_utf8(bytes).ok().and_then(|date_str| {
+                                        let trimmed = date_str.trim();
+                                        if let Some((date_part, time_part)) = trimmed.split_once(' ') {
+                                            let formatted_date = date_part.replace(':', "-");
+                                            Some(format!("{} {}", formatted_date, time_part))
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                })
+                            } else {
+                                None
+                            }
+                        })
+                })
+            });
+
+            LightMetadata {
+                path: path.clone(),
+                file_size,
+                modified_time,
+                date_taken,
+            }
+        })
+        .collect();
+
+    Ok(results)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -969,7 +1039,8 @@ pub fn run() {
             cancel_hq_thumbnail_generation,
             update_hq_viewport_paths,
             get_image_info,
-            get_exif_metadata
+            get_exif_metadata,
+            get_images_light_metadata
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

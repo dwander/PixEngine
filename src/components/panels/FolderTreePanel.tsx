@@ -286,7 +286,7 @@ function FolderTreeItem({
   onRemoveFavorite?: (path: string) => void;
   isFavorite?: (path: string) => boolean;
 }) {
-  const { setCurrentFolder, currentFolder } = useFolderContext();
+  const { setCurrentFolder, currentFolder, loadLightMetadata } = useFolderContext();
   const { loadImageList } = useImageContext();
   const [isOpen, setIsOpen] = useState(node.isOpen || false);
   const [children, setChildren] = useState<FolderNode[]>(node.children || []);
@@ -456,6 +456,9 @@ function FolderTreeItem({
         setCurrentFolder(node.path, imageFiles.length, totalSize);
         await loadImageList(imageFiles);
 
+        // 경량 메타데이터 로딩 (백그라운드)
+        loadLightMetadata(imageFiles).catch(err => console.error('Failed to load light metadata:', err));
+
         // 마지막 접근 경로 저장
         if (onFolderClick && node.treeId) {
           onFolderClick(node.path, node.treeId);
@@ -521,6 +524,9 @@ function FolderTreeItem({
 
           setCurrentFolder(node.path, imagePaths.length, totalSize);
           await loadImageList(imagePaths);
+
+          // 경량 메타데이터 로딩 (백그라운드)
+          loadLightMetadata(imagePaths).catch(err => console.error('Failed to load light metadata:', err));
 
           // 마지막 접근 경로 저장
           if (onFolderClick && node.treeId) {
