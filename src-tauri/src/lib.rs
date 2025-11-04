@@ -668,6 +668,10 @@ struct ExifMetadata {
     // 저작권
     copyright: Option<String>,
     artist: Option<String>,
+
+    // 파일 정보 (get_image_info에서 가져오던 것)
+    file_size: Option<u64>,
+    modified_time: Option<String>,
 }
 
 // EXIF 메타데이터 추출
@@ -839,6 +843,26 @@ async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
         }
     };
 
+    // 파일 메타데이터 가져오기
+    let file_metadata = fs::metadata(&file_path).ok();
+    let file_size = file_metadata.as_ref().map(|m| m.len());
+
+    // 수정 시간 가져오기
+    let modified_time = file_metadata.and_then(|metadata| {
+        use std::time::SystemTime;
+        use chrono::{DateTime, Local};
+
+        metadata.modified().ok().and_then(|time| {
+            time.duration_since(SystemTime::UNIX_EPOCH).ok().and_then(|duration| {
+                DateTime::from_timestamp(duration.as_secs() as i64, 0)
+                    .map(|datetime| {
+                        let local_time: DateTime<Local> = datetime.into();
+                        local_time.format("%Y-%m-%d %H:%M:%S").to_string()
+                    })
+            })
+        })
+    });
+
     Ok(ExifMetadata {
         // 카메라 정보
         camera_make: get_field_ascii(exif::Tag::Make),
@@ -876,6 +900,10 @@ async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
         // 저작권
         copyright: get_field_ascii(exif::Tag::Copyright),
         artist: get_field_ascii(exif::Tag::Artist),
+
+        // 파일 정보
+        file_size,
+        modified_time,
     })
 }
 

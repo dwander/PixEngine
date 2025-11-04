@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from "react";
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { logError } from '../lib/errorHandler';
 import { IMAGE_CACHE_SIZE, PRELOAD_PREVIOUS_COUNT, PRELOAD_NEXT_COUNT } from '../lib/constants';
 
@@ -8,11 +8,54 @@ interface ImageCacheEntry {
   timestamp: number;
 }
 
+// EXIF 메타데이터 인터페이스
+export interface ExifMetadata {
+  // 카메라 정보
+  camera_make?: string;
+  camera_model?: string;
+  lens_model?: string;
+
+  // 촬영 설정
+  iso?: string;
+  aperture?: string;
+  shutter_speed?: string;
+  focal_length?: string;
+  exposure_bias?: string;
+  flash?: string;
+
+  // 날짜/시간
+  date_time_original?: string;
+  date_time_digitized?: string;
+
+  // 이미지 정보
+  image_width?: number;
+  image_height?: number;
+  orientation?: string;
+  color_space?: string;
+
+  // GPS 정보
+  gps_latitude?: string;
+  gps_longitude?: string;
+  gps_altitude?: string;
+
+  // 소프트웨어
+  software?: string;
+
+  // 저작권
+  copyright?: string;
+  artist?: string;
+
+  // 추가 정보 (get_image_info에서 가져오는 것들)
+  file_size?: number;
+  modified_time?: string;
+}
+
 interface ImageContextType {
   currentPath: string | null;
   imageList: string[];
   currentIndex: number;
   isLoading: boolean;
+  metadata: ExifMetadata | null;
   loadImageList: (paths: string[]) => Promise<void>;
   loadImage: (path: string) => Promise<void>;
   goToIndex: (index: number) => Promise<void>;
@@ -28,6 +71,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
   const [imageList, setImageList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
+  const [metadata, setMetadata] = useState<ExifMetadata | null>(null);
 
   // 각 인스턴스별 캐시 (메모리 누수 방지)
   const imageCacheRef = useRef<Map<string, ImageCacheEntry>>(new Map());
@@ -116,6 +160,14 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         setCurrentIndex(index);
       }
 
+      // EXIF 메타데이터 로드 (백그라운드)
+      invoke<ExifMetadata>('get_exif_metadata', { filePath: path })
+        .then((data) => setMetadata(data))
+        .catch((error) => {
+          logError(error, 'Load EXIF metadata');
+          setMetadata(null);
+        });
+
     // 주변 이미지 프리로딩 (백그라운드)
     if (index !== -1) {
       const preloadPaths: string[] = [];
@@ -175,6 +227,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         imageList,
         currentIndex,
         isLoading,
+        metadata,
         loadImage,
         loadImageList,
         goToIndex,

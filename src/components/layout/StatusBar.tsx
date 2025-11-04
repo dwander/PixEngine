@@ -1,17 +1,6 @@
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useImageContext } from '../../contexts/ImageContext'
 import { theme } from '../../lib/theme'
-import { useState, useEffect } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-
-interface ImageInfo {
-  path: string
-  width: number
-  height: number
-  file_size: number
-  modified_time?: string
-  date_taken?: string
-}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0B'
@@ -35,30 +24,7 @@ function getFolderName(path: string | null): string {
 
 export function StatusBar() {
   const { currentFolder, imageCount, totalSize } = useFolderContext()
-  const { currentPath, currentIndex, imageList } = useImageContext()
-  const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null)
-
-  // 현재 이미지 정보 로드
-  useEffect(() => {
-    if (!currentPath) {
-      setImageInfo(null)
-      return
-    }
-
-    const loadImageInfo = async () => {
-      try {
-        const info = await invoke<ImageInfo>('get_image_info', {
-          filePath: currentPath,
-        })
-        setImageInfo(info)
-      } catch (error) {
-        console.error('Failed to load image info for status bar:', error)
-        setImageInfo(null)
-      }
-    }
-
-    loadImageInfo()
-  }, [currentPath])
+  const { currentPath, currentIndex, imageList, metadata } = useImageContext()
 
   if (!currentFolder || imageCount === 0) {
     return (
@@ -86,25 +52,29 @@ export function StatusBar() {
         )}
 
         {/* 현재 이미지 정보 */}
-        {imageInfo && (
+        {metadata && (
           <>
             <span className="flex items-center gap-1">
               <span className="text-gray-300 font-medium truncate max-w-xs" title={getFileName(currentPath)}>
                 {getFileName(currentPath)}
               </span>
-              <span className="text-gray-500">({formatBytes(imageInfo.file_size)})</span>
+              {metadata.file_size && (
+                <span className="text-gray-500">({formatBytes(metadata.file_size)})</span>
+              )}
             </span>
 
             <span className="text-gray-700">|</span>
 
-            <span className="text-gray-400">
-              {imageInfo.width} x {imageInfo.height}
-            </span>
+            {metadata.image_width && metadata.image_height && (
+              <span className="text-gray-400">
+                {metadata.image_width} x {metadata.image_height}
+              </span>
+            )}
 
-            {imageInfo.date_taken && (
+            {metadata.date_time_original && (
               <>
                 <span className="text-gray-700">|</span>
-                <span className="text-gray-400">{imageInfo.date_taken}</span>
+                <span className="text-gray-400">{metadata.date_time_original}</span>
               </>
             )}
           </>

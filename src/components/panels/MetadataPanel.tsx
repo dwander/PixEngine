@@ -1,44 +1,5 @@
-import { useEffect, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
 import { Info } from 'lucide-react'
-
-interface ExifMetadata {
-  // 카메라 정보
-  camera_make?: string
-  camera_model?: string
-  lens_model?: string
-
-  // 촬영 설정
-  iso?: string
-  aperture?: string
-  shutter_speed?: string
-  focal_length?: string
-  exposure_bias?: string
-  flash?: string
-
-  // 날짜/시간
-  date_time_original?: string
-  date_time_digitized?: string
-
-  // 이미지 정보
-  image_width?: number
-  image_height?: number
-  orientation?: string
-  color_space?: string
-
-  // GPS 정보
-  gps_latitude?: string
-  gps_longitude?: string
-  gps_altitude?: string
-
-  // 소프트웨어
-  software?: string
-
-  // 저작권
-  copyright?: string
-  artist?: string
-}
 
 interface MetadataField {
   label: string
@@ -46,34 +7,7 @@ interface MetadataField {
 }
 
 export function MetadataPanel() {
-  const { currentPath } = useImageContext()
-  const [metadata, setMetadata] = useState<ExifMetadata | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!currentPath) {
-      setMetadata(null)
-      setError(null)
-      return
-    }
-
-    const loadMetadata = async () => {
-      setError(null)
-
-      try {
-        const data = await invoke<ExifMetadata>('get_exif_metadata', {
-          filePath: currentPath,
-        })
-        setMetadata(data)
-      } catch (err) {
-        console.error('Failed to load EXIF metadata:', err)
-        setError('EXIF 정보를 읽을 수 없습니다')
-        setMetadata(null)
-      }
-    }
-
-    loadMetadata()
-  }, [currentPath])
+  const { currentPath, metadata } = useImageContext()
 
   // 모든 필드를 하나의 배열로 (metadata가 null이어도 빈 배열로 처리)
   const fields: MetadataField[] = !metadata ? [] : [
@@ -126,13 +60,6 @@ export function MetadataPanel() {
       <div className="text-center text-gray-400 py-8">
         <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
         <p className="text-sm">이미지를 선택하세요</p>
-      </div>
-    )
-  } else if (error) {
-    content = (
-      <div className="text-center text-gray-400 py-8">
-        <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
-        <p className="text-sm">{error}</p>
       </div>
     )
   } else if (visibleFields.length === 0) {
