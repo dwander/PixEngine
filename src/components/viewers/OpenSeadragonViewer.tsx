@@ -40,8 +40,11 @@ export function OpenSeadragonViewer({
         prefixUrl: 'https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/',
         showNavigationControl: false, // Hide default controls
         showNavigator: false,
-        animationTime: 0.3,
-        blendTime: 0.1,
+        // Instant image transitions - no animations or blending
+        animationTime: 0,
+        blendTime: 0,
+        springStiffness: 100,
+        immediateRender: true,
         constrainDuringPan: true,
         maxZoomPixelRatio: 2,
         minZoomLevel: 0.8,
@@ -181,23 +184,39 @@ export function OpenSeadragonViewer({
     if (!viewer || !imageUrl) return
 
     try {
-      // Clear existing image
-      viewer.world.removeAll()
-
-      // Add new image as simple image (non-tiled for now)
+      // Add new image WITHOUT clearing existing image (for seamless transition)
       viewer.addSimpleImage({
         url: imageUrl,
+        opacity: 0, // Start invisible
         success: () => {
           console.log('Image loaded successfully')
 
-          // Fit image to viewport
-          viewer.viewport.goHome(true)
+          // Get the newly added image (last item in world)
+          const newImage = viewer.world.getItemAt(viewer.world.getItemCount() - 1)
 
-          // Draw grid overlay
-          setTimeout(() => {
-            drawGridOverlay()
-            onRenderComplete?.()
-          }, 100)
+          // Immediately show new image and remove old one
+          if (newImage) {
+            // Set full opacity instantly (no fade)
+            newImage.setOpacity(1)
+
+            // Remove all other images except the new one
+            const itemCount = viewer.world.getItemCount()
+            for (let i = itemCount - 1; i >= 0; i--) {
+              const item = viewer.world.getItemAt(i)
+              if (item !== newImage) {
+                viewer.world.removeItem(item)
+              }
+            }
+
+            // Fit image to viewport without animation
+            viewer.viewport.goHome(true)
+
+            // Draw grid overlay
+            setTimeout(() => {
+              drawGridOverlay()
+              onRenderComplete?.()
+            }, 50)
+          }
         },
         error: (event) => {
           console.error('Failed to load image:', event)
