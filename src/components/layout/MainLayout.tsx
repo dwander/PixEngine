@@ -12,8 +12,8 @@ import { ImageViewerPanel as ImageViewerPanelComponent } from "../panels/ImageVi
 import { MetadataPanel as MetadataPanelComponent } from "../panels/MetadataPanel";
 
 // 패널 래퍼 컴포넌트
-function ImageViewerPanelWrapper(props: IDockviewPanelProps<{ gridType?: 'none' | '3div' | '6div' }>) {
-  return <ImageViewerPanelComponent gridType={props.params?.gridType} />;
+function ImageViewerPanelWrapper(props: IDockviewPanelProps<{ gridType?: 'none' | '3div' | '6div'; isFullscreenMode?: boolean; onExitFullscreen?: () => void }>) {
+  return <ImageViewerPanelComponent gridType={props.params?.gridType} isFullscreenMode={props.params?.isFullscreenMode} onExitFullscreen={props.params?.onExitFullscreen} />;
 }
 
 function FolderTreePanelWrapper(_props: IDockviewPanelProps) {
@@ -44,9 +44,11 @@ interface MainLayoutProps {
   }) => void;
   togglePanelId?: string | null;
   gridType?: 'none' | '3div' | '6div';
+  isFullscreenViewer?: boolean;
+  onExitFullscreenViewer?: () => void;
 }
 
-export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 'none' }: MainLayoutProps) {
+export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 'none', isFullscreenViewer = false, onExitFullscreenViewer }: MainLayoutProps) {
   const api = useRef<DockviewReadyEvent | null>(null);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
   const panelSizesBeforeDragRef = useRef<Map<string, { width: number; height: number }>>(new Map());
@@ -112,9 +114,29 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
 
     const centerPanel = api.current.api.getPanel('center');
     if (centerPanel) {
-      centerPanel.api.updateParameters({ gridType });
+      centerPanel.api.updateParameters({ gridType, isFullscreenMode: isFullscreenViewer, onExitFullscreen: onExitFullscreenViewer });
     }
-  }, [gridType]);
+  }, [gridType, isFullscreenViewer, onExitFullscreenViewer]);
+
+  // 전체화면 뷰어 모드: center 패널을 maximize/restore
+  useEffect(() => {
+    if (!api.current) return;
+
+    const centerPanel = api.current.api.getPanel('center');
+    if (!centerPanel) return;
+
+    if (isFullscreenViewer) {
+      // 전체화면 모드: 패널 maximize
+      if (!centerPanel.api.isMaximized()) {
+        centerPanel.api.maximize();
+      }
+    } else {
+      // 일반 모드: 패널 restore
+      if (centerPanel.api.isMaximized()) {
+        centerPanel.api.exitMaximized();
+      }
+    }
+  }, [isFullscreenViewer]);
 
   const onReady = async (event: DockviewReadyEvent) => {
     api.current = event;

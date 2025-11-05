@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
-import { useFolderContext } from '../../contexts/FolderContext'
-import { Check } from 'lucide-react'
+import { Check, Shrink } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 
@@ -96,17 +95,15 @@ interface HistogramData {
 
 interface ImageViewerPanelProps {
   gridType?: 'none' | '3div' | '6div';
+  isFullscreenMode?: boolean;
+  onExitFullscreen?: () => void;
 }
 
-export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'none' }: ImageViewerPanelProps) {
+export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'none', isFullscreenMode = false, onExitFullscreen }: ImageViewerPanelProps) {
   const { currentPath, getCachedImage, metadata } = useImageContext()
-  const { imageFiles } = useFolderContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [_imageLoaded, setImageLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  // 현재 이미지 인덱스 계산
-  const currentIndex = currentPath ? imageFiles.indexOf(currentPath) : -1
   const currentImageRef = useRef<HTMLImageElement | null>(null)
   const histogramCanvasRef = useRef<HTMLCanvasElement>(null)
   const [histogramData, setHistogramData] = useState<HistogramData | null>(null)
@@ -398,11 +395,18 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               )}
             </div>
           )}
-          {/* 우측: 이미지 인덱스 */}
-          {imageFiles.length > 0 && currentIndex >= 0 && (
-            <div>
-              {currentIndex + 1} / {imageFiles.length}
-            </div>
+          {/* 우측: 전체화면 모드일 때 복귀 버튼 */}
+          {isFullscreenMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExitFullscreen?.();
+              }}
+              className="p-2 hover:bg-neutral-700/50 rounded-lg transition-colors"
+              aria-label="전체화면 종료"
+            >
+              <Shrink size={20} className="text-neutral-300" />
+            </button>
           )}
         </div>
 

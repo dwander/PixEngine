@@ -39,6 +39,9 @@ function App() {
     return (saved as 'none' | '3div' | '6div') || 'none';
   });
 
+  // 전체화면 뷰어 상태 관리
+  const [isFullscreenViewer, setIsFullscreenViewer] = useState(false);
+
   const handleTogglePanel = useCallback((panelId: string) => {
     setTogglePanelId(panelId);
     // 상태 즉시 업데이트 (낙관적 업데이트)
@@ -64,18 +67,26 @@ function App() {
     localStorage.setItem('imageViewer.gridType', gridType);
   }, [gridType]);
 
+  // 전체화면 뷰어 토글 핸들러
+  const handleToggleFullscreenViewer = useCallback(() => {
+    setIsFullscreenViewer(prev => !prev);
+  }, []);
+
   return (
     <ErrorBoundary>
       <FolderProvider>
         <ImageProvider>
           <div className={`flex flex-col h-screen ${theme.background.primary}`}>
             {/* 커스텀 타이틀바 */}
-            <TitleBar
-              onTogglePanel={handleTogglePanel}
-              visiblePanels={visiblePanels}
-              onToggleGrid={handleToggleGrid}
-              activeGrid={gridType}
-            />
+            {!isFullscreenViewer && (
+              <TitleBar
+                onTogglePanel={handleTogglePanel}
+                visiblePanels={visiblePanels}
+                onToggleGrid={handleToggleGrid}
+                activeGrid={gridType}
+                onToggleFullscreenViewer={handleToggleFullscreenViewer}
+              />
+            )}
 
             {/* 메인 레이아웃 (dockview) */}
             <main className="flex-1 overflow-hidden">
@@ -83,11 +94,13 @@ function App() {
                 onPanelVisibilityChange={handlePanelVisibilityChange}
                 togglePanelId={togglePanelId}
                 gridType={gridType}
+                isFullscreenViewer={isFullscreenViewer}
+                onExitFullscreenViewer={handleToggleFullscreenViewer}
               />
             </main>
 
             {/* 상태 표시 영역 */}
-            <StatusBar />
+            {!isFullscreenViewer && <StatusBar />}
           </div>
         </ImageProvider>
       </FolderProvider>
