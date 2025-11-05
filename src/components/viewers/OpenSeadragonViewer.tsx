@@ -48,6 +48,10 @@ export function OpenSeadragonViewer({
         visibilityRatio: 1,
         zoomPerScroll: 1.2,
         defaultZoomLevel: 0,
+        // Disable WebGL - use pure Canvas 2D only
+        drawer: 'canvas',
+        // Cross-origin policy for local files
+        crossOriginPolicy: false,
         gestureSettingsMouse: {
           clickToZoom: false, // Disable click to zoom
           dblClickToZoom: true
@@ -228,22 +232,21 @@ export function OpenSeadragonViewer({
     const container = containerRef.current
     if (!viewer || !container) return
 
-    // Check if viewer is fully initialized
-    if (!viewer.viewport || !viewer.viewport.getContainerSize) return
-
-    // Update viewer size
+    // Update container size - OpenSeadragon will auto-detect the change
     container.style.width = `${containerWidth}px`
     container.style.height = `${containerHeight}px`
 
-    // Trigger viewer resize (no arguments needed)
-    try {
-      viewer.viewport.resize()
-    } catch (error) {
-      console.warn('Failed to resize viewport:', error)
-    }
+    // Wait for DOM update, then manually update viewport if needed
+    const timer = setTimeout(() => {
+      if (viewer.viewport) {
+        // OpenSeadragon's updateViewport will handle the resize
+        viewer.viewport.applyConstraints()
+      }
+      // Redraw grid after resize
+      drawGridOverlay()
+    }, 100)
 
-    // Redraw grid
-    setTimeout(drawGridOverlay, 50)
+    return () => clearTimeout(timer)
   }, [containerWidth, containerHeight, drawGridOverlay])
 
   return (
