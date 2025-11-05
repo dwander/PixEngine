@@ -60,15 +60,27 @@ function getWhiteBalanceIcon(wb: string | undefined): string {
 function getFlashIcon(flash: string | undefined): string {
   if (!flash) return ''
   const lowerFlash = flash.toLowerCase()
-  if (lowerFlash.includes('not fired') || lowerFlash.includes('no flash') || lowerFlash.includes('off')) {
+
+  // 발광하지 않음: "not fired, no return light detection"으로 시작
+  if (lowerFlash.startsWith('not fired') && lowerFlash.includes('no return')) {
     return '/icons/Flash_off.svg'
   }
-  if (lowerFlash.includes('fired') && !lowerFlash.includes('no return')) {
+
+  // TTL 발광: "fired, return light detected, forced"
+  if (lowerFlash.includes('fired') && lowerFlash.includes('return light detected') && lowerFlash.includes('forced')) {
     return '/icons/flash_ttl.svg'
   }
+
+  // 강제 발광: "fired, return light not detected, forced"
+  if (lowerFlash.includes('fired') && lowerFlash.includes('return light not detected') && lowerFlash.includes('forced')) {
+    return '/icons/flash_on.svg'
+  }
+
+  // 기타 발광 상태
   if (lowerFlash.includes('fired')) {
     return '/icons/flash_on.svg'
   }
+
   return ''
 }
 
