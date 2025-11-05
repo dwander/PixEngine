@@ -120,12 +120,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   const gridCanvasRef = useRef<HTMLCanvasElement>(null)
 
   // WebGL support detection and renderer selection
-  // TODO: Pixi.js renderer disabled due to texture loading issues and app freezing
-  // Force Canvas 2D fallback until issues are resolved
   const [usePixiRenderer, setUsePixiRenderer] = useState<boolean>(() => {
     const webglSupported = isWebGLSupported()
     console.log('WebGL supported:', webglSupported)
-    return false // Temporarily disabled - Pixi.js causing render failures and freezing
+    return webglSupported // Re-enabled with Texture.from() instead of Assets API
   })
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 

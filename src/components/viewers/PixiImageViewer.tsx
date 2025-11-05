@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react'
-import { Application, Sprite, Texture, Graphics, Assets } from 'pixi.js'
+import { Application, Sprite, Texture, Graphics } from 'pixi.js'
 
 interface PixiImageViewerProps {
   imageUrl: string | null
@@ -82,12 +82,11 @@ export function PixiImageViewer({
     return () => {
       mounted = false
 
-      // Unload current texture if any
-      const currentUrl = currentImageUrlRef.current
-      if (currentUrl) {
-        Assets.unload(currentUrl).catch(err => {
-          console.warn('Failed to unload texture on cleanup:', err)
-        })
+      // Destroy current texture if any
+      const texture = imageTextureRef.current
+      if (texture) {
+        texture.destroy(true)
+        imageTextureRef.current = null
       }
 
       const app = pixiAppRef.current
@@ -97,7 +96,6 @@ export function PixiImageViewer({
       pixiAppRef.current = null
       spriteRef.current = null
       gridGraphicsRef.current = null
-      imageTextureRef.current = null
       currentImageUrlRef.current = null
     }
   }, [])
@@ -180,17 +178,17 @@ export function PixiImageViewer({
 
     ;(async () => {
       try {
-        // Unload previous texture using Assets.unload
-        const prevUrl = currentImageUrlRef.current
-        if (prevUrl && imageTextureRef.current) {
-          await Assets.unload(prevUrl)
+        // Destroy previous texture manually
+        const prevTexture = imageTextureRef.current
+        if (prevTexture) {
+          prevTexture.destroy(true)
           imageTextureRef.current = null
         }
 
-        // Load texture
-        const texture = await Assets.load(imageUrl)
+        // Load texture using Texture.from() instead of Assets API
+        const texture = await Texture.from(imageUrl)
         if (cancelled) {
-          await Assets.unload(imageUrl)
+          texture.destroy(true)
           return
         }
 
