@@ -35,7 +35,9 @@ export function KonvaImageViewer({
   const [currentZoom, setCurrentZoom] = useState<number>(0) // Current zoom scale (0 = fit)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null)
   const [showZoomIndicator, setShowZoomIndicator] = useState(false)
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false)
   const zoomIndicatorTimeoutRef = useRef<number | null>(null)
   const stageRef = useRef<Konva.Stage>(null)
   const layerRef = useRef<Konva.Layer>(null)
@@ -345,7 +347,7 @@ export function KonvaImageViewer({
   }, [image, gridType, imageScale])
 
   // Zoom in/out function with position preservation
-  const zoom = useCallback((direction: 'in' | 'out') => {
+  const zoom = useCallback((direction: 'in' | 'out', mouseX?: number, mouseY?: number) => {
     if (!image || zoomSteps.current.length === 0) return
 
     const oldZoom = currentZoom
@@ -361,17 +363,17 @@ export function KonvaImageViewer({
       const oldScale = zoomSteps.current[oldZoom]
       const newScale = zoomSteps.current[newZoom]
 
-      // Calculate viewport center in image coordinates
-      const viewportCenterX = containerWidth / 2
-      const viewportCenterY = containerHeight / 2
+      // Use mouse position if provided, otherwise use viewport center
+      const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
+      const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
 
-      // Convert viewport center to image coordinates (before zoom)
-      const imageCenterX = (viewportCenterX - imageScale.x) / oldScale
-      const imageCenterY = (viewportCenterY - imageScale.y) / oldScale
+      // Convert zoom point to image coordinates (before zoom)
+      const imagePointX = (zoomPointX - imageScale.x) / oldScale
+      const imagePointY = (zoomPointY - imageScale.y) / oldScale
 
-      // Calculate new position to keep the same point at viewport center
-      const newX = viewportCenterX - imageCenterX * newScale
-      const newY = viewportCenterY - imageCenterY * newScale
+      // Calculate new position to keep the same point at zoom point
+      const newX = zoomPointX - imagePointX * newScale
+      const newY = zoomPointY - imagePointY * newScale
 
       // Mark that zoom is handling the position
       isZoomingRef.current = true
@@ -379,7 +381,7 @@ export function KonvaImageViewer({
       // Update zoom level
       setCurrentZoom(newZoom)
 
-      // Update position to maintain center point
+      // Update position to maintain zoom point
       setImageScale(prev => ({
         ...prev,
         x: newX,
@@ -445,9 +447,14 @@ export function KonvaImageViewer({
     }
   }, [])
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts and Ctrl key state
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Track Ctrl key state
+      if (e.key === 'Control') {
+        setIsCtrlPressed(true)
+      }
+
       // ESC: Reset to fit-to-screen
       if (e.key === 'Escape') {
         e.preventDefault()
@@ -483,40 +490,95 @@ export function KonvaImageViewer({
       }
     }
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // Track Ctrl key state
+      if (e.key === 'Control') {
+        setIsCtrlPressed(false)
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
     }
   }, [zoom, pan, isFitToScreen, resetToFit])
 
-  // Handle drag start
-  const handleDragStart = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (isFitToScreen()) return // No panning in fit-to-screen mode
+  // Handle mouse down
+  const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage()
+    if (!stage) return
 
-    setIsDragging(true)
-    setDragStart({
-      x: e.evt.clientX - imageScale.x,
-      y: e.evt.clientY - imageScale.y
-    })
-  }, [isFitToScreen, imageScale])
+    const pointerPos = stage.getPointerPosition()
+    if (!pointerPos) return
 
-  // Handle drag move
-  const handleDragMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!isDragging || isFitToScreen()) return
+    // Store mouse down position
+    setMouseDownPos({ x: pointerPos.x, y: pointerPos.y })
 
-    const newX = e.evt.clientX - dragStart.x
-    const newY = e.evt.clientY - dragStart.y
+    // If zoomed in and not Ctrl pressed, prepare for dragging
+    if (!isFitToScreen() && !isCtrlPressed) {
+      setDragStart({
+        x: e.evt.clientX - imageScale.x,
+        y: e.evt.clientY - imageScale.y
+      })
+    }
+  }, [isFitToScreen, isCtrlPressed, imageScale])
 
-    setImageScale(prev => ({
-      ...prev,
-      x: newX,
-      y: newY
-    }))
-  }, [isDragging, isFitToScreen, dragStart])
+  // Handle mouse move
+  const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!mouseDownPos) return
 
-  // Handle drag end
-  const handleDragEnd = useCallback(() => {
+    const stage = e.target.getStage()
+    if (!stage) return
+
+    const pointerPos = stage.getPointerPosition()
+    if (!pointerPos) return
+
+    // Check if moved beyond threshold (5 pixels)
+    const dx = Math.abs(pointerPos.x - mouseDownPos.x)
+    const dy = Math.abs(pointerPos.y - mouseDownPos.y)
+
+    if (dx > 5 || dy > 5) {
+      if (!isFitToScreen() && !isCtrlPressed) {
+        setIsDragging(true)
+      }
+    }
+
+    // If dragging, update position
+    if (isDragging) {
+      const newX = e.evt.clientX - dragStart.x
+      const newY = e.evt.clientY - dragStart.y
+      setImageScale(prev => ({ ...prev, x: newX, y: newY }))
+    }
+  }, [mouseDownPos, isDragging, isFitToScreen, isCtrlPressed, dragStart])
+
+  // Handle mouse up
+  const handleMouseUp = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (isDragging) {
+      setIsDragging(false)
+    } else if (mouseDownPos) {
+      // This was a click, not a drag - perform zoom
+      const stage = e.target.getStage()
+      if (!stage) return
+
+      const pointerPos = stage.getPointerPosition()
+      if (!pointerPos) return
+
+      if (isCtrlPressed) {
+        zoom('out', pointerPos.x, pointerPos.y)
+      } else {
+        zoom('in', pointerPos.x, pointerPos.y)
+      }
+    }
+
+    setMouseDownPos(null)
+  }, [isDragging, mouseDownPos, isCtrlPressed, zoom])
+
+  // Handle mouse leave
+  const handleMouseLeave = useCallback(() => {
     setIsDragging(false)
+    setMouseDownPos(null)
   }, [])
 
   // Set high-quality image smoothing and optional hardware acceleration
@@ -566,16 +628,22 @@ export function KonvaImageViewer({
         height={containerHeight}
         pixelRatio={window.devicePixelRatio || 1}
         onWheel={handleWheel}
-        onMouseDown={handleDragStart}
-        onMouseMove={handleDragMove}
-        onMouseUp={handleDragEnd}
-        onMouseLeave={handleDragEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
         style={{
           backgroundColor: '#171717',
           display: 'block',
           maxWidth: '100%',
           maxHeight: '100%',
-          cursor: isDragging ? 'grabbing' : (!isFitToScreen() ? 'grab' : 'default')
+          cursor: isDragging
+            ? 'grabbing'
+            : !isFitToScreen() && !isCtrlPressed
+              ? 'grab'
+              : isCtrlPressed
+                ? 'zoom-out'
+                : 'zoom-in'
         }}
       >
         <Layer
