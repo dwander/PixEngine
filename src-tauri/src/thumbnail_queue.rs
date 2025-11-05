@@ -18,8 +18,10 @@ lazy_static! {
 }
 
 // HQ 썸네일 생성 상수
-/// HQ 썸네일 최대 동시 생성 개수
-const HQ_MAX_CONCURRENT: usize = 3;
+/// HQ 썸네일 최대 동시 생성 개수 (CPU 코어의 절반)
+fn get_hq_max_concurrent() -> usize {
+    (num_cpus::get() / 2).max(1)
+}
 /// 유휴 시간 감지 임계값 (밀리초)
 const IDLE_THRESHOLD_MS: u64 = 3000;
 
@@ -332,9 +334,9 @@ pub async fn start_hq_thumbnail_worker(app_handle: AppHandle, image_paths: Vec<S
             let is_idle = idle_detector::should_generate_hq(IDLE_THRESHOLD_MS);
 
             if is_idle {
-                // 유휴 상태: 뷰포트 항목 우선, 최대 3개 병렬 처리
+                // 유휴 상태: 뷰포트 항목 우선, 최대 CPU 코어/2개 병렬 처리
                 let viewport = HQ_VIEWPORT_PATHS.read().await;
-                let batch_size = HQ_MAX_CONCURRENT.min(remaining.len());
+                let batch_size = get_hq_max_concurrent().min(remaining.len());
 
                 let mut batch = Vec::new();
 

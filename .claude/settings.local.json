@@ -8,7 +8,9 @@
       "Bash(git commit:*)",
       "Bash(npm run check:*)",
       "Bash(npm run:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(cargo build:*)",
+      "Bash(Select-Object -Last 50)"
     ],
     "deny": [],
     "ask": []

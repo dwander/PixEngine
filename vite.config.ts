@@ -16,7 +16,7 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    host: host || "127.0.0.1",  // IPv4 강제 (IPv6 권한 문제 방지)
     hmr: host
       ? {
           protocol: "ws",

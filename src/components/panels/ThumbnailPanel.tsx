@@ -58,6 +58,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [hqProgress, setHqProgress] = useState<ThumbnailProgress | null>(null)
   const [isGeneratingHq, setIsGeneratingHq] = useState(false)
+  const [hqEnabled, setHqEnabled] = useState(false) // HQ 썸네일 생성 체크박스 상태
+  const [hqClassification, setHqClassification] = useState<{ existing: string[]; missing: string[] } | null>(null) // HQ 썸네일 분류 결과
   // const [selectedImage, setSelectedImage] = useState<string | null>(null) // 임시 비활성화
   const [thumbnailSize, setThumbnailSize] = useState(THUMBNAIL_SIZE_DEFAULT)
   const [isVertical, setIsVertical] = useState(true)
@@ -682,6 +684,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         await invoke('cancel_hq_thumbnail_generation')
         setIsGeneratingHq(false)
         setHqProgress(null)
+        setHqEnabled(false)
+        setHqClassification(null)
 
         setIsGenerating(true)
         setShowProgressIndicator(true)
@@ -717,7 +721,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     const unlistenAllCompleted = listen('thumbnail-all-completed', async () => {
       setIsGenerating(false)
 
-      // EXIF 썸네일 생성 완료 후 HQ 썸네일 처리
+      // EXIF 썸네일 생성 완료 후 HQ 썸네일 분류만 수행 (자동 생성 X)
       try {
         // 1. HQ 썸네일 분류 (기존/신규)
         const classification = await invoke<{ existing: string[]; missing: string[] }>(
@@ -731,34 +735,20 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           `HQ thumbnails: ${classification.existing.length} existing, ${classification.missing.length} missing`
         )
 
-        setIsGeneratingHq(true)
-        setHqProgress({ completed: 0, total: imageFiles.length, current_path: '' })
+        // 분류 결과 저장
+        setHqClassification(classification)
 
-        // 2. 기존 HQ 썸네일 즉시 로드 (유휴 시간 없음)
+        // 2. 기존 HQ 썸네일만 즉시 로드 (유휴 시간 없음)
         if (classification.existing.length > 0) {
           await invoke('load_existing_hq_thumbnails', {
             imagePaths: classification.existing,
           })
         }
 
-        // 3. 신규 HQ 썸네일 생성 시작 (유휴 시간 대기)
-        if (classification.missing.length > 0) {
-          await invoke('start_hq_thumbnail_generation', {
-            imagePaths: classification.missing,
-          })
-        } else {
-          // 모두 기존 HQ라면 로드만 하면 됨
-          setIsGeneratingHq(false)
-          // 로딩 완료 후 2초 뒤에 progress indicator 숨김
-          setTimeout(() => {
-            setShowProgressIndicator(false)
-            setProgress(null)
-            setHqProgress(null)
-          }, 2000)
-        }
+        // 3. 모든 HQ 썸네일이 이미 존재하면 체크박스 표시 안 함
+        // missing이 없으면 추가 생성 불필요
       } catch (error) {
-        console.error('Failed to start HQ thumbnail generation:', error)
-        setIsGeneratingHq(false)
+        console.error('Failed to classify HQ thumbnails:', error)
       }
     })
 
@@ -777,6 +767,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
     const unlistenHqAllCompleted = listen('thumbnail-hq-all-completed', () => {
       setIsGeneratingHq(false)
+      setHqEnabled(false)
+      // HQ 썸네일 모두 생성 완료 - missing 비우기 (체크박스 숨김)
+      if (hqClassification) {
+        setHqClassification({ existing: [...hqClassification.existing, ...hqClassification.missing], missing: [] })
+      }
       // 로딩 완료 후 2초 뒤에 progress indicator 숨김
       setTimeout(() => {
         setShowProgressIndicator(false)
@@ -787,6 +782,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
     const unlistenHqCancelled = listen('thumbnail-hq-cancelled', () => {
       setIsGeneratingHq(false)
+      setHqEnabled(false)
     })
 
     const unlistenHqExistingLoaded = listen('thumbnail-hq-existing-loaded', () => {
@@ -804,6 +800,36 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       unlistenHqExistingLoaded.then((fn) => fn())
     }
   }, [imageFiles])
+
+  // HQ 썸네일 생성 토글 핸들러
+  const handleHqToggle = async (enabled: boolean) => {
+    setHqEnabled(enabled)
+
+    if (enabled && hqClassification) {
+      // 체크: HQ 썸네일 생성 시작
+      if (hqClassification.missing.length > 0) {
+        try {
+          setIsGeneratingHq(true)
+          setHqProgress({ completed: hqClassification.existing.length, total: imageFiles.length, current_path: '' })
+
+          await invoke('start_hq_thumbnail_generation', {
+            imagePaths: hqClassification.missing,
+          })
+        } catch (error) {
+          console.error('Failed to start HQ thumbnail generation:', error)
+          setIsGeneratingHq(false)
+        }
+      }
+    } else {
+      // 체크 해제: HQ 썸네일 생성 중단
+      try {
+        await invoke('cancel_hq_thumbnail_generation')
+        setIsGeneratingHq(false)
+      } catch (error) {
+        console.error('Failed to cancel HQ thumbnail generation:', error)
+      }
+    }
+  }
 
   // 이미지가 없을 때
   if (imageFiles.length === 0) {
@@ -1105,6 +1131,21 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                     }
                   </span>
                 </>
+              )}
+
+              {/* HQ 썸네일 생성 체크박스: EXIF 로딩 완료 후, missing이 있는 경우에만 표시 */}
+              {!isGenerating && hqClassification && hqClassification.missing.length > 0 && (
+                <label className="flex items-center gap-1.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={hqEnabled}
+                    onChange={(e) => handleHqToggle(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-neutral-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 focus:ring-1 bg-neutral-700 cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-400 group-hover:text-gray-300 whitespace-nowrap">
+                    고화질 썸네일 생성
+                  </span>
+                </label>
               )}
             </div>
 

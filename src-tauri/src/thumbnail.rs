@@ -10,6 +10,7 @@ use exif::{In, Reader, Tag};
 use image::{ImageBuffer, RgbImage};
 use jpeg_decoder::Decoder as JpegDecoder;
 use tauri::Manager;
+use webp::Encoder as WebPEncoder;
 
 /// 썸네일 결과
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -378,6 +379,16 @@ pub fn encode_to_base64(data: &[u8]) -> String {
     STANDARD.encode(data)
 }
 
+/// RGB 데이터를 WebP로 인코딩 (HQ 썸네일용, 고속 인코딩)
+pub fn encode_thumbnail_to_webp(rgb_data: &[u8], width: u32, height: u32, quality: f32) -> Result<Vec<u8>, String> {
+    let encoder = WebPEncoder::from_rgb(rgb_data, width, height);
+
+    // 고속 인코딩 모드 (quality: 60 = 빠른 인코딩 + 충분한 품질)
+    let webp_data = encoder.encode(quality);
+
+    Ok(webp_data.to_vec())
+}
+
 /// 썸네일 생성 (캐시 우선, EXIF → DCT fallback)
 pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ThumbnailResult, String> {
     // 항상 원본 이미지에서 EXIF 메타데이터 추출 (orientation 정보 필수)
@@ -496,7 +507,7 @@ fn load_cached_exif_metadata(app_handle: &tauri::AppHandle, file_path: &str) -> 
         .ok_or_else(|| "Metadata not found".to_string())
 }
 
-/// 고화질 DCT 썸네일 생성 (320px, EXIF 썸네일 업그레이드용)
+/// 고화질 DCT 썸네일 생성 (320px, WebP 포맷으로 고속 인코딩)
 pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ThumbnailResult, String> {
     let mtime = get_file_mtime(file_path)?;
     let cache_key = generate_cache_key(file_path, mtime);
@@ -504,14 +515,14 @@ pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &st
 
     // 캐시 파일이 이미 존재하면 기존 HQ 썸네일 로드
     if cache_path.exists() {
-        let jpeg_data = fs::read(&cache_path)
+        let webp_data = fs::read(&cache_path)
             .map_err(|e| format!("Failed to read cached HQ thumbnail: {}", e))?;
 
-        let thumbnail_base64 = encode_to_base64(&jpeg_data);
+        let thumbnail_base64 = encode_to_base64(&webp_data);
         let exif_metadata = extract_exif_metadata(file_path).ok();
 
-        // 이미지 크기 추출 (간단한 JPEG 헤더 파싱)
-        let (width, height) = extract_jpeg_dimensions(&jpeg_data).unwrap_or((320, 320));
+        // WebP 이미지 크기 추출
+        let (width, height) = extract_webp_dimensions(&webp_data).unwrap_or((320, 320));
 
         return Ok(ThumbnailResult {
             path: file_path.to_string(),
@@ -526,15 +537,17 @@ pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &st
     // EXIF 메타데이터 추출
     let exif_metadata = extract_exif_metadata(file_path).ok();
 
-    // DCT 스케일링으로 320px 고화질 썸네일 생성 (품질 70으로 용량 절감)
+    // DCT 스케일링으로 320px 고화질 썸네일 생성
     let (rgb_data, width, height) = generate_dct_thumbnail(file_path, 320)?;
-    let jpeg_data = encode_thumbnail_to_jpeg_with_quality(&rgb_data, width, height, 70)?;
+
+    // WebP 인코딩 (품질 60 = 빠른 인코딩 + 충분한 품질, JPEG 70보다 2배 빠름)
+    let webp_data = encode_thumbnail_to_webp(&rgb_data, width, height, 60.0)?;
 
     // 캐시 저장
-    fs::write(&cache_path, &jpeg_data)
+    fs::write(&cache_path, &webp_data)
         .map_err(|e| format!("Failed to write HQ thumbnail cache: {}", e))?;
 
-    let thumbnail_base64 = encode_to_base64(&jpeg_data);
+    let thumbnail_base64 = encode_to_base64(&webp_data);
 
     Ok(ThumbnailResult {
         path: file_path.to_string(),
@@ -544,6 +557,53 @@ pub async fn generate_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &st
         source: ThumbnailSource::DctScaling,
         exif_metadata,
     })
+}
+
+/// WebP 파일의 이미지 크기 추출
+fn extract_webp_dimensions(webp_data: &[u8]) -> Option<(u32, u32)> {
+    // WebP 시그니처 확인: RIFF....WEBP
+    if webp_data.len() < 30 {
+        return None;
+    }
+
+    if &webp_data[0..4] != b"RIFF" || &webp_data[8..12] != b"WEBP" {
+        return None;
+    }
+
+    // VP8/VP8L/VP8X 청크 찾기
+    let chunk_type = &webp_data[12..16];
+
+    match chunk_type {
+        b"VP8 " => {
+            // Lossy WebP - 바이트 26-29에 width/height
+            if webp_data.len() < 30 {
+                return None;
+            }
+            let width = (u16::from_le_bytes([webp_data[26], webp_data[27]]) & 0x3FFF) as u32;
+            let height = (u16::from_le_bytes([webp_data[28], webp_data[29]]) & 0x3FFF) as u32;
+            Some((width, height))
+        }
+        b"VP8L" => {
+            // Lossless WebP - 바이트 21-24에 packed bits
+            if webp_data.len() < 25 {
+                return None;
+            }
+            let bits = u32::from_le_bytes([webp_data[21], webp_data[22], webp_data[23], webp_data[24]]);
+            let width = ((bits & 0x3FFF) + 1) as u32;
+            let height = (((bits >> 14) & 0x3FFF) + 1) as u32;
+            Some((width, height))
+        }
+        b"VP8X" => {
+            // Extended WebP - 바이트 24-29에 width/height (24-bit little endian)
+            if webp_data.len() < 30 {
+                return None;
+            }
+            let width = (u32::from_le_bytes([webp_data[24], webp_data[25], webp_data[26], 0]) & 0xFFFFFF) + 1;
+            let height = (u32::from_le_bytes([webp_data[27], webp_data[28], webp_data[29], 0]) & 0xFFFFFF) + 1;
+            Some((width, height))
+        }
+        _ => None,
+    }
 }
 
 /// JPEG 파일의 이미지 크기 추출
