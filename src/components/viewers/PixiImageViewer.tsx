@@ -28,6 +28,7 @@ export function PixiImageViewer({
   const spriteRef = useRef<Sprite | null>(null)
   const gridGraphicsRef = useRef<Graphics | null>(null)
   const imageTextureRef = useRef<Texture | null>(null)
+  const currentImageUrlRef = useRef<string | null>(null)
 
   // Initialize Pixi Application
   useEffect(() => {
@@ -77,6 +78,15 @@ export function PixiImageViewer({
 
     return () => {
       mounted = false
+
+      // Unload current texture if any
+      const currentUrl = currentImageUrlRef.current
+      if (currentUrl) {
+        Assets.unload(currentUrl).catch(err => {
+          console.warn('Failed to unload texture on cleanup:', err)
+        })
+      }
+
       const app = pixiAppRef.current
       if (app) {
         app.destroy(true, { children: true, texture: false })
@@ -84,6 +94,8 @@ export function PixiImageViewer({
       pixiAppRef.current = null
       spriteRef.current = null
       gridGraphicsRef.current = null
+      imageTextureRef.current = null
+      currentImageUrlRef.current = null
     }
   }, [])
 
@@ -165,19 +177,21 @@ export function PixiImageViewer({
 
     ;(async () => {
       try {
-        // Clean up previous texture
-        if (imageTextureRef.current) {
-          imageTextureRef.current.destroy(true)
+        // Unload previous texture using Assets.unload
+        const prevUrl = currentImageUrlRef.current
+        if (prevUrl && imageTextureRef.current) {
+          await Assets.unload(prevUrl)
           imageTextureRef.current = null
         }
 
         // Load texture
         const texture = await Assets.load(imageUrl)
         if (cancelled) {
-          texture.destroy(true)
+          await Assets.unload(imageUrl)
           return
         }
 
+        currentImageUrlRef.current = imageUrl
         imageTextureRef.current = texture
         sprite.texture = texture
 
@@ -216,7 +230,7 @@ export function PixiImageViewer({
     return () => {
       cancelled = true
     }
-  }, [imageUrl, onRenderComplete, drawGridLines])
+  }, [imageUrl, onRenderComplete, drawGridLines, onError])
 
   // Update grid when gridType changes
   useEffect(() => {
