@@ -196,6 +196,12 @@ export function KonvaImageViewer({
     return zoomSteps.current[currentZoom] === fitToScreenScale.current
   }, [currentZoom])
 
+  // Check if current zoom is fit-to-screen or smaller (zoomed out)
+  const isFitOrSmaller = useCallback(() => {
+    if (zoomSteps.current.length === 0) return true
+    return zoomSteps.current[currentZoom] <= fitToScreenScale.current
+  }, [currentZoom])
+
   // Get current zoom percentage for display
   const getZoomPercentage = useCallback(() => {
     if (zoomSteps.current.length === 0) return 100
@@ -352,18 +358,33 @@ export function KonvaImageViewer({
     if (newZoom !== oldZoom) {
       const oldScale = zoomSteps.current[oldZoom]
       const newScale = zoomSteps.current[newZoom]
+      const fitScale = fitToScreenScale.current
 
-      // Use mouse position if provided, otherwise use viewport center
-      const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
-      const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
+      // Check if new zoom is fit-to-screen or smaller (zoomed out)
+      const isNewZoomFitOrSmaller = newScale <= fitScale
 
-      // Convert zoom point to image coordinates (before zoom)
-      const imagePointX = (zoomPointX - imageScale.x) / oldScale
-      const imagePointY = (zoomPointY - imageScale.y) / oldScale
+      let newX: number
+      let newY: number
 
-      // Calculate new position to keep the same point at zoom point
-      const newX = zoomPointX - imagePointX * newScale
-      const newY = zoomPointY - imagePointY * newScale
+      if (isNewZoomFitOrSmaller) {
+        // For fit-to-screen or zoomed out state, always center the image
+        const imgWidth = image.width
+        const imgHeight = image.height
+        newX = (containerWidth - imgWidth * newScale) / 2
+        newY = (containerHeight - imgHeight * newScale) / 2
+      } else {
+        // For zoomed in state, preserve the zoom point
+        const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
+        const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
+
+        // Convert zoom point to image coordinates (before zoom)
+        const imagePointX = (zoomPointX - imageScale.x) / oldScale
+        const imagePointY = (zoomPointY - imageScale.y) / oldScale
+
+        // Calculate new position to keep the same point at zoom point
+        newX = zoomPointX - imagePointX * newScale
+        newY = zoomPointY - imagePointY * newScale
+      }
 
       // Mark that zoom is handling the position
       isZoomingRef.current = true
@@ -371,7 +392,7 @@ export function KonvaImageViewer({
       // Update zoom level
       setCurrentZoom(newZoom)
 
-      // Update position to maintain zoom point
+      // Update position
       setImageScale(prev => ({
         ...prev,
         x: newX,
@@ -512,14 +533,14 @@ export function KonvaImageViewer({
     // button: 0 = left, 1 = middle, 2 = right
     setMouseDownPos({ x: pointerPos.x, y: pointerPos.y, button: e.evt.button })
 
-    // Only prepare for dragging on left click
-    if (e.evt.button === 0 && !isFitToScreen() && !isCtrlPressed) {
+    // Only prepare for dragging on left click when zoomed in (not fit-to-screen or smaller)
+    if (e.evt.button === 0 && !isFitOrSmaller() && !isCtrlPressed) {
       setDragStart({
         x: e.evt.clientX - imageScale.x,
         y: e.evt.clientY - imageScale.y
       })
     }
-  }, [isFitToScreen, isCtrlPressed, imageScale])
+  }, [isFitOrSmaller, isCtrlPressed, imageScale])
 
   // Handle mouse move
   const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -539,7 +560,7 @@ export function KonvaImageViewer({
     const dy = Math.abs(pointerPos.y - mouseDownPos.y)
 
     if (dx > 5 || dy > 5) {
-      if (!isFitToScreen() && !isCtrlPressed) {
+      if (!isFitOrSmaller() && !isCtrlPressed) {
         setIsDragging(true)
       }
     }
@@ -550,7 +571,7 @@ export function KonvaImageViewer({
       const newY = e.evt.clientY - dragStart.y
       setImageScale(prev => ({ ...prev, x: newX, y: newY }))
     }
-  }, [mouseDownPos, isDragging, isFitToScreen, isCtrlPressed, dragStart])
+  }, [mouseDownPos, isDragging, isFitOrSmaller, isCtrlPressed, dragStart])
 
   // Handle mouse up
   const handleMouseUp = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -648,7 +669,7 @@ export function KonvaImageViewer({
           maxHeight: '100%',
           cursor: isDragging
             ? 'grabbing'
-            : !isFitToScreen() && !isCtrlPressed
+            : !isFitOrSmaller() && !isCtrlPressed
               ? 'grab'
               : isCtrlPressed
                 ? 'zoom-out'
