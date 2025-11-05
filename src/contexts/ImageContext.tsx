@@ -58,6 +58,7 @@ interface ImageContextType {
   currentIndex: number;
   isLoading: boolean;
   metadata: ExifMetadata | null;
+  setImageListOnly: (paths: string[]) => void;
   loadImageList: (paths: string[]) => Promise<void>;
   loadImage: (path: string) => Promise<void>;
   goToIndex: (index: number) => Promise<void>;
@@ -193,10 +194,17 @@ export function ImageProvider({ children }: { children: ReactNode }) {
     }
   }, [imageList, preloadImages]);
 
-  const loadImageList = useCallback(async (paths: string[]) => {
+  // 리스트만 설정 (이미지 로드하지 않음)
+  const setImageListOnly = useCallback((paths: string[]) => {
     // 폴더 변경 시 캐시 정리
     clearCache();
+    setImageList(paths);
+    // 현재 경로 초기화
+    setCurrentPath(null);
+    setCurrentIndex(-1);
+  }, [clearCache]);
 
+  const loadImageList = useCallback(async (paths: string[]) => {
     setImageList(paths);
     if (paths.length > 0) {
       // 현재 경로가 새 리스트에 있으면 유지
@@ -212,7 +220,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
       setCurrentPath(null);
       setCurrentIndex(-1);
     }
-  }, [currentPath, loadImage, clearCache]);
+  }, [currentPath, loadImage]);
 
   const goToIndex = useCallback(async (index: number) => {
     if (index < 0 || index >= imageList.length) return;
@@ -231,6 +239,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         currentIndex,
         isLoading,
         metadata,
+        setImageListOnly,
         loadImage,
         loadImageList,
         goToIndex,

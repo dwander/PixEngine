@@ -51,7 +51,7 @@ interface ThumbnailProgress {
 }
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
-  const { imageList: images, loadImage, getCachedImage } = useImageContext()
+  const { imageList: images, loadImage, getCachedImage, loadImageList } = useImageContext()
   const { lightMetadataMap, setSortedIndex } = useFolderContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
@@ -149,6 +149,16 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
     return sorted
   }, [images, sortField, sortOrder, lightMetadataMap])
+
+  // 정렬이 완료되면 ImageContext에 정렬된 리스트 업데이트 및 첫 번째 이미지 로드
+  useEffect(() => {
+    if (sortedImages.length > 0) {
+      loadImageList(sortedImages)
+      // 첫 번째 정렬된 이미지를 로드
+      loadImage(sortedImages[0])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortField, sortOrder, lightMetadataMap])
 
   // 썸네일 크기 및 정렬 설정 store에서 로드
   useEffect(() => {

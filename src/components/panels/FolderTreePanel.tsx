@@ -303,7 +303,7 @@ function FolderTreeItem({
   isFavorite?: (path: string) => boolean;
 }) {
   const { setCurrentFolder, currentFolder, loadLightMetadata } = useFolderContext();
-  const { loadImageList } = useImageContext();
+  const { setImageListOnly } = useImageContext();
   const [isOpen, setIsOpen] = useState(node.isOpen || false);
   const [children, setChildren] = useState<FolderNode[]>(node.children || []);
   const [isLoading, setIsLoading] = useState(false);
@@ -468,9 +468,9 @@ function FolderTreeItem({
           console.error("Failed to calculate total size:", error);
         }
 
-        // Context 업데이트
+        // Context 업데이트 (정렬되지 않은 리스트만 설정, 이미지 로드하지 않음)
         setCurrentFolder(node.path, imageFiles.length, totalSize);
-        await loadImageList(imageFiles);
+        setImageListOnly(imageFiles);
 
         // 경량 메타데이터 로딩 (백그라운드)
         loadLightMetadata(imageFiles).catch(err => console.error('Failed to load light metadata:', err));
@@ -482,7 +482,7 @@ function FolderTreeItem({
       } else {
         // 이미지가 없으면 빈 배열로 초기화
         setCurrentFolder(node.path, 0, 0);
-        await loadImageList([]);
+        setImageListOnly([]);
       }
     } catch (error) {
       console.error("Failed to read directory:", node.path, error);
@@ -539,7 +539,7 @@ function FolderTreeItem({
           }
 
           setCurrentFolder(node.path, imagePaths.length, totalSize);
-          await loadImageList(imagePaths);
+          setImageListOnly(imagePaths);
 
           // 경량 메타데이터 로딩 (백그라운드)
           loadLightMetadata(imagePaths).catch(err => console.error('Failed to load light metadata:', err));
@@ -551,7 +551,7 @@ function FolderTreeItem({
         } else {
           // 이미지가 없으면 빈 배열로 초기화
           setCurrentFolder(node.path, 0, 0);
-          await loadImageList([]);
+          setImageListOnly([]);
         }
       }
     }
