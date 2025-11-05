@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from "react";
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { logError } from '../lib/errorHandler';
-import { IMAGE_CACHE_SIZE, PRELOAD_PREVIOUS_COUNT, PRELOAD_NEXT_COUNT } from '../lib/constants';
+import { IMAGE_CACHE_SIZE } from '../lib/constants';
 
 interface ImageCacheEntry {
   imageElement: HTMLImageElement;
@@ -54,14 +54,9 @@ export interface ExifMetadata {
 
 interface ImageContextType {
   currentPath: string | null;
-  imageList: string[];
-  currentIndex: number;
   isLoading: boolean;
   metadata: ExifMetadata | null;
-  setImageListOnly: (paths: string[]) => void;
-  loadImageList: (paths: string[]) => Promise<void>;
   loadImage: (path: string) => Promise<void>;
-  goToIndex: (index: number) => Promise<void>;
   getCachedImage: (path: string) => HTMLImageElement | undefined;
   preloadImages: (paths: string[]) => Promise<void>;
   clearCache: () => void;
@@ -71,8 +66,6 @@ const ImageContext = createContext<ImageContextType | undefined>(undefined);
 
 export function ImageProvider({ children }: { children: ReactNode }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
-  const [imageList, setImageList] = useState<string[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
   const [metadata, setMetadata] = useState<ExifMetadata | null>(null);
 
@@ -155,14 +148,8 @@ export function ImageProvider({ children }: { children: ReactNode }) {
   const loadImage = useCallback(async (path: string) => {
     setIsLoading(true);
     try {
-      // 이미지 리스트에서 현재 인덱스 찾기
-      const index = imageList.indexOf(path);
-
-      // 상태 업데이트 (React 18의 자동 배칭 활용)
+      // 상태 업데이트
       setCurrentPath(path);
-      if (index !== -1) {
-        setCurrentIndex(index);
-      }
 
       // EXIF 메타데이터 로드 (백그라운드)
       invoke<ExifMetadata>('get_exif_metadata', { filePath: path })
@@ -171,78 +158,19 @@ export function ImageProvider({ children }: { children: ReactNode }) {
           logError(error, 'Load EXIF metadata');
           setMetadata(null);
         });
-
-    // 주변 이미지 프리로딩 (백그라운드)
-    if (index !== -1) {
-      const preloadPaths: string[] = [];
-
-      // 이전 이미지들
-      for (let i = Math.max(0, index - PRELOAD_PREVIOUS_COUNT); i < index; i++) {
-        if (imageList[i]) preloadPaths.push(imageList[i]);
-      }
-
-      // 다음 이미지들 (현재 포함)
-      for (let i = index; i < Math.min(imageList.length, index + PRELOAD_NEXT_COUNT); i++) {
-        if (imageList[i]) preloadPaths.push(imageList[i]);
-      }
-
-        // 백그라운드에서 프리로딩 (await 하지 않음)
-        preloadImages(preloadPaths).catch((error) => logError(error, 'Load image preloading'));
-      }
     } finally {
       setIsLoading(false);
     }
-  }, [imageList, preloadImages]);
+  }, []);
 
-  // 리스트만 설정 (이미지 로드하지 않음)
-  const setImageListOnly = useCallback((paths: string[]) => {
-    // 폴더 변경 시 캐시 정리
-    clearCache();
-    setImageList(paths);
-    // 현재 경로 초기화
-    setCurrentPath(null);
-    setCurrentIndex(-1);
-  }, [clearCache]);
-
-  const loadImageList = useCallback(async (paths: string[]) => {
-    setImageList(paths);
-    if (paths.length > 0) {
-      // 현재 경로가 새 리스트에 있으면 유지
-      if (currentPath && paths.indexOf(currentPath) !== -1) {
-        const index = paths.indexOf(currentPath);
-        setCurrentIndex(index);
-      } else {
-        // 없으면 첫 번째 이미지 자동 로드
-        await loadImage(paths[0]);
-      }
-    } else {
-      // 이미지가 없으면 상태 초기화
-      setCurrentPath(null);
-      setCurrentIndex(-1);
-    }
-  }, [currentPath, loadImage]);
-
-  const goToIndex = useCallback(async (index: number) => {
-    if (index < 0 || index >= imageList.length) return;
-
-    const path = imageList[index];
-    if (path) {
-      await loadImage(path);
-    }
-  }, [imageList, loadImage]);
 
   return (
     <ImageContext.Provider
       value={{
         currentPath,
-        imageList,
-        currentIndex,
         isLoading,
         metadata,
-        setImageListOnly,
         loadImage,
-        loadImageList,
-        goToIndex,
         getCachedImage,
         preloadImages,
         clearCache,

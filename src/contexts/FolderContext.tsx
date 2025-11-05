@@ -12,30 +12,30 @@ export interface LightMetadata {
 
 interface FolderContextType {
   currentFolder: string | null;
+  imageFiles: string[]; // 정렬되지 않은 원본 이미지 리스트
   imageCount: number;
   totalSize: number; // bytes 단위
   isLoading: boolean;
   lightMetadataMap: Map<string, LightMetadata>;
-  sortedIndex: number; // 정렬된 리스트에서의 인덱스
-  setCurrentFolder: (path: string | null, count: number, size: number) => void;
+  setFolderImages: (folder: string, files: string[], size: number) => void;
   setLoading: (loading: boolean) => void;
   loadLightMetadata: (imagePaths: string[]) => Promise<void>;
-  setSortedIndex: (index: number) => void;
 }
 
 const FolderContext = createContext<FolderContextType | undefined>(undefined);
 
 export function FolderProvider({ children }: { children: ReactNode }) {
-  const [currentFolder, setCurrentFolderState] = useState<string | null>(null);
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<string[]>([]);
   const [imageCount, setImageCount] = useState(0);
   const [totalSize, setTotalSize] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [lightMetadataMap, setLightMetadataMap] = useState<Map<string, LightMetadata>>(new Map());
-  const [sortedIndex, setSortedIndex] = useState(0);
 
-  const setCurrentFolder = (path: string | null, count: number, size: number) => {
-    setCurrentFolderState(path);
-    setImageCount(count);
+  const setFolderImages = (folder: string, files: string[], size: number) => {
+    setCurrentFolder(folder);
+    setImageFiles(files);
+    setImageCount(files.length);
     setTotalSize(size);
     // 폴더 변경 시 메타데이터 맵 초기화
     setLightMetadataMap(new Map());
@@ -69,15 +69,14 @@ export function FolderProvider({ children }: { children: ReactNode }) {
   return (
     <FolderContext.Provider value={{
       currentFolder,
+      imageFiles,
       imageCount,
       totalSize,
       isLoading,
       lightMetadataMap,
-      sortedIndex,
-      setCurrentFolder,
+      setFolderImages,
       setLoading,
       loadLightMetadata,
-      setSortedIndex
     }}>
       {children}
     </FolderContext.Provider>

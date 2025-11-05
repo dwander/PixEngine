@@ -23,8 +23,11 @@ function getFolderName(path: string | null): string {
 }
 
 export function StatusBar() {
-  const { currentFolder, imageCount, totalSize, sortedIndex } = useFolderContext()
-  const { currentPath, imageList, metadata } = useImageContext()
+  const { currentFolder, imageCount, totalSize, imageFiles } = useFolderContext()
+  const { currentPath, metadata } = useImageContext()
+
+  // 현재 이미지의 인덱스 계산
+  const currentIndex = currentPath ? imageFiles.indexOf(currentPath) : -1
 
   if (!currentFolder || imageCount === 0) {
     return (
@@ -38,11 +41,11 @@ export function StatusBar() {
     <footer className={`${theme.layout.statusBarHeight} ${theme.background.primary} flex items-center px-4 text-xs ${theme.text.quaternary} border-t border-neutral-800`}>
       <div className="flex items-center gap-4 flex-1">
         {/* 전체 이미지 정보 */}
-        {imageList.length > 0 && (
+        {imageFiles.length > 0 && (
           <>
             <span className="flex items-center gap-1">
               <span className="text-gray-300">
-                {sortedIndex + 1}<span className="text-gray-500">/</span>{imageList.length}<span className="text-gray-500">개</span>
+                {currentIndex >= 0 ? currentIndex + 1 : 0}<span className="text-gray-500">/</span>{imageFiles.length}<span className="text-gray-500">개</span>
               </span>
               <span className="text-gray-500">({formatBytes(totalSize)})</span>
             </span>

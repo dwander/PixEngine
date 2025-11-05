@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
+import { useFolderContext } from '../../contexts/FolderContext'
 import { Check } from 'lucide-react'
 
 // 측광 모드 아이콘 선택
@@ -96,13 +97,15 @@ interface ImageViewerPanelProps {
 }
 
 export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'none' }: ImageViewerPanelProps) {
-  const { currentPath, imageList, currentIndex, goToIndex, getCachedImage, metadata } = useImageContext()
+  const { currentPath, getCachedImage, metadata } = useImageContext()
+  const { imageFiles } = useFolderContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
-  const [imageLoaded, setImageLoaded] = useState(false)
+  const [_imageLoaded, setImageLoaded] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const navigationQueueRef = useRef<number[]>([])
-  const isProcessingRef = useRef(false)
+
+  // 현재 이미지 인덱스 계산
+  const currentIndex = currentPath ? imageFiles.indexOf(currentPath) : -1
   const currentImageRef = useRef<HTMLImageElement | null>(null)
   const histogramCanvasRef = useRef<HTMLCanvasElement>(null)
   const [histogramData, setHistogramData] = useState<HistogramData | null>(null)
@@ -505,16 +508,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   }, [handleResize])
 
   // 이미지 로드 완료 시 다음 큐 항목 처리
-  useEffect(() => {
-    if (imageLoaded && navigationQueueRef.current.length > 0) {
-      // 현재 이미지 렌더링이 완료되면 즉시 다음 이미지로
-      const nextIndex = navigationQueueRef.current.shift()!
-      isProcessingRef.current = false
-      goToIndex(nextIndex)
-    } else if (imageLoaded) {
-      isProcessingRef.current = false
-    }
-  }, [imageLoaded, goToIndex])
 
   return (
     <div className="h-full bg-neutral-900 flex flex-col">
@@ -546,9 +539,9 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
             </div>
           )}
           {/* 우측: 이미지 인덱스 */}
-          {imageList.length > 0 && (
+          {imageFiles.length > 0 && currentIndex >= 0 && (
             <div>
-              {currentIndex + 1} / {imageList.length}
+              {currentIndex + 1} / {imageFiles.length}
             </div>
           )}
         </div>

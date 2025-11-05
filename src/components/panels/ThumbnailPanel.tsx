@@ -51,8 +51,8 @@ interface ThumbnailProgress {
 }
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
-  const { imageList: images, loadImage, getCachedImage, loadImageList } = useImageContext()
-  const { lightMetadataMap, setSortedIndex } = useFolderContext()
+  const { loadImage, getCachedImage } = useImageContext()
+  const { imageFiles, lightMetadataMap } = useFolderContext()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -104,9 +104,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
   }, [isDropdownOpen])
 
-  // 정렬된 이미지 리스트
+  // 정렬된 이미지 리스트 (ThumbnailPanel 내부에서 독립적으로 관리)
   const sortedImages = useMemo(() => {
-    const sorted = [...images]
+    const sorted = [...imageFiles]
 
     sorted.sort((a, b) => {
       let compareResult = 0
@@ -148,17 +148,23 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     })
 
     return sorted
-  }, [images, sortField, sortOrder, lightMetadataMap])
+  }, [imageFiles, sortField, sortOrder, lightMetadataMap])
 
-  // 정렬이 완료되면 ImageContext에 정렬된 리스트 업데이트 및 첫 번째 이미지 로드
+  // imageFiles 변경 (폴더 변경) 시 focusedIndex 초기화 및 첫 이미지 로드
   useEffect(() => {
+    setFocusedIndex(0)
     if (sortedImages.length > 0) {
-      loadImageList(sortedImages)
-      // 첫 번째 정렬된 이미지를 로드
       loadImage(sortedImages[0])
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortField, sortOrder, lightMetadataMap])
+  }, [imageFiles, loadImage, sortedImages])
+
+  // 정렬 조건 변경 시 focusedIndex 초기화 및 첫 이미지 로드
+  useEffect(() => {
+    setFocusedIndex(0)
+    if (sortedImages.length > 0) {
+      loadImage(sortedImages[0])
+    }
+  }, [sortField, sortOrder])
 
   // 썸네일 크기 및 정렬 설정 store에서 로드
   useEffect(() => {
@@ -263,7 +269,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     return () => {
       scrollArea.removeEventListener('wheel', handleWheel)
     }
-  }, [isVertical, images.length])
+  }, [isVertical, imageFiles.length])
 
   // 그리드 컬럼 수 계산 (세로 모드)
   const columnCount = useMemo(() => {
@@ -326,7 +332,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     const timeoutId = setTimeout(measureSize, 100)
 
     return () => clearTimeout(timeoutId)
-  }, [isVertical, containerHeight, images.length])
+  }, [isVertical, containerHeight, imageFiles.length])
 
   // 가상화 설정 (가로 모드 - 수평 스크롤)
   const horizontalVirtualizer = useVirtualizer({
@@ -403,7 +409,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       clearTimeout(timeoutId)
       scrollArea.removeEventListener('scroll', updateViewportIndices)
     }
-  }, [isGeneratingHq, isVertical, columnCount, images.length])
+  }, [isGeneratingHq, isVertical, columnCount, imageFiles.length])
 
   // focusedIndex 변경 시 자동 스크롤
   useEffect(() => {
@@ -429,13 +435,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     continuousPlayState.isActive ? 0 : DEBOUNCE_FOCUS_INDEX
   )
 
-  // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드 및 sortedIndex 업데이트
+  // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드
   useEffect(() => {
     if (debouncedFocusedIndex >= 0 && debouncedFocusedIndex < sortedImages.length) {
       const imagePath = sortedImages[debouncedFocusedIndex]
       loadImage(imagePath)
-      // 정렬된 인덱스를 FolderContext에 업데이트
-      setSortedIndex(debouncedFocusedIndex)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedFocusedIndex])
@@ -652,14 +656,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 썸네일 생성 시작
   useEffect(() => {
-    // 폴더 변경 시 스크롤 위치 및 포커스 초기화
+    // 폴더 변경 시 스크롤 위치 초기화 (focusedIndex는 별도 useEffect에서 처리)
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = 0
       scrollAreaRef.current.scrollLeft = 0
     }
-    setFocusedIndex(0) // 포커스를 첫 번째 썸네일로 초기화
 
-    if (images.length === 0) {
+    if (imageFiles.length === 0) {
       setThumbnails(new Map())
       setProgress(null)
       setIsGenerating(false)
@@ -682,11 +685,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
         setIsGenerating(true)
         setShowProgressIndicator(true)
-        setProgress({ completed: 0, total: images.length, current_path: '' })
+        setProgress({ completed: 0, total: imageFiles.length, current_path: '' })
 
         // 배치 생성 시작
         await invoke('start_thumbnail_generation', {
-          imagePaths: images,
+          imagePaths: imageFiles,
         })
       } catch (error) {
         console.error('Failed to start thumbnail generation:', error)
@@ -695,7 +698,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
 
     startGeneration()
-  }, [images])
+  }, [imageFiles])
 
   // 진행률 이벤트 리스너
   useEffect(() => {
@@ -720,7 +723,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         const classification = await invoke<{ existing: string[]; missing: string[] }>(
           'classify_hq_thumbnails',
           {
-            imagePaths: images,
+            imagePaths: imageFiles,
           }
         )
 
@@ -729,7 +732,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         )
 
         setIsGeneratingHq(true)
-        setHqProgress({ completed: 0, total: images.length, current_path: '' })
+        setHqProgress({ completed: 0, total: imageFiles.length, current_path: '' })
 
         // 2. 기존 HQ 썸네일 즉시 로드 (유휴 시간 없음)
         if (classification.existing.length > 0) {
@@ -800,10 +803,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       unlistenHqCancelled.then((fn) => fn())
       unlistenHqExistingLoaded.then((fn) => fn())
     }
-  }, [images])
+  }, [imageFiles])
 
   // 이미지가 없을 때
-  if (images.length === 0) {
+  if (imageFiles.length === 0) {
     return (
       <div ref={containerRef} className="flex h-full items-center justify-center bg-neutral-900 text-gray-400">
         <p className="text-sm">폴더를 선택하여 이미지를 불러오세요</p>
@@ -1032,7 +1035,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             }}
           >
             {horizontalVirtualizer.getVirtualItems().map((virtualItem) => {
-              const imagePath = images[virtualItem.index]
+              const imagePath = sortedImages[virtualItem.index]
               const thumbnail = thumbnails.get(imagePath)
               const transform = thumbnail?.exif_metadata
                 ? getOrientationTransform(thumbnail.exif_metadata.orientation)
@@ -1046,7 +1049,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                   data-index={virtualItem.index}
                   className="h-full aspect-square flex-shrink-0"
                   style={{
-                    marginRight: virtualItem.index < images.length - 1 ? '0.5rem' : '0',
+                    marginRight: virtualItem.index < sortedImages.length - 1 ? '0.5rem' : '0',
                   }}
                   onClick={() => {
                     // setSelectedImage(imagePath) // 임시 비활성화
