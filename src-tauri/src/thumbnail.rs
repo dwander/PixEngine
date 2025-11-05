@@ -606,34 +606,6 @@ fn extract_webp_dimensions(webp_data: &[u8]) -> Option<(u32, u32)> {
     }
 }
 
-/// JPEG 파일의 이미지 크기 추출
-fn extract_jpeg_dimensions(jpeg_data: &[u8]) -> Option<(u32, u32)> {
-    if jpeg_data.len() < 2 || jpeg_data[0] != 0xFF || jpeg_data[1] != 0xD8 {
-        return None;
-    }
-
-    let mut i = 2;
-    while i + 9 < jpeg_data.len() {
-        if jpeg_data[i] != 0xFF {
-            return None;
-        }
-
-        let marker = jpeg_data[i + 1];
-        let length = u16::from_be_bytes([jpeg_data[i + 2], jpeg_data[i + 3]]) as usize;
-
-        // SOF0, SOF1, SOF2 마커에서 이미지 크기 추출
-        if marker == 0xC0 || marker == 0xC1 || marker == 0xC2 {
-            let height = u16::from_be_bytes([jpeg_data[i + 5], jpeg_data[i + 6]]) as u32;
-            let width = u16::from_be_bytes([jpeg_data[i + 7], jpeg_data[i + 8]]) as u32;
-            return Some((width, height));
-        }
-
-        i += 2 + length;
-    }
-
-    None
-}
-
 /// HQ 썸네일이 이미 존재하는지 확인 (캐시 파일 존재 여부)
 /// 이제 캐시는 모두 HQ 썸네일만 저장되므로 파일 존재만 확인
 pub fn has_hq_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> bool {

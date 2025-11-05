@@ -1,6 +1,6 @@
 /**
  * Konva.js-based Image Viewer
- * High-performance Canvas 2D rendering with superior quality
+ * High-performance Canvas 2D rendering with hardware acceleration
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react'
@@ -14,6 +14,7 @@ interface KonvaImageViewerProps {
   onError?: (error: Error) => void
   containerWidth: number
   containerHeight: number
+  enableHardwareAcceleration?: boolean
 }
 
 export function KonvaImageViewer({
@@ -22,11 +23,14 @@ export function KonvaImageViewer({
   onRenderComplete,
   onError,
   containerWidth,
-  containerHeight
+  containerHeight,
+  enableHardwareAcceleration = false
 }: KonvaImageViewerProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [imageScale, setImageScale] = useState({ x: 0, y: 0, scale: 1 })
   const stageRef = useRef<Konva.Stage>(null)
+  const layerRef = useRef<Konva.Layer>(null)
+  const imageRef = useRef<Konva.Image>(null)
 
   // Load image
   useEffect(() => {
@@ -207,38 +211,68 @@ export function KonvaImageViewer({
     return lines
   }, [image, gridType, imageScale])
 
-  // Set high-quality image smoothing on stage
+  // Set high-quality image smoothing and optional hardware acceleration
   useEffect(() => {
     const stage = stageRef.current
-    if (!stage) return
+    const layer = layerRef.current
+    const imageNode = imageRef.current
 
+    if (!stage || !layer || !imageNode || !image) return
+
+    // High-quality image smoothing
     const canvas = stage.getStage().content?.querySelector('canvas')
     if (canvas) {
-      const ctx = canvas.getContext('2d')
+      const contextOptions: CanvasRenderingContext2DSettings = {
+        alpha: true,
+      }
+
+      // 하드웨어 가속 옵션 (필요시에만 활성화)
+      if (enableHardwareAcceleration) {
+        contextOptions.desynchronized = true
+      }
+
+      const ctx = canvas.getContext('2d', contextOptions)
       if (ctx) {
-        // High-quality image smoothing for better downscaling
         ctx.imageSmoothingEnabled = true
         ctx.imageSmoothingQuality = 'high'
       }
     }
-  }, [image])
+
+    // 이미지 노드 최적화 (하드웨어 가속 활성화 시에만)
+    if (enableHardwareAcceleration) {
+      imageNode.perfectDrawEnabled(false)
+      imageNode.shadowForStrokeEnabled(false)
+      imageNode.hitStrokeWidth(0)
+    }
+
+    // Layer 렌더링
+    layer.clearBeforeDraw(true)
+    layer.batchDraw()
+  }, [image, imageScale, enableHardwareAcceleration])
 
   return (
     <Stage
       ref={stageRef}
       width={containerWidth}
       height={containerHeight}
+      pixelRatio={window.devicePixelRatio || 1}
       style={{ backgroundColor: '#171717' }}
     >
-      <Layer imageSmoothingEnabled={true}>
+      <Layer
+        ref={layerRef}
+        imageSmoothingEnabled={true}
+        listening={false}
+      >
         {image && (
           <KonvaImage
+            ref={imageRef}
             image={image}
             x={imageScale.x}
             y={imageScale.y}
             width={image.width * imageScale.scale}
             height={image.height * imageScale.scale}
             listening={false}
+            perfectDrawEnabled={false}
           />
         )}
         {renderGridLines()}

@@ -103,7 +103,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   const { imageFiles } = useFolderContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [_imageLoaded, setImageLoaded] = useState(false)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 현재 이미지 인덱스 계산
@@ -115,15 +114,12 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   // Web Worker for histogram calculation
   const histogramWorkerRef = useRef<Worker | null>(null)
 
-  // Grid overlay canvas (separate layer)
-  const gridCanvasRef = useRef<HTMLCanvasElement>(null)
-
-  // Use OpenSeadragon for high-performance image viewing
+  // Konva.js viewer container size
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 
-  // Handle OpenSeadragon errors
+  // Handle viewer errors
   const handleViewerError = useCallback((error: Error) => {
-    console.error('OpenSeadragon error:', error)
+    console.error('Konva viewer error:', error)
   }, [])
 
   // 컨텍스트 메뉴 및 표시 옵션
@@ -282,157 +278,9 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     ctx.globalAlpha = 1.0
   }, [histogramData])
 
-  // Canvas에 이미지 렌더링 함수
-  const renderImageToCanvas = useCallback(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    const img = currentImageRef.current
+  // Konva.js가 모든 렌더링을 처리하므로 별도의 Canvas 렌더링 코드 불필요
 
-    if (!canvas || !container || !img) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // 컨테이너 크기 (10px 패딩 적용)
-    const padding = 10
-    const containerWidth = container.clientWidth - (padding * 2)
-    const containerHeight = container.clientHeight - (padding * 2)
-
-    // 이미지 원본 크기
-    const imgWidth = img.width
-    const imgHeight = img.height
-
-    // 뷰포트에 맞게 스케일 계산
-    const scale = Math.min(
-      containerWidth / imgWidth,
-      containerHeight / imgHeight,
-      1 // 원본보다 크게 확대하지 않음
-    )
-
-    // Canvas 표시 크기 (CSS)
-    const displayWidth = Math.floor(imgWidth * scale)
-    const displayHeight = Math.floor(imgHeight * scale)
-
-    // Canvas 실제 해상도 (고해상도 지원)
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = displayWidth * dpr
-    canvas.height = displayHeight * dpr
-
-    // CSS 크기 설정
-    canvas.style.width = `${displayWidth}px`
-    canvas.style.height = `${displayHeight}px`
-
-    // 컨텍스트 초기화 (기존 transform 제거)
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-
-    // 고해상도 스케일 적용
-    ctx.scale(dpr, dpr)
-
-    // 이미지 그리기
-    ctx.drawImage(img, 0, 0, displayWidth, displayHeight)
-  }, [])
-
-  // 격자선 그리기 함수 (별도 분리) - useRef로 현재 gridType 참조
-  const gridTypeRef = useRef(gridType)
-  useEffect(() => {
-    gridTypeRef.current = gridType
-  }, [gridType])
-
-  const drawGridLines = useCallback(() => {
-    const imageCanvas = canvasRef.current
-    const gridCanvas = gridCanvasRef.current
-    const currentGridType = gridTypeRef.current
-
-    if (!imageCanvas || !gridCanvas) return
-
-    const ctx = gridCanvas.getContext('2d')
-    if (!ctx) return
-
-    // Grid canvas 크기를 image canvas와 동기화
-    if (gridCanvas.width !== imageCanvas.width || gridCanvas.height !== imageCanvas.height) {
-      gridCanvas.width = imageCanvas.width
-      gridCanvas.height = imageCanvas.height
-      gridCanvas.style.width = imageCanvas.style.width
-      gridCanvas.style.height = imageCanvas.style.height
-    }
-
-    // 기존 격자선 지우기
-    ctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height)
-
-    // gridType이 'none'이면 여기서 종료 (격자선 없음)
-    if (currentGridType === 'none') return
-
-    const dpr = window.devicePixelRatio || 1
-    const displayWidth = gridCanvas.width / dpr
-    const displayHeight = gridCanvas.height / dpr
-
-    // 고해상도 스케일 적용
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.scale(dpr, dpr)
-
-    // 격자선 그리기
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'
-    ctx.lineWidth = 2
-
-    if (currentGridType === '3div') {
-      // 3분할 격자선 (Rule of Thirds)
-      // 수직선 2개
-      ctx.beginPath()
-      ctx.moveTo(displayWidth / 3, 0)
-      ctx.lineTo(displayWidth / 3, displayHeight)
-      ctx.moveTo((displayWidth * 2) / 3, 0)
-      ctx.lineTo((displayWidth * 2) / 3, displayHeight)
-      // 수평선 2개
-      ctx.moveTo(0, displayHeight / 3)
-      ctx.lineTo(displayWidth, displayHeight / 3)
-      ctx.moveTo(0, (displayHeight * 2) / 3)
-      ctx.lineTo(displayWidth, (displayHeight * 2) / 3)
-      ctx.stroke()
-    } else if (currentGridType === '6div') {
-      // 6분할 격자선 (긴 축: 6분할, 짧은 축: 3분할)
-      const isLandscape = displayWidth > displayHeight
-      ctx.beginPath()
-
-      if (isLandscape) {
-        // 가로모드: 가로 6분할 (세로선 5개), 세로 3분할 (가로선 2개)
-        for (let i = 1; i <= 5; i++) {
-          const x = (displayWidth * i) / 6
-          ctx.moveTo(x, 0)
-          ctx.lineTo(x, displayHeight)
-        }
-        for (let i = 1; i <= 2; i++) {
-          const y = (displayHeight * i) / 3
-          ctx.moveTo(0, y)
-          ctx.lineTo(displayWidth, y)
-        }
-      } else {
-        // 세로모드: 세로 6분할 (가로선 5개), 가로 3분할 (세로선 2개)
-        for (let i = 1; i <= 5; i++) {
-          const y = (displayHeight * i) / 6
-          ctx.moveTo(0, y)
-          ctx.lineTo(displayWidth, y)
-        }
-        for (let i = 1; i <= 2; i++) {
-          const x = (displayWidth * i) / 3
-          ctx.moveTo(x, 0)
-          ctx.lineTo(x, displayHeight)
-        }
-      }
-      ctx.stroke()
-    }
-  }, [])
-
-  // 컨테이너 리사이즈 핸들러 (ResizeObserver용)
-  const handleResize = useCallback(() => {
-    if (currentImageRef.current) {
-      // renderImageToCanvas는 캔버스 크기 조정 + 이미지 그리기
-      renderImageToCanvas()
-      // 격자선은 별도 레이어이므로 항상 다시 그림
-      drawGridLines()
-    }
-  }, [renderImageToCanvas, drawGridLines])
-
-  // 이미지 로딩 (캐시 우선)
+  // 이미지 URL 설정 (Konva가 렌더링 처리)
   useEffect(() => {
     if (!currentPath) {
       setImageUrl(null)
@@ -440,71 +288,40 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       return
     }
 
-    async function loadImage() {
-      if (!currentPath) return;
+    setImageLoaded(false)
 
-      setImageLoaded(false)
+    // 캐시에서 이미지 확인
+    const cachedImg = getCachedImage(currentPath)
 
-      try {
-        // 캐시에서 이미지 확인
-        const cachedImg = getCachedImage(currentPath);
+    if (cachedImg) {
+      // 캐시된 이미지 - 히스토그램 계산
+      currentImageRef.current = cachedImg
+      calculateHistogram(cachedImg)
 
-        // 캐시된 이미지가 있으면 즉시 렌더링
-        if (cachedImg) {
-          currentImageRef.current = cachedImg
-
-          // 히스토그램 계산 (Web Worker에서 백그라운드 처리)
-          calculateHistogram(cachedImg)
-
-          // 다음 프레임에서 렌더링 (DOM 업데이트 후)
-          requestAnimationFrame(() => {
-            renderImageToCanvas()
-            drawGridLines()
-            setImageLoaded(true)
-          })
-        } else {
-          // 캐시에 없으면 일반적인 로드 프로세스
-          const assetUrl = convertFileSrc(currentPath!)
-          setImageUrl(assetUrl)
-        }
-      } catch (err) {
-        console.error('Failed to load image:', err)
-      }
+      // Konva에 전달할 URL 설정
+      const assetUrl = convertFileSrc(currentPath)
+      setImageUrl(assetUrl)
+    } else {
+      // 캐시에 없으면 URL만 설정 (Konva가 로드)
+      const assetUrl = convertFileSrc(currentPath)
+      setImageUrl(assetUrl)
     }
+  }, [currentPath, getCachedImage, calculateHistogram])
 
-    loadImage()
-  }, [currentPath, getCachedImage, renderImageToCanvas])
-
-  // Canvas에 이미지 렌더링 (뷰포트에 맞게 리사이즈) - 캐시에 없는 경우
+  // Konva에서 이미지 로드 완료 시 히스토그램 계산
   useEffect(() => {
-    if (!imageUrl || !canvasRef.current || !containerRef.current) return
+    if (!imageUrl) return
 
     const img = new Image()
-    // Tauri asset protocol은 CORS를 허용하므로 anonymous로 설정
     img.crossOrigin = 'anonymous'
 
     img.onload = () => {
       currentImageRef.current = img
-
-      // 히스토그램 계산 (Web Worker에서 백그라운드 처리)
       calculateHistogram(img)
+    }
 
-      renderImageToCanvas()
-      drawGridLines()
-      setImageLoaded(true)
-    }
-    img.onerror = () => {
-      console.error('Failed to load image:', imageUrl)
-    }
     img.src = imageUrl
-  }, [imageUrl, renderImageToCanvas, calculateHistogram, drawGridLines])
-
-  // gridType 변경 시 격자선만 다시 그리기 (이미지는 재렌더링하지 않음)
-  useEffect(() => {
-    if (currentImageRef.current && gridCanvasRef.current) {
-      drawGridLines()
-    }
-  }, [gridType, drawGridLines])
+  }, [imageUrl, calculateHistogram])
 
   // 히스토그램 데이터 변경 시 렌더링
   useEffect(() => {
@@ -513,7 +330,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     }
   }, [histogramData, showHistogram, renderHistogram])
 
-  // 창 크기 변경 시 다시 렌더링 (ResizeObserver 사용)
+  // 창 크기 변경 시 컨테이너 크기 업데이트 (Konva가 자동으로 리렌더링)
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -524,7 +341,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         const { width, height } = entry.contentRect
         setContainerSize({ width, height })
       }
-      handleResize()
     })
 
     resizeObserver.observe(container)
@@ -538,7 +354,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     return () => {
       resizeObserver.disconnect()
     }
-  }, [handleResize])
+  }, [])
 
   // 이미지 로드 완료 시 다음 큐 항목 처리
 
@@ -581,8 +397,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
 
         {/* Konva.js 이미지 렌더링 */}
         <div className="h-full flex items-center justify-center relative">
-          {containerSize.width > 0 && containerSize.height > 0 ? (
-            /* Konva.js high-performance Canvas 2D renderer */
+          {containerSize.width > 0 && containerSize.height > 0 && (
             <KonvaImageViewer
               imageUrl={imageUrl}
               gridType={gridType}
@@ -590,22 +405,8 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               containerHeight={containerSize.height}
               onRenderComplete={() => setImageLoaded(true)}
               onError={handleViewerError}
+              enableHardwareAcceleration={false}
             />
-          ) : (
-            /* Fallback Canvas 2D renderer (legacy) */
-            <>
-              {/* Image canvas (base layer) */}
-              <canvas ref={canvasRef} style={{ display: imageUrl ? 'block' : 'none' }} />
-              {/* Grid overlay canvas (separate layer, positioned absolutely) */}
-              <canvas
-                ref={gridCanvasRef}
-                style={{
-                  display: imageUrl ? 'block' : 'none',
-                  position: 'absolute',
-                  pointerEvents: 'none'
-                }}
-              />
-            </>
           )}
         </div>
 
