@@ -22,6 +22,7 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
   const [isPanelMenuOpen, setIsPanelMenuOpen] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isAnyMenuOpen, setIsAnyMenuOpen] = useState(false); // 메뉴가 한 번이라도 열렸는지 추적
+  const [initialFocusForced, setInitialFocusForced] = useState(false); // 초기 포커스 강제 활성화 여부
   const panelMenuRef = useRef<HTMLDivElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
 
@@ -39,6 +40,12 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
 
     checkMaximized();
     checkFocused();
+
+    // 앱 시작 시 포커스가 없을 경우를 대비하여 강제로 활성화 상태로 설정
+    if (!initialFocusForced) {
+      setIsFocused(true);
+      setInitialFocusForced(true);
+    }
 
     // 이벤트 리스너 등록
     const setupListeners = async () => {
