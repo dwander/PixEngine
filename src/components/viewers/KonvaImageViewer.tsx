@@ -35,7 +35,7 @@ export function KonvaImageViewer({
   const [currentZoom, setCurrentZoom] = useState<number>(0) // Current zoom scale (0 = fit)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number } | null>(null)
+  const [mouseDownPos, setMouseDownPos] = useState<{ x: number; y: number; button: number } | null>(null)
   const [showZoomIndicator, setShowZoomIndicator] = useState(false)
   const [isCtrlPressed, setIsCtrlPressed] = useState(false)
   const zoomIndicatorTimeoutRef = useRef<number | null>(null)
@@ -508,11 +508,12 @@ export function KonvaImageViewer({
     const pointerPos = stage.getPointerPosition()
     if (!pointerPos) return
 
-    // Store mouse down position
-    setMouseDownPos({ x: pointerPos.x, y: pointerPos.y })
+    // Store mouse down position with button information
+    // button: 0 = left, 1 = middle, 2 = right
+    setMouseDownPos({ x: pointerPos.x, y: pointerPos.y, button: e.evt.button })
 
-    // If zoomed in and not Ctrl pressed, prepare for dragging
-    if (!isFitToScreen() && !isCtrlPressed) {
+    // Only prepare for dragging on left click
+    if (e.evt.button === 0 && !isFitToScreen() && !isCtrlPressed) {
       setDragStart({
         x: e.evt.clientX - imageScale.x,
         y: e.evt.clientY - imageScale.y
@@ -523,6 +524,9 @@ export function KonvaImageViewer({
   // Handle mouse move
   const handleMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     if (!mouseDownPos) return
+
+    // Only handle move for left button
+    if (mouseDownPos.button !== 0) return
 
     const stage = e.target.getStage()
     if (!stage) return
@@ -552,8 +556,8 @@ export function KonvaImageViewer({
   const handleMouseUp = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isDragging) {
       setIsDragging(false)
-    } else if (mouseDownPos) {
-      // This was a click, not a drag - perform zoom
+    } else if (mouseDownPos && mouseDownPos.button === 0) {
+      // Only perform zoom on left click (button 0), not right click (button 2)
       const stage = e.target.getStage()
       if (!stage) return
 
