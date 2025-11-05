@@ -1,9 +1,9 @@
 // 애플리케이션 전역 상수
 
 // 이미지 캐싱
-export const IMAGE_CACHE_SIZE = 20; // 최대 캐시 이미지 수
-export const PRELOAD_PREVIOUS_COUNT = 2; // 이전 이미지 프리로드 개수
-export const PRELOAD_NEXT_COUNT = 3; // 다음 이미지 프리로드 개수
+export const IMAGE_CACHE_SIZE = 50; // 최대 캐시 이미지 수 (20→50으로 증가, 성능 개선)
+export const PRELOAD_PREVIOUS_COUNT = 3; // 이전 이미지 프리로드 개수 (2→3으로 증가)
+export const PRELOAD_NEXT_COUNT = 5; // 다음 이미지 프리로드 개수 (3→5로 증가)
 
 // 썸네일
 export const THUMBNAIL_SIZE_MIN = 75; // 최소 썸네일 크기 (px)

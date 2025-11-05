@@ -3,6 +3,9 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { Check } from 'lucide-react'
+import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
+import { PixiImageViewer } from '../viewers/PixiImageViewer'
+import { isWebGLSupported } from '../../lib/webglUtils'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -110,6 +113,26 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   const histogramCanvasRef = useRef<HTMLCanvasElement>(null)
   const [histogramData, setHistogramData] = useState<HistogramData | null>(null)
 
+  // Web Worker for histogram calculation
+  const histogramWorkerRef = useRef<Worker | null>(null)
+
+  // Grid overlay canvas (separate layer)
+  const gridCanvasRef = useRef<HTMLCanvasElement>(null)
+
+  // WebGL support detection and renderer selection
+  const [usePixiRenderer, setUsePixiRenderer] = useState<boolean>(() => {
+    const webglSupported = isWebGLSupported()
+    console.log('WebGL supported:', webglSupported)
+    return webglSupported
+  })
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+
+  // Handle Pixi.js errors and fallback to Canvas 2D
+  const handlePixiError = useCallback((error: Error) => {
+    console.error('Pixi.js error, falling back to Canvas 2D:', error)
+    setUsePixiRenderer(false)
+  }, [])
+
   // 컨텍스트 메뉴 및 표시 옵션
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [showShootingInfo, setShowShootingInfo] = useState(() => {
@@ -156,8 +179,29 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     localStorage.setItem('imageViewer.showHistogram', JSON.stringify(showHistogram))
   }, [showHistogram])
 
-  // 히스토그램 계산 함수
-  const calculateHistogram = useCallback((img: HTMLImageElement): HistogramData => {
+  // Web Worker 초기화 및 정리
+  useEffect(() => {
+    // Web Worker 생성
+    histogramWorkerRef.current = new Worker(new URL('../../workers/histogram.worker.ts', import.meta.url), {
+      type: 'module'
+    })
+
+    // Worker 메시지 핸들러
+    histogramWorkerRef.current.onmessage = (e: MessageEvent<HistogramWorkerResult>) => {
+      setHistogramData(e.data.histogram)
+    }
+
+    // 컴포넌트 언마운트 시 Worker 정리
+    return () => {
+      if (histogramWorkerRef.current) {
+        histogramWorkerRef.current.terminate()
+        histogramWorkerRef.current = null
+      }
+    }
+  }, [])
+
+  // 히스토그램 계산 함수 (Web Worker로 위임)
+  const calculateHistogram = useCallback((img: HTMLImageElement): void => {
     try {
       // 임시 캔버스 생성하여 픽셀 데이터 추출
       const tempCanvas = document.createElement('canvas')
@@ -169,7 +213,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
 
       const ctx = tempCanvas.getContext('2d', { willReadFrequently: true })
       if (!ctx) {
-        return { red: [], green: [], blue: [], luminance: [] }
+        return
       }
 
       // CORS 이슈 방지: 이미지 그리기
@@ -180,36 +224,16 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
       } catch (error) {
         console.warn('Cannot read image data (CORS), skipping histogram calculation')
-        return { red: [], green: [], blue: [], luminance: [] }
+        return
       }
 
-      const data = imageData.data
-
-      // 히스토그램 초기화 (0-255 범위)
-      const red = new Array(256).fill(0)
-      const green = new Array(256).fill(0)
-      const blue = new Array(256).fill(0)
-      const luminance = new Array(256).fill(0)
-
-      // 픽셀 데이터 분석
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i]
-        const g = data[i + 1]
-        const b = data[i + 2]
-
-        red[r]++
-        green[g]++
-        blue[b]++
-
-        // 밝기 계산 (ITU-R BT.709 표준)
-        const lum = Math.floor(0.2126 * r + 0.7152 * g + 0.0722 * b)
-        luminance[lum]++
+      // Web Worker로 계산 위임
+      if (histogramWorkerRef.current) {
+        const message: HistogramWorkerMessage = { imageData }
+        histogramWorkerRef.current.postMessage(message)
       }
-
-      return { red, green, blue, luminance }
     } catch (error) {
-      console.error('Error calculating histogram:', error)
-      return { red: [], green: [], blue: [], luminance: [] }
+      console.error('Error preparing histogram calculation:', error)
     }
   }, [])
 
@@ -322,24 +346,36 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   }, [gridType])
 
   const drawGridLines = useCallback(() => {
-    const canvas = canvasRef.current
-    const img = currentImageRef.current
+    const imageCanvas = canvasRef.current
+    const gridCanvas = gridCanvasRef.current
     const currentGridType = gridTypeRef.current
 
-    if (!canvas || !img) return
+    if (!imageCanvas || !gridCanvas) return
 
-    // 항상 이미지를 먼저 다시 그림 (이전 격자선 제거)
-    const ctx = canvas.getContext('2d')
+    const ctx = gridCanvas.getContext('2d')
     if (!ctx) return
 
-    const displayWidth = canvas.width / (window.devicePixelRatio || 1)
-    const displayHeight = canvas.height / (window.devicePixelRatio || 1)
+    // Grid canvas 크기를 image canvas와 동기화
+    if (gridCanvas.width !== imageCanvas.width || gridCanvas.height !== imageCanvas.height) {
+      gridCanvas.width = imageCanvas.width
+      gridCanvas.height = imageCanvas.height
+      gridCanvas.style.width = imageCanvas.style.width
+      gridCanvas.style.height = imageCanvas.style.height
+    }
 
-    // 이미지 다시 그리기 (격자선 제거)
-    ctx.drawImage(img, 0, 0, displayWidth, displayHeight)
+    // 기존 격자선 지우기
+    ctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height)
 
-    // gridType이 'none'이면 여기서 종료 (격자선 없이 이미지만)
+    // gridType이 'none'이면 여기서 종료 (격자선 없음)
     if (currentGridType === 'none') return
+
+    const dpr = window.devicePixelRatio || 1
+    const displayWidth = gridCanvas.width / dpr
+    const displayHeight = gridCanvas.height / dpr
+
+    // 고해상도 스케일 적용
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.scale(dpr, dpr)
 
     // 격자선 그리기
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'
@@ -398,11 +434,8 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     if (currentImageRef.current) {
       // renderImageToCanvas는 캔버스 크기 조정 + 이미지 그리기
       renderImageToCanvas()
-      // drawGridLines는 이미지 재그리기 + 격자선 추가
-      // 두 번 그려지는 것을 방지하기 위해 gridType이 있을 때만 drawGridLines 호출
-      if (gridTypeRef.current !== 'none') {
-        drawGridLines()
-      }
+      // 격자선은 별도 레이어이므로 항상 다시 그림
+      drawGridLines()
     }
   }, [renderImageToCanvas, drawGridLines])
 
@@ -427,9 +460,8 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         if (cachedImg) {
           currentImageRef.current = cachedImg
 
-          // 히스토그램 계산 (백그라운드)
-          const histogram = calculateHistogram(cachedImg)
-          setHistogramData(histogram)
+          // 히스토그램 계산 (Web Worker에서 백그라운드 처리)
+          calculateHistogram(cachedImg)
 
           // 다음 프레임에서 렌더링 (DOM 업데이트 후)
           requestAnimationFrame(() => {
@@ -461,9 +493,8 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     img.onload = () => {
       currentImageRef.current = img
 
-      // 히스토그램 계산 (백그라운드)
-      const histogram = calculateHistogram(img)
-      setHistogramData(histogram)
+      // 히스토그램 계산 (Web Worker에서 백그라운드 처리)
+      calculateHistogram(img)
 
       renderImageToCanvas()
       drawGridLines()
@@ -475,10 +506,9 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     img.src = imageUrl
   }, [imageUrl, renderImageToCanvas, calculateHistogram, drawGridLines])
 
-  // gridType 변경 시 격자선만 다시 그리기
+  // gridType 변경 시 격자선만 다시 그리기 (이미지는 재렌더링하지 않음)
   useEffect(() => {
-    if (currentImageRef.current && canvasRef.current) {
-      // drawGridLines가 이미지 재렌더링 + 격자선 그리기를 모두 처리
+    if (currentImageRef.current && gridCanvasRef.current) {
       drawGridLines()
     }
   }, [gridType, drawGridLines])
@@ -496,11 +526,21 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     if (!container) return
 
     // ResizeObserver는 maximize/minimize를 포함한 모든 크기 변경을 감지
-    const resizeObserver = new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        setContainerSize({ width, height })
+      }
       handleResize()
     })
 
     resizeObserver.observe(container)
+
+    // Initial size
+    setContainerSize({
+      width: container.clientWidth,
+      height: container.clientHeight
+    })
 
     return () => {
       resizeObserver.disconnect()
@@ -547,8 +587,33 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         </div>
 
         {/* Canvas로 이미지 렌더링 - 완전 중앙 정렬 */}
-        <div className="h-full flex items-center justify-center">
-          <canvas ref={canvasRef} style={{ display: imageUrl ? 'block' : 'none' }} />
+        <div className="h-full flex items-center justify-center relative">
+          {usePixiRenderer && containerSize.width > 0 && containerSize.height > 0 ? (
+            /* Pixi.js WebGL renderer */
+            <PixiImageViewer
+              imageUrl={imageUrl}
+              gridType={gridType}
+              containerWidth={containerSize.width}
+              containerHeight={containerSize.height}
+              onRenderComplete={() => setImageLoaded(true)}
+              onError={handlePixiError}
+            />
+          ) : (
+            /* Fallback Canvas 2D renderer */
+            <>
+              {/* Image canvas (base layer) */}
+              <canvas ref={canvasRef} style={{ display: imageUrl ? 'block' : 'none' }} />
+              {/* Grid overlay canvas (separate layer, positioned absolutely) */}
+              <canvas
+                ref={gridCanvasRef}
+                style={{
+                  display: imageUrl ? 'block' : 'none',
+                  position: 'absolute',
+                  pointerEvents: 'none'
+                }}
+              />
+            </>
+          )}
         </div>
 
         {/* 컨텍스트 메뉴 */}
