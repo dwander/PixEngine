@@ -35,6 +35,8 @@ export function KonvaImageViewer({
   const [currentZoom, setCurrentZoom] = useState<number>(0) // Current zoom scale (0 = fit)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [showZoomIndicator, setShowZoomIndicator] = useState(false)
+  const zoomIndicatorTimeoutRef = useRef<number | null>(null)
   const stageRef = useRef<Konva.Stage>(null)
   const layerRef = useRef<Konva.Layer>(null)
   const imageRef = useRef<Konva.Image>(null)
@@ -162,10 +164,44 @@ export function KonvaImageViewer({
     setImageScale({ x, y, scale: targetScale })
   }, [image, containerWidth, containerHeight, currentZoom])
 
+  // Show zoom indicator when zoom level changes
+  useEffect(() => {
+    if (!image || zoomSteps.current.length === 0) return
+
+    // Clear previous timeout
+    if (zoomIndicatorTimeoutRef.current !== null) {
+      clearTimeout(zoomIndicatorTimeoutRef.current)
+    }
+
+    // Show indicator
+    setShowZoomIndicator(true)
+
+    // Hide after 2 seconds
+    zoomIndicatorTimeoutRef.current = window.setTimeout(() => {
+      setShowZoomIndicator(false)
+      zoomIndicatorTimeoutRef.current = null
+    }, 2000)
+
+    // Cleanup
+    return () => {
+      if (zoomIndicatorTimeoutRef.current !== null) {
+        clearTimeout(zoomIndicatorTimeoutRef.current)
+        zoomIndicatorTimeoutRef.current = null
+      }
+    }
+  }, [currentZoom, image])
+
   // Check if current zoom is fit-to-screen
   const isFitToScreen = useCallback(() => {
     if (zoomSteps.current.length === 0) return true
     return zoomSteps.current[currentZoom] === fitToScreenScale.current
+  }, [currentZoom])
+
+  // Get current zoom percentage for display
+  const getZoomPercentage = useCallback(() => {
+    if (zoomSteps.current.length === 0) return 100
+    const currentScale = zoomSteps.current[currentZoom]
+    return Math.round(currentScale * 100)
   }, [currentZoom])
 
   // Update global zoom state for other components (e.g., ThumbnailPanel)
@@ -489,43 +525,71 @@ export function KonvaImageViewer({
   }, [image, imageScale, enableHardwareAcceleration])
 
   return (
-    <Stage
-      ref={stageRef}
-      width={containerWidth}
-      height={containerHeight}
-      pixelRatio={window.devicePixelRatio || 1}
-      onWheel={handleWheel}
-      onMouseDown={handleDragStart}
-      onMouseMove={handleDragMove}
-      onMouseUp={handleDragEnd}
-      onMouseLeave={handleDragEnd}
-      style={{
-        backgroundColor: '#171717',
-        display: 'block',
-        maxWidth: '100%',
-        maxHeight: '100%',
-        cursor: isDragging ? 'grabbing' : (!isFitToScreen() ? 'grab' : 'default')
-      }}
-    >
-      <Layer
-        ref={layerRef}
-        imageSmoothingEnabled={true}
-        listening={false}
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <Stage
+        ref={stageRef}
+        width={containerWidth}
+        height={containerHeight}
+        pixelRatio={window.devicePixelRatio || 1}
+        onWheel={handleWheel}
+        onMouseDown={handleDragStart}
+        onMouseMove={handleDragMove}
+        onMouseUp={handleDragEnd}
+        onMouseLeave={handleDragEnd}
+        style={{
+          backgroundColor: '#171717',
+          display: 'block',
+          maxWidth: '100%',
+          maxHeight: '100%',
+          cursor: isDragging ? 'grabbing' : (!isFitToScreen() ? 'grab' : 'default')
+        }}
       >
-        {image && (
-          <KonvaImage
-            ref={imageRef}
-            image={image}
-            x={imageScale.x}
-            y={imageScale.y}
-            width={image.width * imageScale.scale}
-            height={image.height * imageScale.scale}
-            listening={false}
-            perfectDrawEnabled={false}
-          />
-        )}
-        {renderGridLines()}
-      </Layer>
-    </Stage>
+        <Layer
+          ref={layerRef}
+          imageSmoothingEnabled={true}
+          listening={false}
+        >
+          {image && (
+            <KonvaImage
+              ref={imageRef}
+              image={image}
+              x={imageScale.x}
+              y={imageScale.y}
+              width={image.width * imageScale.scale}
+              height={image.height * imageScale.scale}
+              listening={false}
+              perfectDrawEnabled={false}
+            />
+          )}
+          {renderGridLines()}
+        </Layer>
+      </Stage>
+
+      {/* Zoom level indicator */}
+      {showZoomIndicator && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            color: 'white',
+            padding: '6px 20px',
+            borderRadius: '999px',
+            fontSize: '15px',
+            fontWeight: '500',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+            letterSpacing: '0.5px',
+          }}
+        >
+          {getZoomPercentage()}%
+        </div>
+      )}
+    </div>
   )
 }
