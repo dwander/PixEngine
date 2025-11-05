@@ -120,10 +120,11 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   const gridCanvasRef = useRef<HTMLCanvasElement>(null)
 
   // WebGL support detection and renderer selection
+  // CRITICAL: Pixi.js causing app to freeze on startup - disabled
   const [usePixiRenderer, setUsePixiRenderer] = useState<boolean>(() => {
     const webglSupported = isWebGLSupported()
     console.log('WebGL supported:', webglSupported)
-    return webglSupported // Re-enabled with Texture.from() instead of Assets API
+    return false // Disabled - causing app freeze
   })
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 
