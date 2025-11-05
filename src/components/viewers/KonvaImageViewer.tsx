@@ -173,10 +173,8 @@ export function KonvaImageViewer({
     setImageScale({ x, y, scale: targetScale })
   }, [image, containerWidth, containerHeight, currentZoom])
 
-  // Show zoom indicator when zoom level changes
-  useEffect(() => {
-    if (!image || zoomSteps.current.length === 0) return
-
+  // Helper function to show zoom indicator
+  const showZoomIndicatorTemporarily = useCallback(() => {
     // Clear previous timeout
     if (zoomIndicatorTimeoutRef.current !== null) {
       clearTimeout(zoomIndicatorTimeoutRef.current)
@@ -190,15 +188,7 @@ export function KonvaImageViewer({
       setShowZoomIndicator(false)
       zoomIndicatorTimeoutRef.current = null
     }, 2000)
-
-    // Cleanup
-    return () => {
-      if (zoomIndicatorTimeoutRef.current !== null) {
-        clearTimeout(zoomIndicatorTimeoutRef.current)
-        zoomIndicatorTimeoutRef.current = null
-      }
-    }
-  }, [currentZoom, image])
+  }, [])
 
   // Check if current zoom is fit-to-screen
   const isFitToScreen = useCallback(() => {
@@ -388,8 +378,11 @@ export function KonvaImageViewer({
         y: newY,
         scale: newScale
       }))
+
+      // Show zoom indicator
+      showZoomIndicatorTemporarily()
     }
-  }, [image, currentZoom, imageScale, containerWidth, containerHeight])
+  }, [image, currentZoom, imageScale, containerWidth, containerHeight, showZoomIndicatorTemporarily])
 
   // Handle mouse wheel zoom (Ctrl + Wheel)
   const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -444,8 +437,10 @@ export function KonvaImageViewer({
     const fitIndex = zoomSteps.current.indexOf(fitToScreenScale.current)
     if (fitIndex !== -1) {
       setCurrentZoom(fitIndex)
+      // Show zoom indicator
+      showZoomIndicatorTemporarily()
     }
-  }, [])
+  }, [showZoomIndicatorTemporarily])
 
   // Handle keyboard shortcuts and Ctrl key state
   useEffect(() => {
@@ -579,6 +574,16 @@ export function KonvaImageViewer({
   const handleMouseLeave = useCallback(() => {
     setIsDragging(false)
     setMouseDownPos(null)
+  }, [])
+
+  // Cleanup zoom indicator timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (zoomIndicatorTimeoutRef.current !== null) {
+        clearTimeout(zoomIndicatorTimeoutRef.current)
+        zoomIndicatorTimeoutRef.current = null
+      }
+    }
   }, [])
 
   // Set high-quality image smoothing and optional hardware acceleration
