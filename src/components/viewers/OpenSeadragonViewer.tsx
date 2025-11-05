@@ -228,12 +228,19 @@ export function OpenSeadragonViewer({
     const container = containerRef.current
     if (!viewer || !container) return
 
+    // Check if viewer is fully initialized
+    if (!viewer.viewport || !viewer.viewport.getContainerSize) return
+
     // Update viewer size
     container.style.width = `${containerWidth}px`
     container.style.height = `${containerHeight}px`
 
-    // Trigger viewer resize
-    viewer.viewport.resize()
+    // Trigger viewer resize (no arguments needed)
+    try {
+      viewer.viewport.resize()
+    } catch (error) {
+      console.warn('Failed to resize viewport:', error)
+    }
 
     // Redraw grid
     setTimeout(drawGridOverlay, 50)
