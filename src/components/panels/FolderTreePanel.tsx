@@ -190,6 +190,22 @@ export function FolderTreePanel() {
         console.error("Failed to load desktop folder:", error);
       }
 
+      // "문서" 폴더
+      try {
+        const documentsInfo = await invoke<FolderInfo | null>("get_documents_folder");
+        if (documentsInfo) {
+          nodes.push({
+            name: documentsInfo.name,
+            path: documentsInfo.path,
+            isOpen: false,
+            children: undefined,
+            treeId: 'documents', // 독립적인 트리 ID
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load documents folder:", error);
+      }
+
       // "사진" 폴더
       try {
         const pictureInfo = await invoke<FolderInfo | null>("get_picture_folder");

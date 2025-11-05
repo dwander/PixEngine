@@ -402,6 +402,23 @@ fn get_desktop_folder() -> Option<FolderInfo> {
     }
 }
 
+// 문서 폴더 가져오기
+#[tauri::command]
+fn get_documents_folder() -> Option<FolderInfo> {
+    if let Some(documents_dir) = dirs::document_dir() {
+        // canonicalize로 심볼릭 링크를 실제 경로로 해결
+        let real_path = fs::canonicalize(&documents_dir)
+            .unwrap_or(documents_dir.clone());
+
+        Some(FolderInfo {
+            name: "문서".to_string(),
+            path: real_path.to_string_lossy().to_string(),
+        })
+    } else {
+        None
+    }
+}
+
 // 디렉토리 내용 읽기
 #[tauri::command]
 fn read_directory_contents(path: &str) -> Result<Vec<serde_json::Value>, String> {
@@ -1057,6 +1074,7 @@ pub fn run() {
             has_subdirectories,
             get_picture_folder,
             get_desktop_folder,
+            get_documents_folder,
             read_directory_contents,
             calculate_images_total_size,
             generate_thumbnail_for_image,
