@@ -12,6 +12,7 @@ export function useWindowState() {
     let saveTimeout: ReturnType<typeof setTimeout>;
     let isMounted = true;
     let isShown = false;
+    let previousMaximized = false;
 
     // 초기 렌더링 완료 후 윈도우 표시
     const showWindow = async () => {
@@ -19,6 +20,8 @@ export function useWindowState() {
         try {
           await invoke("show_window");
           isShown = true;
+          // 초기 최대화 상태 저장
+          previousMaximized = await appWindow.isMaximized();
         } catch (error) {
           console.error("윈도우 표시 실패:", error);
         }
@@ -28,9 +31,9 @@ export function useWindowState() {
     // 현재 윈도우 상태 저장 (Rust 커맨드 사용)
     const saveWindowState = async () => {
       try {
+        const maximized = await appWindow.isMaximized();
         const position = await appWindow.outerPosition();
         const size = await appWindow.outerSize();
-        const maximized = await appWindow.isMaximized();
 
         await invoke("save_window_state", {
           x: position.x,
@@ -39,6 +42,8 @@ export function useWindowState() {
           height: size.height,
           maximized,
         });
+
+        previousMaximized = maximized;
       } catch (error) {
         console.error("윈도우 상태 저장 실패:", error);
       }
@@ -59,11 +64,29 @@ export function useWindowState() {
 
     // 이벤트 리스너 등록
     const setupListeners = async () => {
+      let skipNextSave = false;
+
       const unlistenMove = await appWindow.onMoved(() => {
+        // 복원 직후 스킵 플래그가 있으면 한 번만 건너뛰고 해제
+        if (skipNextSave) {
+          skipNextSave = false;
+          return;
+        }
         debouncedSave();
       });
 
-      const unlistenResize = await appWindow.onResized(() => {
+      const unlistenResize = await appWindow.onResized(async () => {
+        // 최대화 상태 변경 감지
+        const currentMaximized = await appWindow.isMaximized();
+
+        // 최대화 → 복원으로 변경되는 경우
+        if (previousMaximized && !currentMaximized) {
+          // 복원 직후에는 저장하지 않음 (잘못된 중앙 위치 방지)
+          previousMaximized = currentMaximized;
+          skipNextSave = true; // 다음 move 이벤트도 한 번 건너뛰기
+          return;
+        }
+
         debouncedSave();
       });
 

@@ -155,15 +155,38 @@ fn save_window_state(
     height: u32,
     maximized: bool,
 ) -> Result<(), String> {
-    let state = WindowState {
-        x,
-        y,
-        width,
-        height,
-        maximized,
+    let path = get_window_state_path(&app)?;
+
+    // 기존 상태 로드 (있으면)
+    let mut state = if path.exists() {
+        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str::<WindowState>(&content).unwrap_or(WindowState {
+            x,
+            y,
+            width,
+            height,
+            maximized,
+        })
+    } else {
+        WindowState {
+            x,
+            y,
+            width,
+            height,
+            maximized,
+        }
     };
 
-    let path = get_window_state_path(&app)?;
+    // 최대화 상태는 항상 업데이트
+    state.maximized = maximized;
+
+    // 최대화 상태가 아닐 때만 위치와 크기 업데이트
+    if !maximized {
+        state.x = x;
+        state.y = y;
+        state.width = width;
+        state.height = height;
+    }
 
     // 디렉토리가 없으면 생성
     if let Some(parent) = path.parent() {
@@ -1005,11 +1028,14 @@ pub fn run() {
 
             // 저장된 윈도우 상태 복원
             if let Some(state) = load_window_state(&app.handle()) {
+                // 최대화 상태일 때도 먼저 일반 위치/크기를 설정해야 함
+                // (복원 시 사용할 크기/위치를 Tauri에 알려주기 위함)
+                let _ = window.set_size(PhysicalSize::new(state.width, state.height));
+                let _ = window.set_position(PhysicalPosition::new(state.x, state.y));
+
+                // 최대화 상태면 설정 후 최대화 실행
                 if state.maximized {
                     let _ = window.maximize();
-                } else {
-                    let _ = window.set_size(PhysicalSize::new(state.width, state.height));
-                    let _ = window.set_position(PhysicalPosition::new(state.x, state.y));
                 }
             }
 
