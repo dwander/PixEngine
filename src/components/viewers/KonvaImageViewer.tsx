@@ -114,8 +114,8 @@ export function KonvaImageViewer({
     // Build dynamic zoom steps with zoom out levels
     const steps: number[] = []
 
-    // Add zoom out levels (25%, 33%, 50%)
-    const zoomOutLevels = [0.25, 0.33, 0.5]
+    // Add zoom out levels (5%, 10%, 15%, 20%, 25%, 33%, 50%)
+    const zoomOutLevels = [0.05, 0.1, 0.15, 0.2, 0.25, 0.33, 0.5]
     for (const level of zoomOutLevels) {
       if (level < fitScale) {
         steps.push(level)
@@ -324,9 +324,39 @@ export function KonvaImageViewer({
     }
   }, [image, zoom])
 
+  // Pan with arrow keys
+  const pan = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    if (isFitToScreen()) return
+
+    const panStep = 50 // pixels to move per key press
+
+    setImageScale(prev => {
+      let newX = prev.x
+      let newY = prev.y
+
+      switch (direction) {
+        case 'left':
+          newX += panStep
+          break
+        case 'right':
+          newX -= panStep
+          break
+        case 'up':
+          newY += panStep
+          break
+        case 'down':
+          newY -= panStep
+          break
+      }
+
+      return { ...prev, x: newX, y: newY }
+    })
+  }, [isFitToScreen])
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Zoom shortcuts
       if (e.key === '+' || e.key === '=') {
         e.preventDefault()
         zoom('in')
@@ -334,13 +364,33 @@ export function KonvaImageViewer({
         e.preventDefault()
         zoom('out')
       }
+      // Pan shortcuts (only when zoomed in, not fit-to-screen)
+      else if (!isFitToScreen()) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          e.stopPropagation()
+          pan('left')
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          e.stopPropagation()
+          pan('right')
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          e.stopPropagation()
+          pan('up')
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          e.stopPropagation()
+          pan('down')
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [zoom])
+  }, [zoom, pan, isFitToScreen])
 
   // Check if current zoom is fit-to-screen
   const isFitToScreen = useCallback(() => {
