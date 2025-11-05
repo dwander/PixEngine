@@ -8,6 +8,7 @@ import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
+import { useViewerStore } from '../../store/viewerStore'
 import {
   THUMBNAIL_SIZE_DEFAULT,
   THUMBNAIL_SIZE_MIN,
@@ -53,6 +54,7 @@ interface ThumbnailProgress {
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage } = useImageContext()
   const { imageFiles, lightMetadataMap } = useFolderContext()
+  const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -521,8 +523,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // 방향키 처리
+    // 방향키 처리 (이미지 뷰어가 줌인 상태일 때는 무시)
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      // 이미지 뷰어가 줌인 상태면 방향키를 썸네일 네비게이션에 사용하지 않음
+      if (isZoomedIn) {
+        return
+      }
+
       e.preventDefault()
 
       // 단일 탭: e.repeat === false
@@ -626,7 +633,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [sortedImages.length, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay])
+  }, [isZoomedIn, sortedImages.length, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {

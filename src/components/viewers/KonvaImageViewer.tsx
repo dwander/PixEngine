@@ -6,6 +6,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Line } from 'react-konva'
 import Konva from 'konva'
+import { useViewerStore } from '../../store/viewerStore'
 
 interface KonvaImageViewerProps {
   imageUrl: string | null
@@ -39,6 +40,7 @@ export function KonvaImageViewer({
   const imageRef = useRef<Konva.Image>(null)
   const fitToScreenScale = useRef<number>(1)
   const zoomSteps = useRef<number[]>([]) // Dynamic zoom steps
+  const setIsZoomedIn = useViewerStore((state) => state.setIsZoomedIn)
 
   // Load image
   useEffect(() => {
@@ -159,6 +161,17 @@ export function KonvaImageViewer({
 
     setImageScale({ x, y, scale: targetScale })
   }, [image, containerWidth, containerHeight, currentZoom])
+
+  // Check if current zoom is fit-to-screen
+  const isFitToScreen = useCallback(() => {
+    if (zoomSteps.current.length === 0) return true
+    return zoomSteps.current[currentZoom] === fitToScreenScale.current
+  }, [currentZoom])
+
+  // Update global zoom state for other components (e.g., ThumbnailPanel)
+  useEffect(() => {
+    setIsZoomedIn(!isFitToScreen())
+  }, [currentZoom, isFitToScreen, setIsZoomedIn])
 
   // Draw grid lines
   const renderGridLines = useCallback(() => {
@@ -353,11 +366,25 @@ export function KonvaImageViewer({
     })
   }, [isFitToScreen])
 
+  // Reset to fit-to-screen
+  const resetToFit = useCallback(() => {
+    if (zoomSteps.current.length === 0) return
+    const fitIndex = zoomSteps.current.indexOf(fitToScreenScale.current)
+    if (fitIndex !== -1) {
+      setCurrentZoom(fitIndex)
+    }
+  }, [])
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // ESC: Reset to fit-to-screen
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        resetToFit()
+      }
       // Zoom shortcuts
-      if (e.key === '+' || e.key === '=') {
+      else if (e.key === '+' || e.key === '=') {
         e.preventDefault()
         zoom('in')
       } else if (e.key === '-' || e.key === '_') {
@@ -390,13 +417,7 @@ export function KonvaImageViewer({
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [zoom, pan, isFitToScreen])
-
-  // Check if current zoom is fit-to-screen
-  const isFitToScreen = useCallback(() => {
-    if (zoomSteps.current.length === 0) return true
-    return zoomSteps.current[currentZoom] === fitToScreenScale.current
-  }, [currentZoom])
+  }, [zoom, pan, isFitToScreen, resetToFit])
 
   // Handle drag start
   const handleDragStart = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
