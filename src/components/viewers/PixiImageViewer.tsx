@@ -34,12 +34,12 @@ export function PixiImageViewer({
     const canvas = canvasRef.current
     if (!canvas) return
 
-    let app: Application
+    let mounted = true
 
     // Create Pixi Application with WebGL
     ;(async () => {
       try {
-        app = new Application()
+        const app = new Application()
         await app.init({
           canvas,
           width: containerWidth,
@@ -50,6 +50,11 @@ export function PixiImageViewer({
           antialias: true,
           preference: 'webgl', // Try WebGL first
         })
+
+        if (!mounted) {
+          app.destroy(true, { children: true, texture: false })
+          return
+        }
 
         pixiAppRef.current = app
 
@@ -71,6 +76,8 @@ export function PixiImageViewer({
     })()
 
     return () => {
+      mounted = false
+      const app = pixiAppRef.current
       if (app) {
         app.destroy(true, { children: true, texture: false })
       }
