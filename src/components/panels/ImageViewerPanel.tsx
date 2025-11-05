@@ -340,12 +340,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       const dvContainer = container.closest('.dv-content-container')
       if (dvContainer) {
         const rect = dvContainer.getBoundingClientRect()
-        console.log('[ImageViewerPanel] dv-content-container size:', { width: rect.width, height: rect.height })
         setContainerSize({ width: rect.width, height: rect.height })
       } else {
         // fallback to containerRef
         const { width, height } = container.getBoundingClientRect()
-        console.log('[ImageViewerPanel] containerRef size:', { width, height })
         setContainerSize({ width, height })
       }
     }
@@ -451,29 +449,20 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
             </button>
           </div>
         )}
-      </div>
 
-      {/* 하단 정보 바 (히스토그램 + 촬영 정보) */}
-      {(showHistogram || (showShootingInfo && metadata)) && (
-        <div className="h-12 px-4 flex items-center justify-between relative" style={{ fontSize: '16px' }}>
-          {/* 좌측: 히스토그램 (위로 올라가는 구조) */}
-          <div className="flex items-center">
-            {showHistogram && (
-              <div className="absolute left-4 w-64 rounded-lg border border-neutral-700 overflow-hidden" style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', height: '80px', bottom: '8px' }}>
-                <canvas
-                  ref={histogramCanvasRef}
-                  width={256}
-                  height={64}
-                  className="w-full h-full"
-                />
-              </div>
-            )}
+        {showHistogram && (
+          <div className="absolute left-4 bottom-4 w-64 rounded border border-neutral-700 overflow-hidden z-20" style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)', height: '80px' }}>
+            <canvas
+              ref={histogramCanvasRef}
+              width={256}
+              height={64}
+              className="w-full h-full"
+            />
           </div>
+        )}
 
-          {/* 우측: 촬영 설정 (아이콘 + 값) */}
-          {showShootingInfo && metadata && (
-          <div className="flex items-center gap-2 text-gray-300">
-            {/* 셔터 속도 */}
+        {showShootingInfo && metadata && (
+          <div className="absolute right-4 bottom-4 px-3 py-1 rounded-xl border border-neutral-700 z-20 flex items-center gap-2 text-gray-300" style={{ fontSize: '16px', backgroundColor: 'rgba(0, 0, 0, 0.75)' }}>
             {metadata.shutter_speed && (
               <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="셔터 속도">
                 <img src="/icons/shutter.svg" alt="shutter" className="w-10 h-10 opacity-60 invert" />
@@ -481,7 +470,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             )}
 
-            {/* 조리개 */}
             {metadata.aperture && (
               <div className="flex items-center gap-0.5" style={{ width: '90px', paddingLeft: '15px' }} title="조리개">
                 <img src="/icons/iris.svg" alt="aperture" className="w-10 h-10 opacity-60 invert" />
@@ -489,7 +477,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             )}
 
-            {/* ISO */}
             {metadata.iso && (
               <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="ISO">
                 <img src="/icons/iso.svg" alt="ISO" className="w-10 h-10 opacity-60 invert" />
@@ -497,7 +484,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             )}
 
-            {/* 초점 거리 */}
             {metadata.focal_length && (
               <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="초점 거리">
                 <img src="/icons/focal_length.svg" alt="focal length" style={{ width: '30px', height: '30px' }} className="opacity-60 invert" />
@@ -505,7 +491,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             )}
 
-            {/* 노출 보정 */}
             {metadata.exposure_bias && (
               <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="노출 보정">
                 <img src="/icons/expose.svg" alt="exposure" className="w-10 h-10 opacity-60 invert" />
@@ -513,7 +498,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             )}
 
-            {/* 플래시 */}
             {metadata.flash && getFlashIcon(metadata.flash) ? (
               <div className="flex items-center gap-0.5" style={{ width: '50px', marginLeft: '20px' }} title={metadata.flash}>
                 <img src={getFlashIcon(metadata.flash)} alt="flash" className="w-10 h-10 opacity-60 invert" />
@@ -524,7 +508,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             ) : null}
 
-            {/* 측광 모드 */}
             {metadata.metering_mode && getMeteringModeIcon(metadata.metering_mode) ? (
               <div className="flex items-center gap-0.5" style={{ width: '50px' }} title={metadata.metering_mode}>
                 <img src={getMeteringModeIcon(metadata.metering_mode)} alt="metering" className="w-10 h-10 opacity-60 invert" />
@@ -535,7 +518,6 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             ) : null}
 
-            {/* 화이트밸런스 */}
             {metadata.white_balance && getWhiteBalanceIcon(metadata.white_balance) ? (
               <div className="flex items-center gap-0.5" style={{ width: '50px' }} title={metadata.white_balance}>
                 <img src={getWhiteBalanceIcon(metadata.white_balance)} alt="white balance" className="w-10 h-10 opacity-60 invert" />
@@ -546,9 +528,8 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               </div>
             ) : null}
           </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 })
