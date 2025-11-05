@@ -17,6 +17,9 @@ interface KonvaImageViewerProps {
   enableHardwareAcceleration?: boolean
 }
 
+// Zoom levels: fit → dynamic steps to 100% → fixed steps after 100%
+const ZOOM_LEVELS_AFTER_100 = [1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
+
 export function KonvaImageViewer({
   imageUrl,
   gridType = 'none',
@@ -28,9 +31,14 @@ export function KonvaImageViewer({
 }: KonvaImageViewerProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [imageScale, setImageScale] = useState({ x: 0, y: 0, scale: 1 })
+  const [currentZoom, setCurrentZoom] = useState<number>(0) // Current zoom scale (0 = fit)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const stageRef = useRef<Konva.Stage>(null)
   const layerRef = useRef<Konva.Layer>(null)
   const imageRef = useRef<Konva.Image>(null)
+  const fitToScreenScale = useRef<number>(1)
+  const zoomSteps = useRef<number[]>([]) // Dynamic zoom steps
 
   // Load image
   useEffect(() => {
@@ -38,6 +46,10 @@ export function KonvaImageViewer({
       setImage(null)
       return
     }
+
+    // Reset zoom and dragging state when loading new image
+    setIsDragging(false)
+    // Note: currentZoom will be set by the zoom steps effect
 
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -81,7 +93,7 @@ export function KonvaImageViewer({
     stage.batchDraw()
   }, [containerWidth, containerHeight])
 
-  // Calculate image position and scale
+  // Calculate fit-to-screen scale and zoom steps
   useEffect(() => {
     if (!image) return
 
@@ -90,19 +102,63 @@ export function KonvaImageViewer({
     const containerW = containerWidth
     const containerH = containerHeight
 
-    // Calculate scale to fit
-    const scale = Math.min(
+    // Calculate scale to fit (no upscaling beyond 100%)
+    const fitScale = Math.min(
       containerW / imgWidth,
       containerH / imgHeight,
-      1 // Don't scale up beyond original size
+      1
     )
 
-    // Center the image
-    const x = (containerW - imgWidth * scale) / 2
-    const y = (containerH - imgHeight * scale) / 2
+    fitToScreenScale.current = fitScale
 
-    setImageScale({ x, y, scale })
+    // Build dynamic zoom steps with zoom out levels
+    const steps: number[] = []
+
+    // Add zoom out levels (25%, 33%, 50%)
+    const zoomOutLevels = [0.25, 0.33, 0.5]
+    for (const level of zoomOutLevels) {
+      if (level < fitScale) {
+        steps.push(level)
+      }
+    }
+
+    // Add fit-to-screen
+    steps.push(fitScale)
+
+    // Add intermediate steps to 100%
+    if (fitScale < 0.5) {
+      steps.push(0.5, 0.75)
+    } else if (fitScale < 0.75) {
+      steps.push(0.75)
+    }
+
+    // Add 100% and levels after 100%
+    steps.push(...ZOOM_LEVELS_AFTER_100)
+
+    zoomSteps.current = steps
+
+    // Reset to fit when steps change
+    const fitIndex = steps.indexOf(fitScale)
+    setCurrentZoom(fitIndex)
   }, [image, containerWidth, containerHeight])
+
+  // Calculate image position and scale based on current zoom
+  useEffect(() => {
+    if (!image || zoomSteps.current.length === 0) return
+
+    const imgWidth = image.width
+    const imgHeight = image.height
+    const containerW = containerWidth
+    const containerH = containerHeight
+
+    const targetScale = zoomSteps.current[currentZoom]
+
+    // Center the image (initial position before panning)
+    const x = (containerW - imgWidth * targetScale) / 2
+    const y = (containerH - imgHeight * targetScale) / 2
+
+    setImageScale({ x, y, scale: targetScale })
+  }, [image, containerWidth, containerHeight, currentZoom])
 
   // Draw grid lines
   const renderGridLines = useCallback(() => {
@@ -232,6 +288,96 @@ export function KonvaImageViewer({
     return lines
   }, [image, gridType, imageScale])
 
+  // Zoom in/out function
+  const zoom = useCallback((direction: 'in' | 'out') => {
+    if (!image || zoomSteps.current.length === 0) return
+
+    const oldZoom = currentZoom
+    let newZoom = oldZoom
+
+    if (direction === 'in') {
+      newZoom = Math.min(oldZoom + 1, zoomSteps.current.length - 1)
+    } else {
+      newZoom = Math.max(oldZoom - 1, 0)
+    }
+
+    if (newZoom !== oldZoom) {
+      setCurrentZoom(newZoom)
+    }
+  }, [image, currentZoom])
+
+  // Handle mouse wheel zoom (Ctrl + Wheel)
+  const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
+    // Only handle zoom when Ctrl is pressed
+    if (!e.evt.ctrlKey) return
+
+    e.evt.preventDefault()
+
+    if (!image || zoomSteps.current.length === 0) return
+
+    const delta = e.evt.deltaY
+
+    if (delta < 0) {
+      zoom('in')
+    } else {
+      zoom('out')
+    }
+  }, [image, zoom])
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault()
+        zoom('in')
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault()
+        zoom('out')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [zoom])
+
+  // Check if current zoom is fit-to-screen
+  const isFitToScreen = useCallback(() => {
+    if (zoomSteps.current.length === 0) return true
+    return zoomSteps.current[currentZoom] === fitToScreenScale.current
+  }, [currentZoom])
+
+  // Handle drag start
+  const handleDragStart = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (isFitToScreen()) return // No panning in fit-to-screen mode
+
+    setIsDragging(true)
+    setDragStart({
+      x: e.evt.clientX - imageScale.x,
+      y: e.evt.clientY - imageScale.y
+    })
+  }, [isFitToScreen, imageScale])
+
+  // Handle drag move
+  const handleDragMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!isDragging || isFitToScreen()) return
+
+    const newX = e.evt.clientX - dragStart.x
+    const newY = e.evt.clientY - dragStart.y
+
+    setImageScale(prev => ({
+      ...prev,
+      x: newX,
+      y: newY
+    }))
+  }, [isDragging, isFitToScreen, dragStart])
+
+  // Handle drag end
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
   // Set high-quality image smoothing and optional hardware acceleration
   useEffect(() => {
     const stage = stageRef.current
@@ -277,11 +423,17 @@ export function KonvaImageViewer({
       width={containerWidth}
       height={containerHeight}
       pixelRatio={window.devicePixelRatio || 1}
+      onWheel={handleWheel}
+      onMouseDown={handleDragStart}
+      onMouseMove={handleDragMove}
+      onMouseUp={handleDragEnd}
+      onMouseLeave={handleDragEnd}
       style={{
         backgroundColor: '#171717',
         display: 'block',
         maxWidth: '100%',
-        maxHeight: '100%'
+        maxHeight: '100%',
+        cursor: isDragging ? 'grabbing' : (!isFitToScreen() ? 'grab' : 'default')
       }}
     >
       <Layer
