@@ -4,8 +4,7 @@ import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { Check } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
-import { PixiImageViewer } from '../viewers/PixiImageViewer'
-import { isWebGLSupported } from '../../lib/webglUtils'
+import { OpenSeadragonViewer } from '../viewers/OpenSeadragonViewer'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -119,19 +118,12 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   // Grid overlay canvas (separate layer)
   const gridCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  // WebGL support detection and renderer selection
-  // CRITICAL: Pixi.js causing app to freeze on startup - disabled
-  const [usePixiRenderer, setUsePixiRenderer] = useState<boolean>(() => {
-    const webglSupported = isWebGLSupported()
-    console.log('WebGL supported:', webglSupported)
-    return false // Disabled - causing app freeze
-  })
+  // Use OpenSeadragon for high-performance image viewing
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 
-  // Handle Pixi.js errors and fallback to Canvas 2D
-  const handlePixiError = useCallback((error: Error) => {
-    console.error('Pixi.js error, falling back to Canvas 2D:', error)
-    setUsePixiRenderer(false)
+  // Handle OpenSeadragon errors
+  const handleViewerError = useCallback((error: Error) => {
+    console.error('OpenSeadragon error:', error)
   }, [])
 
   // 컨텍스트 메뉴 및 표시 옵션
@@ -587,20 +579,20 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
           )}
         </div>
 
-        {/* Canvas로 이미지 렌더링 - 완전 중앙 정렬 */}
+        {/* OpenSeadragon 이미지 렌더링 */}
         <div className="h-full flex items-center justify-center relative">
-          {usePixiRenderer && containerSize.width > 0 && containerSize.height > 0 ? (
-            /* Pixi.js WebGL renderer */
-            <PixiImageViewer
+          {containerSize.width > 0 && containerSize.height > 0 ? (
+            /* OpenSeadragon high-performance renderer */
+            <OpenSeadragonViewer
               imageUrl={imageUrl}
               gridType={gridType}
               containerWidth={containerSize.width}
               containerHeight={containerSize.height}
               onRenderComplete={() => setImageLoaded(true)}
-              onError={handlePixiError}
+              onError={handleViewerError}
             />
           ) : (
-            /* Fallback Canvas 2D renderer */
+            /* Fallback Canvas 2D renderer (legacy) */
             <>
               {/* Image canvas (base layer) */}
               <canvas ref={canvasRef} style={{ display: imageUrl ? 'block' : 'none' }} />
