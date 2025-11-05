@@ -42,6 +42,7 @@ export function KonvaImageViewer({
   const imageRef = useRef<Konva.Image>(null)
   const fitToScreenScale = useRef<number>(1)
   const zoomSteps = useRef<number[]>([]) // Dynamic zoom steps
+  const isZoomingRef = useRef<boolean>(false) // Track if zoom is in progress
   const setIsZoomedIn = useViewerStore((state) => state.setIsZoomedIn)
 
   // Load image
@@ -149,6 +150,12 @@ export function KonvaImageViewer({
   // Calculate image position and scale based on current zoom
   useEffect(() => {
     if (!image || zoomSteps.current.length === 0) return
+
+    // Skip if zoom function is handling the position
+    if (isZoomingRef.current) {
+      isZoomingRef.current = false
+      return
+    }
 
     const imgWidth = image.width
     const imgHeight = image.height
@@ -337,7 +344,7 @@ export function KonvaImageViewer({
     return lines
   }, [image, gridType, imageScale])
 
-  // Zoom in/out function
+  // Zoom in/out function with position preservation
   const zoom = useCallback((direction: 'in' | 'out') => {
     if (!image || zoomSteps.current.length === 0) return
 
@@ -351,9 +358,36 @@ export function KonvaImageViewer({
     }
 
     if (newZoom !== oldZoom) {
+      const oldScale = zoomSteps.current[oldZoom]
+      const newScale = zoomSteps.current[newZoom]
+
+      // Calculate viewport center in image coordinates
+      const viewportCenterX = containerWidth / 2
+      const viewportCenterY = containerHeight / 2
+
+      // Convert viewport center to image coordinates (before zoom)
+      const imageCenterX = (viewportCenterX - imageScale.x) / oldScale
+      const imageCenterY = (viewportCenterY - imageScale.y) / oldScale
+
+      // Calculate new position to keep the same point at viewport center
+      const newX = viewportCenterX - imageCenterX * newScale
+      const newY = viewportCenterY - imageCenterY * newScale
+
+      // Mark that zoom is handling the position
+      isZoomingRef.current = true
+
+      // Update zoom level
       setCurrentZoom(newZoom)
+
+      // Update position to maintain center point
+      setImageScale(prev => ({
+        ...prev,
+        x: newX,
+        y: newY,
+        scale: newScale
+      }))
     }
-  }, [image, currentZoom])
+  }, [image, currentZoom, imageScale, containerWidth, containerHeight])
 
   // Handle mouse wheel zoom (Ctrl + Wheel)
   const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
