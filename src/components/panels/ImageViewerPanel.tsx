@@ -335,21 +335,34 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     const container = containerRef.current
     if (!container) return
 
-    // ResizeObserver는 maximize/minimize를 포함한 모든 크기 변경을 감지
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
+    const updateSize = () => {
+      // containerRef의 가장 가까운 부모 dv-content-container를 찾기
+      const dvContainer = container.closest('.dv-content-container')
+      if (dvContainer) {
+        const rect = dvContainer.getBoundingClientRect()
+        console.log('[ImageViewerPanel] dv-content-container size:', { width: rect.width, height: rect.height })
+        setContainerSize({ width: rect.width, height: rect.height })
+      } else {
+        // fallback to containerRef
+        const { width, height } = container.getBoundingClientRect()
+        console.log('[ImageViewerPanel] containerRef size:', { width, height })
         setContainerSize({ width, height })
       }
+    }
+
+    // 같은 dv-content-container를 찾아서 관찰 (closest로 통일)
+    const dvContainer = container.closest('.dv-content-container')
+    const targetElement = (dvContainer as Element) || container
+
+    // ResizeObserver는 maximize/minimize를 포함한 모든 크기 변경을 감지
+    const resizeObserver = new ResizeObserver(() => {
+      updateSize()
     })
 
-    resizeObserver.observe(container)
+    resizeObserver.observe(targetElement)
 
     // Initial size
-    setContainerSize({
-      width: container.clientWidth,
-      height: container.clientHeight
-    })
+    updateSize()
 
     return () => {
       resizeObserver.disconnect()
@@ -396,7 +409,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         </div>
 
         {/* Konva.js 이미지 렌더링 */}
-        <div className="h-full flex items-center justify-center relative">
+        <div className="h-full flex items-center justify-center relative overflow-hidden">
           {containerSize.width > 0 && containerSize.height > 0 && (
             <KonvaImageViewer
               imageUrl={imageUrl}

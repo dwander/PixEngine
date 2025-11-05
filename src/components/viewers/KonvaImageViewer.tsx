@@ -28,9 +28,12 @@ export function KonvaImageViewer({
 }: KonvaImageViewerProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [imageScale, setImageScale] = useState({ x: 0, y: 0, scale: 1 })
+  const [debouncedSize, setDebouncedSize] = useState({ width: containerWidth, height: containerHeight })
+  const [isResizing, setIsResizing] = useState(false)
   const stageRef = useRef<Konva.Stage>(null)
   const layerRef = useRef<Konva.Layer>(null)
   const imageRef = useRef<Konva.Image>(null)
+  const resizeTimeoutRef = useRef<number | null>(null)
 
   // Load image
   useEffect(() => {
@@ -60,14 +63,71 @@ export function KonvaImageViewer({
     }
   }, [imageUrl, onRenderComplete, onError])
 
+  // Debounce container size changes
+  useEffect(() => {
+    // Mark as resizing
+    setIsResizing(true)
+
+    // Clear previous timeout
+    if (resizeTimeoutRef.current) {
+      window.clearTimeout(resizeTimeoutRef.current)
+    }
+
+    // Set new timeout
+    resizeTimeoutRef.current = window.setTimeout(() => {
+      console.log('[Konva] Applying debounced size:', { width: containerWidth, height: containerHeight })
+      setDebouncedSize({ width: containerWidth, height: containerHeight })
+      setIsResizing(false)
+    }, 100) // 100ms 디바운스
+
+    return () => {
+      if (resizeTimeoutRef.current) {
+        window.clearTimeout(resizeTimeoutRef.current)
+      }
+    }
+  }, [containerWidth, containerHeight])
+
+  // Update stage size when debounced size changes
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage) return
+
+    console.log('[Konva] Container size changed:', {
+      width: debouncedSize.width,
+      height: debouncedSize.height,
+      stageWidth: stage.width(),
+      stageHeight: stage.height()
+    })
+
+    // Force stage to update its size
+    stage.width(debouncedSize.width)
+    stage.height(debouncedSize.height)
+
+    // Force canvas elements to update
+    const canvas = stage.getStage().content?.querySelector('canvas') as HTMLCanvasElement
+    if (canvas) {
+      canvas.width = debouncedSize.width * (window.devicePixelRatio || 1)
+      canvas.height = debouncedSize.height * (window.devicePixelRatio || 1)
+      canvas.style.width = `${debouncedSize.width}px`
+      canvas.style.height = `${debouncedSize.height}px`
+    }
+
+    console.log('[Konva] After update:', {
+      stageWidth: stage.width(),
+      stageHeight: stage.height(),
+      canvasWidth: canvas?.width,
+      canvasHeight: canvas?.height
+    })
+  }, [debouncedSize])
+
   // Calculate image position and scale
   useEffect(() => {
     if (!image) return
 
     const imgWidth = image.width
     const imgHeight = image.height
-    const containerW = containerWidth
-    const containerH = containerHeight
+    const containerW = debouncedSize.width
+    const containerH = debouncedSize.height
 
     // Calculate scale to fit
     const scale = Math.min(
@@ -81,7 +141,13 @@ export function KonvaImageViewer({
     const y = (containerH - imgHeight * scale) / 2
 
     setImageScale({ x, y, scale })
-  }, [image, containerWidth, containerHeight])
+
+    // Redraw after scale calculation
+    const stage = stageRef.current
+    if (stage) {
+      stage.batchDraw()
+    }
+  }, [image, debouncedSize])
 
   // Draw grid lines
   const renderGridLines = useCallback(() => {
@@ -253,17 +319,22 @@ export function KonvaImageViewer({
   return (
     <Stage
       ref={stageRef}
-      width={containerWidth}
-      height={containerHeight}
+      width={debouncedSize.width}
+      height={debouncedSize.height}
       pixelRatio={window.devicePixelRatio || 1}
-      style={{ backgroundColor: '#171717' }}
+      style={{
+        backgroundColor: '#171717',
+        display: 'block',
+        maxWidth: '100%',
+        maxHeight: '100%'
+      }}
     >
       <Layer
         ref={layerRef}
         imageSmoothingEnabled={true}
         listening={false}
       >
-        {image && (
+        {image && !isResizing && (
           <KonvaImage
             ref={imageRef}
             image={image}
@@ -275,7 +346,7 @@ export function KonvaImageViewer({
             perfectDrawEnabled={false}
           />
         )}
-        {renderGridLines()}
+        {!isResizing && renderGridLines()}
       </Layer>
     </Stage>
   )
