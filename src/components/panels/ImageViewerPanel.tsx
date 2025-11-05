@@ -308,15 +308,25 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
 
   const drawGridLines = useCallback(() => {
     const canvas = canvasRef.current
+    const img = currentImageRef.current
     const currentGridType = gridTypeRef.current
-    if (!canvas || currentGridType === 'none') return
 
+    if (!canvas || !img) return
+
+    // 항상 이미지를 먼저 다시 그림 (이전 격자선 제거)
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     const displayWidth = canvas.width / (window.devicePixelRatio || 1)
     const displayHeight = canvas.height / (window.devicePixelRatio || 1)
 
+    // 이미지 다시 그리기 (격자선 제거)
+    ctx.drawImage(img, 0, 0, displayWidth, displayHeight)
+
+    // gridType이 'none'이면 여기서 종료 (격자선 없이 이미지만)
+    if (currentGridType === 'none') return
+
+    // 격자선 그리기
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'
     ctx.lineWidth = 2
 
@@ -371,8 +381,13 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   // 컨테이너 리사이즈 핸들러 (ResizeObserver용)
   const handleResize = useCallback(() => {
     if (currentImageRef.current) {
+      // renderImageToCanvas는 캔버스 크기 조정 + 이미지 그리기
       renderImageToCanvas()
-      drawGridLines()
+      // drawGridLines는 이미지 재그리기 + 격자선 추가
+      // 두 번 그려지는 것을 방지하기 위해 gridType이 있을 때만 drawGridLines 호출
+      if (gridTypeRef.current !== 'none') {
+        drawGridLines()
+      }
     }
   }, [renderImageToCanvas, drawGridLines])
 
@@ -448,11 +463,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   // gridType 변경 시 격자선만 다시 그리기
   useEffect(() => {
     if (currentImageRef.current && canvasRef.current) {
-      // 이미지를 다시 그린 후 격자선 추가
-      renderImageToCanvas()
+      // drawGridLines가 이미지 재렌더링 + 격자선 그리기를 모두 처리
       drawGridLines()
     }
-  }, [gridType, renderImageToCanvas, drawGridLines])
+  }, [gridType, drawGridLines])
 
   // 히스토그램 데이터 변경 시 렌더링
   useEffect(() => {
