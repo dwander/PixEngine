@@ -4,7 +4,7 @@ import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { Check } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
-import { OpenSeadragonViewer } from '../viewers/OpenSeadragonViewer'
+import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -579,11 +579,11 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
           )}
         </div>
 
-        {/* OpenSeadragon 이미지 렌더링 */}
+        {/* Konva.js 이미지 렌더링 */}
         <div className="h-full flex items-center justify-center relative">
           {containerSize.width > 0 && containerSize.height > 0 ? (
-            /* OpenSeadragon high-performance renderer */
-            <OpenSeadragonViewer
+            /* Konva.js high-performance Canvas 2D renderer */
+            <KonvaImageViewer
               imageUrl={imageUrl}
               gridType={gridType}
               containerWidth={containerSize.width}

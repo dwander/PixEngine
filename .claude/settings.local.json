@@ -10,7 +10,8 @@
       "Bash(npm run:*)",
       "Bash(dir:*)",
       "Bash(cargo build:*)",
-      "Bash(Select-Object -Last 50)"
+      "Bash(Select-Object -Last 50)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []
