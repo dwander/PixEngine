@@ -48,8 +48,9 @@ export function PixiImageViewer({
           backgroundColor: 0x171717, // neutral-900
           resolution: window.devicePixelRatio || 1,
           autoDensity: true,
-          antialias: true,
+          antialias: false, // Disable antialiasing to avoid shader issues
           preference: 'webgl', // Try WebGL first
+          hello: false, // Disable Pixi.js hello message
         })
 
         if (!mounted) {
@@ -72,7 +73,9 @@ export function PixiImageViewer({
         console.log('Pixi.js initialized with renderer:', app.renderer.type)
       } catch (error) {
         console.error('Failed to initialize Pixi.js:', error)
-        onError?.(error instanceof Error ? error : new Error('Failed to initialize Pixi.js'))
+        if (mounted) {
+          onError?.(error instanceof Error ? error : new Error('Failed to initialize Pixi.js'))
+        }
       }
     })()
 
