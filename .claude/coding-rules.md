@@ -105,6 +105,20 @@ feat: JPEG DCT 스케일링으로 썸네일 생성 속도 최적화
 3. **알고리즘 우선**: 하드웨어 탓하기 전에 알고리즘 개선
 4. **사용자 체감**: 실제 사용자가 느끼는 속도 중시
 
+## 패키지 관리자
+- **pnpm 사용 필수** (npm은 이 시스템에서 제대로 작동하지 않음)
+- 예시:
+  ```bash
+  # ✅ 올바른 방법
+  pnpm install
+  pnpm run dev
+  pnpm exec tsc --noEmit
+
+  # ❌ 사용 금지
+  npm install
+  npm run dev
+  ```
+
 ## 개발 워크플로우
 1. 기능 구현
 2. 로컬 테스트
