@@ -20,6 +20,26 @@
     height: 100vh;
     overflow: hidden;
   }
+
+  /* 접근성 포커스 링 제거 */
+  *,
+  *:focus,
+  *:focus-visible {
+    outline: none !important;
+  }
+
+  /* 버튼 포커스 시 링 제거 */
+  button:focus,
+  button:focus-visible,
+  a:focus,
+  a:focus-visible,
+  input:focus,
+  input:focus-visible,
+  textarea:focus,
+  textarea:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
 }
 
 /* 다크 모드 기본 설정 */
