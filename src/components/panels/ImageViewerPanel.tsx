@@ -4,6 +4,7 @@ import { useImageContext } from '../../contexts/ImageContext'
 import { Check, Shrink, Expand, X } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
+import { logError } from '../../lib/errorHandler'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
