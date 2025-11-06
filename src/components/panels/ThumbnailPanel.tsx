@@ -760,8 +760,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           })
         }
 
-        // 3. 모든 HQ 썸네일이 이미 존재하면 체크박스 표시 안 함
-        // missing이 없으면 추가 생성 불필요
+        // 3. EXIF 썸네일 로딩 완료 후 항상 2초 뒤 progress indicator 숨김
+        // (missing이 있어도 체크박스로 사용자가 선택할 수 있으므로 진행률은 숨김)
+        setTimeout(() => {
+          setShowProgressIndicator(false)
+          setProgress(null)
+        }, 2000)
       } catch (error) {
         console.error('Failed to classify HQ thumbnails:', error)
       }
