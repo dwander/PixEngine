@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useImageContext } from '../../contexts/ImageContext'
 import { theme } from '../../lib/theme'
+import versionData from '../../../version.json'
 
 const appWindow = getCurrentWebviewWindow()
 
@@ -94,8 +95,9 @@ export function StatusBar() {
       <footer className={`${theme.layout.statusBarHeight} ${theme.background.primary} flex items-center justify-between px-4 text-xs ${theme.text.quaternary} border-t border-neutral-800`}>
         <span>준비 완료</span>
 
-        {/* UI 크기 조절 */}
-        <div className="relative" ref={zoomMenuRef}>
+        <div className="flex items-center gap-4">
+          {/* UI 크기 조절 */}
+          <div className="relative" ref={zoomMenuRef}>
           <button
             onClick={() => setIsZoomMenuOpen(!isZoomMenuOpen)}
             className="flex items-center gap-1 px-2 py-1 hover:bg-neutral-800 rounded text-gray-400 hover:text-gray-300"
@@ -118,6 +120,12 @@ export function StatusBar() {
               ))}
             </div>
           )}
+          </div>
+
+          <span className="text-gray-700">|</span>
+
+          {/* 버전 표시 */}
+          <span className="text-gray-500">v{versionData.version}</span>
         </div>
       </footer>
     )
@@ -177,8 +185,9 @@ export function StatusBar() {
         </span>
       </div>
 
-      {/* UI 크기 조절 */}
-      <div className="relative" ref={zoomMenuRef}>
+      <div className="flex items-center gap-4">
+        {/* UI 크기 조절 */}
+        <div className="relative" ref={zoomMenuRef}>
         <button
           onClick={() => setIsZoomMenuOpen(!isZoomMenuOpen)}
           className="flex items-center gap-1 px-2 py-1 hover:bg-neutral-800 rounded text-gray-400 hover:text-gray-300"
@@ -201,6 +210,12 @@ export function StatusBar() {
             ))}
           </div>
         )}
+        </div>
+
+        <span className="text-gray-700">|</span>
+
+        {/* 버전 표시 */}
+        <span className="text-gray-500">v{versionData.version}</span>
       </div>
     </footer>
   )

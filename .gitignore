@@ -30,3 +30,7 @@ target/rust-analyzer/flycheck0/stdout
 target/rust-analyzer/flycheck0/stderr
 
 src-tauri/Cargo.lock
+
+# Build-time generated files (auto-incremented on build)
+src-tauri/tauri.conf.json
+src-tauri/Cargo.toml
