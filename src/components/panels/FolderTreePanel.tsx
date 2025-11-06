@@ -1,5 +1,6 @@
 import { Folder, FolderOpen, ChevronRight, ChevronDown, HardDrive, Monitor, Star, FolderPlus, Scissors, Copy, Edit3, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
 import { useFolderContext } from "../../contexts/FolderContext";
@@ -53,6 +54,7 @@ export function FolderTreePanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastAccessed, setLastAccessed] = useState<LastAccessed | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FolderNode } | null>(null);
 
   useEffect(() => {
     const initialize = async () => {
@@ -62,6 +64,31 @@ export function FolderTreePanel() {
     };
     initialize();
   }, []);
+
+  // 컨텍스트 메뉴 외부 클릭 감지
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu) {
+        setContextMenu(null);
+      }
+    };
+
+    const handleContextMenuOutside = (e: MouseEvent) => {
+      if (contextMenu) {
+        // 이전 메뉴를 닫고, 새 메뉴는 handleContextMenu에서 열림
+        setContextMenu(null);
+      }
+    };
+
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      document.addEventListener('contextmenu', handleContextMenuOutside);
+      return () => {
+        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('contextmenu', handleContextMenuOutside);
+      };
+    }
+  }, [contextMenu]);
 
   const loadLastAccessed = async () => {
     try {
@@ -232,6 +259,56 @@ export function FolderTreePanel() {
     }
   };
 
+  const handleCreateFolder = async () => {
+    if (!contextMenu) return;
+    const targetNode = contextMenu.node;
+    setContextMenu(null);
+
+    const result = await dialog.showPrompt('새 폴더 이름을 입력하세요:', {
+      icon: 'none',
+      placeholder: '새 폴더',
+      defaultValue: '새 폴더'
+    });
+
+    if (!result.confirmed || !result.value || !result.value.trim()) return;
+
+    try {
+      await invoke('create_folder', {
+        parentPath: targetNode.path,
+        folderName: result.value.trim()
+      });
+      toast.success(`폴더 "${result.value.trim()}"가 생성되었습니다`);
+      // TODO: 해당 폴더만 새로고침하도록 개선 필요
+      window.location.reload();
+    } catch (error) {
+      toast.error(`폴더 생성 실패: ${error}`);
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!contextMenu) return;
+    const targetNode = contextMenu.node;
+    setContextMenu(null);
+
+    const result = await dialog.showConfirm(
+      `정말로 "${targetNode.name}" 폴더를 삭제하시겠습니까?\n\n⚠️ 폴더 내의 모든 파일과 하위 폴더가 함께 삭제됩니다.`,
+      {
+        icon: 'error',
+        confirmText: '삭제'
+      }
+    );
+
+    if (!result.confirmed) return;
+
+    try {
+      await invoke('delete_folder', { path: targetNode.path });
+      toast.success(`폴더 "${targetNode.name}"가 삭제되었습니다`);
+      window.location.reload();
+    } catch (error) {
+      toast.error(`폴더 삭제 실패: ${error}`);
+    }
+  };
+
   return (
     <div className="h-full bg-neutral-900 overflow-y-auto overflow-x-hidden py-2">
       {isLoading ? (
@@ -251,6 +328,8 @@ export function FolderTreePanel() {
               onAddFavorite={addFavorite}
               onRemoveFavorite={removeFavorite}
               isFavorite={isFavorite}
+              contextMenu={contextMenu}
+              setContextMenu={setContextMenu}
             />
           ))}
           <FolderTreeItem
@@ -277,8 +356,100 @@ export function FolderTreePanel() {
             onAddFavorite={addFavorite}
             onRemoveFavorite={removeFavorite}
             isFavorite={isFavorite}
+            contextMenu={contextMenu}
+            setContextMenu={setContextMenu}
           />
         </>
+      )}
+      {/* 컨텍스트 메뉴 - Portal로 body에 렌더링 */}
+      {contextMenu && createPortal(
+        <div
+          className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-[9998] min-w-[12rem]"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 새 폴더 생성 */}
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
+            onClick={handleCreateFolder}
+          >
+            <FolderPlus className="h-4 w-4" />
+            새 폴더 생성
+          </button>
+
+          {/* 구분선 */}
+          <div className="border-t border-neutral-700 my-1" />
+
+          {/* 자르기, 복사 */}
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-400 flex items-center gap-2"
+            disabled
+          >
+            <Scissors className="h-4 w-4" />
+            자르기
+          </button>
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-400 flex items-center gap-2"
+            disabled
+          >
+            <Copy className="h-4 w-4" />
+            복사
+          </button>
+
+          {/* 구분선 */}
+          <div className="border-t border-neutral-700 my-1" />
+
+          {/* 이름 변경, 삭제 */}
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
+            onClick={() => {
+              // TODO: 이름 변경 구현
+              setContextMenu(null);
+            }}
+          >
+            <Edit3 className="h-4 w-4" />
+            이름 변경
+          </button>
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-red-400 flex items-center gap-2"
+            onClick={handleDeleteFolder}
+          >
+            <Trash2 className="h-4 w-4" />
+            삭제
+          </button>
+
+          {/* 구분선 */}
+          <div className="border-t border-neutral-700 my-1" />
+
+          {/* 즐겨찾기 */}
+          {isFavorite(contextMenu.node.path) || contextMenu.node.isFavorite ? (
+            <button
+              className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
+              onClick={() => {
+                removeFavorite(contextMenu.node.path);
+                setContextMenu(null);
+              }}
+            >
+              <Star className="h-4 w-4" />
+              즐겨찾기에서 제거
+            </button>
+          ) : (
+            <button
+              className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
+              onClick={() => {
+                addFavorite(contextMenu.node.name, contextMenu.node.path);
+                setContextMenu(null);
+              }}
+            >
+              <Star className="h-4 w-4" />
+              즐겨찾기에 추가
+            </button>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -296,13 +467,17 @@ function FolderTreeItem({
   onFolderClick,
   onAddFavorite,
   onRemoveFavorite,
-  isFavorite: checkIsFavorite
+  isFavorite: checkIsFavorite,
+  contextMenu,
+  setContextMenu
 }: FolderTreeItemProps & {
   lastAccessed?: LastAccessed | null;
   onFolderClick?: (path: string, treeId: string) => void;
   onAddFavorite?: (name: string, path: string) => void;
   onRemoveFavorite?: (path: string) => void;
   isFavorite?: (path: string) => boolean;
+  contextMenu: { x: number; y: number; node: FolderNode } | null;
+  setContextMenu: (menu: { x: number; y: number; node: FolderNode } | null) => void;
 }) {
   const { setFolderImages, currentFolder, loadLightMetadata } = useFolderContext();
   const { clearCache } = useImageContext();
@@ -314,7 +489,6 @@ function FolderTreeItem({
   const [hasSubdirs, setHasSubdirs] = useState<boolean | null>(null);
   const [imagePaths, setImagePaths] = useState<string[]>([]);
   const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState('');
 
@@ -574,43 +748,38 @@ function FolderTreeItem({
   };
   const isCurrentFolder = currentFolder && normalizePathForComparison(node.path) === normalizePathForComparison(currentFolder);
 
-  // 컨텍스트 메뉴 외부 클릭 감지
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (contextMenu) {
-        setContextMenu(null);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [contextMenu]);
-
   const handleContextMenu = (e: React.MouseEvent) => {
     // 카테고리는 우클릭 메뉴 없음
     if (node.isCategory) return;
 
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+
+    const x = e.clientX;
+    const y = e.clientY;
+
+    setContextMenu({ x, y, node });
   };
 
   const handleAddFavorite = () => {
-    if (onAddFavorite) {
-      onAddFavorite(node.name, node.path);
+    if (onAddFavorite && contextMenu) {
+      onAddFavorite(contextMenu.node.name, contextMenu.node.path);
     }
     setContextMenu(null);
   };
 
   const handleRemoveFavorite = () => {
-    if (onRemoveFavorite) {
-      onRemoveFavorite(node.path);
+    if (onRemoveFavorite && contextMenu) {
+      onRemoveFavorite(contextMenu.node.path);
     }
     setContextMenu(null);
   };
 
   const handleCreateFolder = async () => {
+    if (!contextMenu) return;
+    const targetNode = contextMenu.node;
     setContextMenu(null);
+
     const result = await dialog.showPrompt('새 폴더 이름을 입력하세요:', {
       icon: 'none',
       placeholder: '새 폴더',
@@ -621,7 +790,7 @@ function FolderTreeItem({
 
     try {
       await invoke('create_folder', {
-        parentPath: node.path,
+        parentPath: targetNode.path,
         folderName: result.value.trim()
       });
       // 폴더 생성 후 새로고침
@@ -634,20 +803,26 @@ function FolderTreeItem({
 
   const handleCut = () => {
     // TODO: 구현 예정
+    if (contextMenu) {
+      console.log('Cut:', contextMenu.node.path);
+    }
     setContextMenu(null);
-    console.log('Cut:', node.path);
   };
 
   const handleCopy = () => {
     // TODO: 구현 예정
+    if (contextMenu) {
+      console.log('Copy:', contextMenu.node.path);
+    }
     setContextMenu(null);
-    console.log('Copy:', node.path);
   };
 
   const handleRename = () => {
+    if (contextMenu?.node.path === node.path) {
+      setNewName(node.name);
+      setIsRenaming(true);
+    }
     setContextMenu(null);
-    setNewName(node.name);
-    setIsRenaming(true);
   };
 
   const handleRenameConfirm = async () => {
@@ -673,9 +848,12 @@ function FolderTreeItem({
   };
 
   const handleDelete = async () => {
+    if (!contextMenu) return;
+    const targetNode = contextMenu.node;
     setContextMenu(null);
+
     const result = await dialog.showConfirm(
-      `정말로 "${node.name}" 폴더를 삭제하시겠습니까?\n\n⚠️ 폴더 내의 모든 파일과 하위 폴더가 함께 삭제됩니다.`,
+      `정말로 "${targetNode.name}" 폴더를 삭제하시겠습니까?\n\n⚠️ 폴더 내의 모든 파일과 하위 폴더가 함께 삭제됩니다.`,
       {
         icon: 'error',
         confirmText: '삭제'
@@ -685,16 +863,14 @@ function FolderTreeItem({
     if (!result.confirmed) return;
 
     try {
-      await invoke('delete_folder', { path: node.path });
-      toast.success(`폴더 "${node.name}"가 삭제되었습니다`);
+      await invoke('delete_folder', { path: targetNode.path });
+      toast.success(`폴더 "${targetNode.name}"가 삭제되었습니다`);
       // 삭제 후 부모 폴더를 새로고침해야 함
       window.location.reload();
     } catch (error) {
       toast.error(`폴더 삭제 실패: ${error}`);
     }
   };
-
-  const isInFavorites = checkIsFavorite ? checkIsFavorite(node.path) : false;
 
   const renderIcon = () => {
     if (node.icon === 'computer') {
@@ -717,7 +893,6 @@ function FolderTreeItem({
       <div
         className="flex items-center cursor-pointer group"
         onClick={handleToggle}
-        onContextMenu={handleContextMenu}
       >
         {/* 들여쓰기 공간 */}
         <div style={{ width: `${level * 16}px` }} className="flex-shrink-0" />
@@ -729,6 +904,7 @@ function FolderTreeItem({
               ? 'bg-blue-900/30 border border-blue-500/50 hover:bg-blue-900/40'
               : 'hover:bg-neutral-800'
           }`}
+          onContextMenu={handleContextMenu}
         >
           {hasChildren ? (
             isOpen ? (
@@ -787,86 +963,10 @@ function FolderTreeItem({
                 onAddFavorite={onAddFavorite}
                 onRemoveFavorite={onRemoveFavorite}
                 isFavorite={checkIsFavorite}
+                contextMenu={contextMenu}
+                setContextMenu={setContextMenu}
               />
             ))
-          )}
-        </div>
-      )}
-      {contextMenu && (
-        <div
-          className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-50 min-w-[12rem]"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* 새 폴더 생성 */}
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
-            onClick={handleCreateFolder}
-          >
-            <FolderPlus className="h-4 w-4" />
-            새 폴더 생성
-          </button>
-
-          {/* 구분선 */}
-          <div className="border-t border-neutral-700 my-1" />
-
-          {/* 자르기, 복사 */}
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-400 flex items-center gap-2"
-            onClick={handleCut}
-            disabled
-          >
-            <Scissors className="h-4 w-4" />
-            자르기
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-400 flex items-center gap-2"
-            onClick={handleCopy}
-            disabled
-          >
-            <Copy className="h-4 w-4" />
-            복사
-          </button>
-
-          {/* 구분선 */}
-          <div className="border-t border-neutral-700 my-1" />
-
-          {/* 이름 변경, 삭제 */}
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
-            onClick={handleRename}
-          >
-            <Edit3 className="h-4 w-4" />
-            이름 변경
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-red-400 flex items-center gap-2"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-4 w-4" />
-            삭제
-          </button>
-
-          {/* 구분선 */}
-          <div className="border-t border-neutral-700 my-1" />
-
-          {/* 즐겨찾기 */}
-          {isInFavorites || node.isFavorite ? (
-            <button
-              className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
-              onClick={handleRemoveFavorite}
-            >
-              <Star className="h-4 w-4" />
-              즐겨찾기에서 제거
-            </button>
-          ) : (
-            <button
-              className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-gray-200 flex items-center gap-2"
-              onClick={handleAddFavorite}
-            >
-              <Star className="h-4 w-4" />
-              즐겨찾기에 추가
-            </button>
           )}
         </div>
       )}
