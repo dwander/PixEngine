@@ -90,6 +90,57 @@ export function StatusBar() {
     }
   }
 
+  // 줌 레벨 증가/감소 핸들러
+  const handleZoomStep = async (direction: 'in' | 'out') => {
+    const currentIndex = ZOOM_LEVELS.indexOf(zoomLevel as typeof ZOOM_LEVELS[number])
+    let newIndex: number
+
+    if (direction === 'in') {
+      // 현재 값이 배열에 없으면 가장 가까운 큰 값으로
+      if (currentIndex === -1) {
+        newIndex = ZOOM_LEVELS.findIndex(level => level > zoomLevel)
+        if (newIndex === -1) newIndex = ZOOM_LEVELS.length - 1
+      } else {
+        newIndex = Math.min(currentIndex + 1, ZOOM_LEVELS.length - 1)
+      }
+    } else {
+      // 현재 값이 배열에 없으면 가장 가까운 작은 값으로
+      if (currentIndex === -1) {
+        newIndex = ZOOM_LEVELS.length - 1
+        for (let i = 0; i < ZOOM_LEVELS.length; i++) {
+          if (ZOOM_LEVELS[i] >= zoomLevel) {
+            newIndex = Math.max(0, i - 1)
+            break
+          }
+        }
+      } else {
+        newIndex = Math.max(currentIndex - 1, 0)
+      }
+    }
+
+    await handleZoomChange(ZOOM_LEVELS[newIndex])
+  }
+
+  // 키보드 단축키 핸들러
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl + Plus (또는 =)
+      if (e.ctrlKey && (e.key === '+' || e.key === '=')) {
+        e.preventDefault()
+        handleZoomStep('in')
+      }
+      // Ctrl + Minus
+      else if (e.ctrlKey && (e.key === '-' || e.key === '_')) {
+        e.preventDefault()
+        handleZoomStep('out')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomLevel])
+
   if (!currentFolder || imageCount === 0) {
     return (
       <footer className={`${theme.layout.statusBarHeight} ${theme.background.primary} flex items-center justify-between px-4 text-xs ${theme.text.quaternary} border-t border-neutral-800`}>

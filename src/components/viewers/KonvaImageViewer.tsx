@@ -610,11 +610,11 @@ export function KonvaImageViewer({
         e.preventDefault()
         resetToFit()
       }
-      // Zoom shortcuts
-      else if (e.key === '+' || e.key === '=') {
+      // Zoom shortcuts (only when Ctrl is NOT pressed to avoid conflict with UI zoom)
+      else if ((e.key === '+' || e.key === '=') && !e.ctrlKey) {
         e.preventDefault()
         zoom('in')
-      } else if (e.key === '-' || e.key === '_') {
+      } else if ((e.key === '-' || e.key === '_') && !e.ctrlKey) {
         e.preventDefault()
         zoom('out')
       }
