@@ -9,6 +9,7 @@ import { useDebounce } from '../../hooks/useDebounce'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
+import { readImageRating } from '../../lib/rating'
 import {
   THUMBNAIL_SIZE_DEFAULT,
   THUMBNAIL_SIZE_MIN,
@@ -73,6 +74,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const horizontalContentRef = useRef<HTMLDivElement>(null) // 가로 모드 내부 컨테이너
   const [focusedIndex, setFocusedIndex] = useState(0) // 키보드 포커스 인덱스
+  const [ratings, setRatings] = useState<Map<string, number>>(new Map()) // 이미지 별점 (경로 -> 0-5)
 
   // 정렬 상태
   const [sortField, setSortField] = useState<SortField>('filename')
@@ -738,6 +740,57 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     startGeneration()
   }, [imageFiles])
 
+  // 이미지 별점 로드 (백그라운드에서 비동기로)
+  useEffect(() => {
+    if (imageFiles.length === 0) {
+      setRatings(new Map())
+      return
+    }
+
+    const loadRatings = async () => {
+      const newRatings = new Map<string, number>()
+
+      // 병렬로 모든 별점 로드 (실패해도 계속 진행)
+      await Promise.allSettled(
+        imageFiles.map(async (filePath) => {
+          try {
+            const rating = await readImageRating(filePath)
+            if (rating > 0) { // 0은 저장하지 않음 (unrated)
+              newRatings.set(filePath, rating)
+            }
+          } catch (error) {
+            // 별점 읽기 실패는 무시 (XMP가 없는 파일일 수 있음)
+          }
+        })
+      )
+
+      setRatings(newRatings)
+    }
+
+    loadRatings()
+  }, [imageFiles])
+
+  // 별점 변경 이벤트 리스너 (실시간 업데이트)
+  useEffect(() => {
+    const unlisten = listen<{ path: string; rating: number }>('rating-changed', (event) => {
+      const { path, rating } = event.payload
+
+      setRatings((prev) => {
+        const next = new Map(prev)
+        if (rating > 0) {
+          next.set(path, rating)
+        } else {
+          next.delete(path) // 0이면 배지 제거
+        }
+        return next
+      })
+    })
+
+    return () => {
+      unlisten.then((fn) => fn())
+    }
+  }, [])
+
   // 진행률 이벤트 리스너
   useEffect(() => {
     const unlistenProgress = listen<ThumbnailProgress>('thumbnail-progress', (event) => {
@@ -1043,6 +1096,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                         : ''
                       // const isSelected = selectedImage === imagePath
                       const isFocused = focusedIndex === index
+                      const rating = ratings.get(imagePath) || 0
 
                       return (
                         <div
@@ -1074,6 +1128,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                             ) : (
                               <div className="flex h-full items-center justify-center">
                                 <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
+                              </div>
+                            )}
+                            {/* 별점 배지 (우측 상단) */}
+                            {rating > 0 && (
+                              <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs font-bold rounded px-1.5 py-0.5 shadow-lg">
+                                {rating}
                               </div>
                             )}
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
@@ -1109,6 +1169,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                 : ''
               // const isSelected = selectedImage === imagePath
               const isFocused = focusedIndex === virtualItem.index
+              const rating = ratings.get(imagePath) || 0
 
               return (
                 <div
@@ -1143,6 +1204,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                     ) : (
                       <div className="flex h-full items-center justify-center">
                         <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
+                      </div>
+                    )}
+                    {/* 별점 배지 (우측 상단) */}
+                    {rating > 0 && (
+                      <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs font-bold rounded px-1.5 py-0.5 shadow-lg">
+                        {rating}
                       </div>
                     )}
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">

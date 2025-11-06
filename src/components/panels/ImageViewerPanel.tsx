@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
 import { useImageContext } from '../../contexts/ImageContext'
 import { Check, Shrink, Expand, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 import { logError } from '../../lib/errorHandler'
+import { writeImageRating } from '../../lib/rating'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -220,6 +222,45 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     document.addEventListener('keydown', handleEscKey)
     return () => document.removeEventListener('keydown', handleEscKey)
   }, [contextMenu])
+
+  // 별점 키보드 단축키 (0-5, Numpad 0-5, Ctrl+0-5)
+  useEffect(() => {
+    if (!currentPath) return
+
+    const handleRatingKey = async (e: KeyboardEvent) => {
+      // 입력 요소에서 타이핑 중이면 무시
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return
+      }
+
+      // 0-5 숫자 키 감지 (일반 키, 넘패드, Ctrl 조합 모두 지원)
+      const key = e.key
+      const isNumberKey = /^[0-5]$/.test(key)
+      const isNumpadKey = /^Numpad[0-5]$/.test(e.code)
+
+      if (isNumberKey || isNumpadKey) {
+        e.preventDefault()
+
+        const rating = isNumpadKey
+          ? parseInt(e.code.replace('Numpad', ''), 10)
+          : parseInt(key, 10)
+
+        try {
+          await writeImageRating(currentPath, rating)
+          console.log(`별점 ${rating}으로 설정됨: ${currentPath}`)
+
+          // 썸네일 패널에 별점 변경 이벤트 전송
+          await emit('rating-changed', { path: currentPath, rating })
+        } catch (error) {
+          logError(error as Error, `별점 설정 실패: ${currentPath}`)
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleRatingKey)
+    return () => document.removeEventListener('keydown', handleRatingKey)
+  }, [currentPath])
 
   // 촬영 정보 토글 상태 저장
   useEffect(() => {

@@ -52,9 +52,11 @@ blake3 = "1.5"                 # 캐시 키 해싱
 
 # 파일 시스템
 walkdir = "2"
+filetime = "0.2"               # 파일 수정 시간 설정
 
 # 메타데이터
 kamadak-exif = "0.5"
+xmp_toolkit = "1.11"           # XMP 메타데이터 (별점 등)
 
 # 시간 처리
 chrono = "0.4"

@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 mod thumbnail;
 mod thumbnail_queue;
 mod idle_detector;
+mod rating;
 
 use thumbnail_queue::ThumbnailQueueManager;
 
@@ -1023,6 +1024,28 @@ async fn get_images_light_metadata(file_paths: Vec<String>) -> Result<Vec<LightM
     Ok(results)
 }
 
+// XMP Rating 읽기
+#[tauri::command]
+async fn read_image_rating(file_path: String) -> Result<i32, String> {
+    // 백그라운드 스레드에서 실행 (파일 I/O 블로킹)
+    tokio::task::spawn_blocking(move || {
+        rating::read_rating(&file_path)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+// XMP Rating 쓰기
+#[tauri::command]
+async fn write_image_rating(file_path: String, rating: i32) -> Result<(), String> {
+    // 백그라운드 스레드에서 실행 (파일 I/O 블로킹)
+    tokio::task::spawn_blocking(move || {
+        rating::write_rating(&file_path, rating)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1090,7 +1113,9 @@ pub fn run() {
             update_hq_viewport_paths,
             get_image_info,
             get_exif_metadata,
-            get_images_light_metadata
+            get_images_light_metadata,
+            read_image_rating,
+            write_image_rating
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
