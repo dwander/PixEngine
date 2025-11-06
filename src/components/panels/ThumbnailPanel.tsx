@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Loader2, Check, ChevronDown } from 'lucide-react'
+import { Loader2, Check, ChevronDown, ChevronRight, Scissors, Copy, FolderInput, Trash2, Edit3, Star } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -67,6 +68,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // const [selectedImage, setSelectedImage] = useState<string | null>(null) // 임시 비활성화
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set()) // 다중 선택된 이미지들
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null) // Shift 클릭용
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null) // 컨텍스트 메뉴 위치
+  const [showRatingSubmenu, setShowRatingSubmenu] = useState(false) // 별점 서브메뉴 표시 여부
   const [thumbnailSize, setThumbnailSize] = useState(THUMBNAIL_SIZE_DEFAULT)
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
@@ -112,6 +115,30 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [isDropdownOpen])
+
+  // 컨텍스트 메뉴 외부 클릭 감지
+  useEffect(() => {
+    const handleClick = () => {
+      setContextMenu(null)
+      setShowRatingSubmenu(false)
+    }
+    const handleScroll = () => {
+      setContextMenu(null)
+      setShowRatingSubmenu(false)
+    }
+
+    if (contextMenu) {
+      document.addEventListener('click', handleClick)
+      document.addEventListener('contextmenu', handleClick)
+      scrollAreaRef.current?.addEventListener('scroll', handleScroll)
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClick)
+      document.removeEventListener('contextmenu', handleClick)
+      scrollAreaRef.current?.removeEventListener('scroll', handleScroll)
+    }
+  }, [contextMenu])
 
   // 정렬된 이미지 리스트 (ThumbnailPanel 내부에서 독립적으로 관리)
   const sortedImages = useMemo(() => {
@@ -1150,6 +1177,15 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                             setFocusedIndex(index)
                             loadImage(imagePath, index)
                           }}
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            // 우클릭한 이미지가 선택되지 않았으면 해당 이미지만 선택
+                            if (!selectedImages.has(imagePath)) {
+                              setSelectedImages(new Set([imagePath]))
+                              setLastSelectedIndex(index)
+                            }
+                            setContextMenu({ x: e.clientX, y: e.clientY })
+                          }}
                           onDoubleClick={() => {
                             toggleFullscreen?.()
                           }}
@@ -1257,6 +1293,16 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                     setFocusedIndex(index)
                     loadImage(imagePath, index)
                   }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    const index = virtualItem.index
+                    // 우클릭한 이미지가 선택되지 않았으면 해당 이미지만 선택
+                    if (!selectedImages.has(imagePath)) {
+                      setSelectedImages(new Set([imagePath]))
+                      setLastSelectedIndex(index)
+                    }
+                    setContextMenu({ x: e.clientX, y: e.clientY })
+                  }}
                   onDoubleClick={() => {
                     toggleFullscreen?.()
                   }}
@@ -1350,6 +1396,170 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 컨텍스트 메뉴 - Portal로 body에 렌더링 */}
+      {contextMenu && createPortal(
+        <div
+          className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-[9998] min-w-[12rem]"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 잘라내기 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
+            onClick={() => {
+              setContextMenu(null)
+              // TODO: 잘라내기 구현
+            }}
+          >
+            <Scissors className="w-4 h-4" />
+            <span>잘라내기</span>
+          </button>
+
+          {/* 복사 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
+            onClick={() => {
+              setContextMenu(null)
+              // TODO: 복사 구현
+            }}
+          >
+            <Copy className="w-4 h-4" />
+            <span>복사</span>
+          </button>
+
+          {/* 붙여넣기 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
+            onClick={() => {
+              setContextMenu(null)
+              // TODO: 붙여넣기 구현
+            }}
+          >
+            <Copy className="w-4 h-4 scale-x-[-1]" />
+            <span>붙여넣기</span>
+          </button>
+
+          {/* 이동하기 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
+            onClick={() => {
+              setContextMenu(null)
+              // TODO: 이동하기 구현
+            }}
+          >
+            <FolderInput className="w-4 h-4" />
+            <span>이동하기</span>
+          </button>
+
+          {/* 삭제 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
+            onClick={() => {
+              setContextMenu(null)
+              // TODO: 삭제 구현
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>삭제</span>
+          </button>
+
+          {/* 이름변경 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
+            onClick={() => {
+              setContextMenu(null)
+              // TODO: 이름변경 구현
+            }}
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>이름변경</span>
+          </button>
+
+          <div className="h-px bg-neutral-700 my-1" />
+
+          {/* 전체선택 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
+            onClick={() => {
+              setSelectedImages(new Set(sortedImages))
+              setContextMenu(null)
+            }}
+          >
+            전체선택
+          </button>
+
+          {/* 선택해제 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
+            onClick={() => {
+              setSelectedImages(new Set())
+              setContextMenu(null)
+            }}
+          >
+            선택해제
+          </button>
+
+          {/* 선택반전 */}
+          <button
+            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
+            onClick={() => {
+              const newSelection = new Set<string>()
+              sortedImages.forEach(img => {
+                if (!selectedImages.has(img)) {
+                  newSelection.add(img)
+                }
+              })
+              setSelectedImages(newSelection)
+              setContextMenu(null)
+            }}
+          >
+            선택반전
+          </button>
+
+          <div className="h-px bg-neutral-700 my-1" />
+
+          {/* 별점주기 - 서브메뉴 */}
+          <div className="relative">
+            <button
+              className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center justify-between"
+              onMouseEnter={() => setShowRatingSubmenu(true)}
+            >
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4" />
+                <span>별점주기</span>
+              </div>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* 별점 서브메뉴 */}
+            {showRatingSubmenu && (
+              <div
+                className="absolute left-full top-0 ml-1 bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 min-w-[8rem]"
+                onMouseLeave={() => setShowRatingSubmenu(false)}
+              >
+                {[0, 1, 2, 3, 4, 5].map(rating => (
+                  <button
+                    key={rating}
+                    className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
+                    onClick={() => {
+                      // TODO: 별점 설정 구현 (여기서는 UI만)
+                      setContextMenu(null)
+                      setShowRatingSubmenu(false)
+                    }}
+                  >
+                    {rating === 0 ? '별점 해제' : `★ ${rating}`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )
