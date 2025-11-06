@@ -52,7 +52,7 @@ interface ThumbnailProgress {
 }
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
-  const { loadImage, getCachedImage } = useImageContext()
+  const { loadImage, getCachedImage, preloadImages } = useImageContext()
   const { imageFiles, lightMetadataMap } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
@@ -440,11 +440,30 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     continuousPlayState.isActive ? 0 : DEBOUNCE_FOCUS_INDEX
   )
 
-  // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드
+  // 디바운싱된 focusedIndex 변경 시 이미지 자동 로드 및 주변 이미지 프리로드
   useEffect(() => {
     if (debouncedFocusedIndex >= 0 && debouncedFocusedIndex < sortedImages.length) {
       const imagePath = sortedImages[debouncedFocusedIndex]
       loadImage(imagePath, debouncedFocusedIndex)
+
+      // 주변 이미지 프리로드 (앞뒤 5장씩)
+      const preloadCount = 5
+      const preloadPaths: string[] = []
+      for (let i = 1; i <= preloadCount; i++) {
+        // 다음 이미지들
+        if (debouncedFocusedIndex + i < sortedImages.length) {
+          preloadPaths.push(sortedImages[debouncedFocusedIndex + i])
+        }
+        // 이전 이미지들
+        if (debouncedFocusedIndex - i >= 0) {
+          preloadPaths.push(sortedImages[debouncedFocusedIndex - i])
+        }
+      }
+
+      // 프리로드할 이미지가 있으면 백그라운드에서 로드
+      if (preloadPaths.length > 0) {
+        preloadImages(preloadPaths)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedFocusedIndex])

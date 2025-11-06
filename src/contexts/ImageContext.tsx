@@ -57,6 +57,7 @@ interface ImageContextType {
   currentSortedIndex: number; // 썸네일 패널의 정렬된 순서 인덱스
   isLoading: boolean;
   metadata: ExifMetadata | null;
+  preloadProgress: { loaded: number; total: number } | null;
   loadImage: (path: string, sortedIndex?: number) => Promise<void>;
   getCachedImage: (path: string) => HTMLImageElement | undefined;
   preloadImages: (paths: string[]) => Promise<void>;
@@ -70,6 +71,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
   const [currentSortedIndex, setCurrentSortedIndex] = useState<number>(-1);
   const [isLoading, setIsLoading] = useState(false);
   const [metadata, setMetadata] = useState<ExifMetadata | null>(null);
+  const [preloadProgress, setPreloadProgress] = useState<{ loaded: number; total: number } | null>(null);
 
   // 각 인스턴스별 캐시 (메모리 누수 방지)
   const imageCacheRef = useRef<Map<string, ImageCacheEntry>>(new Map());
@@ -100,10 +102,20 @@ export function ImageProvider({ children }: { children: ReactNode }) {
   // 이미지 프리로딩 (백그라운드)
   const preloadImages = useCallback(async (paths: string[]) => {
     const cache = imageCacheRef.current;
+    const total = paths.length;
 
+    // 캐시에 이미 있는 이미지 개수 확인
+    const cachedCount = paths.filter(path => cache.has(path)).length;
+
+    // 버퍼 상태 업데이트 (완료 후에도 유지)
+    setPreloadProgress({ loaded: cachedCount, total });
+
+    // 캐시되지 않은 이미지만 로드
     for (const path of paths) {
       // 이미 캐시에 있으면 스킵
-      if (cache.has(path)) continue;
+      if (cache.has(path)) {
+        continue;
+      }
 
       try {
         // convertFileSrc를 사용하여 asset URL 생성
@@ -136,6 +148,11 @@ export function ImageProvider({ children }: { children: ReactNode }) {
               imageElement: img,
               timestamp: Date.now()
             });
+
+            // 버퍼 상태 업데이트
+            const currentCached = paths.filter(p => cache.has(p)).length;
+            setPreloadProgress({ loaded: currentCached, total });
+
             resolve();
           };
           img.onerror = () => reject(new Error(`Failed to load image: ${path}`));
@@ -145,6 +162,10 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         logError(error, `Preload image: ${path}`);
       }
     }
+
+    // 최종 버퍼 상태 업데이트 (사라지지 않음)
+    const finalCached = paths.filter(p => cache.has(p)).length;
+    setPreloadProgress({ loaded: finalCached, total });
   }, []);
 
   const loadImage = useCallback(async (path: string, sortedIndex?: number) => {
@@ -175,6 +196,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
         currentSortedIndex,
         isLoading,
         metadata,
+        preloadProgress,
         loadImage,
         getCachedImage,
         preloadImages,

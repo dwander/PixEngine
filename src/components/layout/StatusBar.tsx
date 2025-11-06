@@ -32,7 +32,7 @@ const ZOOM_LEVELS = [70, 85, 100, 110, 125, 150] as const
 
 export function StatusBar() {
   const { currentFolder, imageCount, totalSize } = useFolderContext()
-  const { currentPath, currentSortedIndex, metadata } = useImageContext()
+  const { currentPath, currentSortedIndex, metadata, preloadProgress } = useImageContext()
 
   // 현재 이미지의 인덱스 (썸네일 패널의 정렬된 순서)
   const currentIndex = currentSortedIndex
@@ -96,6 +96,25 @@ export function StatusBar() {
         <span>준비 완료</span>
 
         <div className="flex items-center gap-4">
+          {/* 이미지 프리로드 진행바 */}
+          {preloadProgress && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 text-xs">버퍼:</span>
+                <div className="w-24 h-2 bg-neutral-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all duration-200"
+                    style={{ width: `${(preloadProgress.loaded / preloadProgress.total) * 100}%` }}
+                  />
+                </div>
+                <span className="text-gray-400 text-xs">
+                  {preloadProgress.loaded}/{preloadProgress.total}
+                </span>
+              </div>
+              <span className="text-gray-700">|</span>
+            </>
+          )}
+
           {/* UI 크기 조절 */}
           <div className="relative" ref={zoomMenuRef}>
           <button
@@ -186,6 +205,25 @@ export function StatusBar() {
       </div>
 
       <div className="flex items-center gap-4">
+        {/* 이미지 프리로드 진행바 */}
+        {preloadProgress && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-xs">버퍼:</span>
+              <div className="w-24 h-2 bg-neutral-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-200"
+                  style={{ width: `${(preloadProgress.loaded / preloadProgress.total) * 100}%` }}
+                />
+              </div>
+              <span className="text-gray-400 text-xs">
+                {preloadProgress.loaded}/{preloadProgress.total}
+              </span>
+            </div>
+            <span className="text-gray-700">|</span>
+          </>
+        )}
+
         {/* UI 크기 조절 */}
         <div className="relative" ref={zoomMenuRef}>
         <button
