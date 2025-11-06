@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
-import { Check, Shrink, Expand } from 'lucide-react'
+import { Check, Shrink, Expand, X } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 
@@ -164,13 +164,17 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     }
   }, [])
 
-  // 컨텍스트 메뉴 닫기
+  // 컨텍스트 메뉴 닫기 (ESC 키만)
   useEffect(() => {
     if (!contextMenu) return
 
-    const handleClickOutside = () => setContextMenu(null)
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null)
+      }
+    }
+    document.addEventListener('keydown', handleEscKey)
+    return () => document.removeEventListener('keydown', handleEscKey)
   }, [contextMenu])
 
   // 촬영 정보 토글 상태 저장
@@ -476,6 +480,15 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
             className="absolute bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl py-1 min-w-48 z-50"
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
+            {/* 닫기 버튼 */}
+            <button
+              className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center bg-neutral-700 hover:bg-neutral-600 rounded-full border border-neutral-600 transition-colors"
+              onClick={() => setContextMenu(null)}
+              aria-label="메뉴 닫기"
+            >
+              <X size={14} className="text-neutral-300" />
+            </button>
+
             <button
               className="w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-neutral-700 flex items-center justify-between"
               onClick={() => {
