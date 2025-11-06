@@ -124,6 +124,7 @@ export function KonvaImageViewer({
       1
     )
 
+    const previousFitScale = fitToScreenScale.current
     fitToScreenScale.current = fitScale
 
     // Build dynamic zoom steps with zoom out levels
@@ -150,6 +151,7 @@ export function KonvaImageViewer({
     // Add 100% and levels after 100%
     steps.push(...ZOOM_LEVELS_AFTER_100)
 
+    const previousSteps = zoomSteps.current
     zoomSteps.current = steps
 
     // Only reset zoom when image changes, not when container size changes
@@ -158,8 +160,35 @@ export function KonvaImageViewer({
       previousImageUrl.current = imageUrl
       const fitIndex = steps.indexOf(fitScale)
       setCurrentZoom(fitIndex)
+    } else if (previousSteps.length > 0 && steps.length > 0) {
+      // Container size changed but image didn't change
+      // Preserve zoom state intelligently
+      const wasFitToScreen = previousSteps[currentZoom] === previousFitScale
+
+      if (wasFitToScreen) {
+        // Was fit-to-screen: switch to new fit-to-screen
+        const newFitIndex = steps.indexOf(fitScale)
+        if (newFitIndex !== -1) {
+          setCurrentZoom(newFitIndex)
+        }
+      } else {
+        // Was at specific scale: preserve that scale if possible
+        const currentScale = previousSteps[currentZoom]
+        const newIndex = steps.indexOf(currentScale)
+        if (newIndex !== -1) {
+          setCurrentZoom(newIndex)
+        } else {
+          // If exact scale not found, find closest
+          const closestIndex = steps.reduce((bestIdx, scale, idx) => {
+            return Math.abs(scale - currentScale) < Math.abs(steps[bestIdx] - currentScale)
+              ? idx
+              : bestIdx
+          }, 0)
+          setCurrentZoom(closestIndex)
+        }
+      }
     }
-  }, [image, containerWidth, containerHeight, imageUrl])
+  }, [image, containerWidth, containerHeight, imageUrl, currentZoom])
 
   // Notify parent when zoom state changes (only when it actually changes)
   useEffect(() => {
