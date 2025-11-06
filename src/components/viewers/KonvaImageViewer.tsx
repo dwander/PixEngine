@@ -52,6 +52,7 @@ export function KonvaImageViewer({
   const isZoomingRef = useRef<boolean>(false) // Track if zoom is in progress
   const previousFitToScreenState = useRef<boolean>(true) // Track previous fit-to-screen state
   const previousImageUrl = useRef<string | null>(null) // Track image changes
+  const previousContainerSize = useRef<{ width: number; height: number }>({ width: 0, height: 0 }) // Track container size changes
   const setIsZoomedIn = useViewerStore((state) => state.setIsZoomedIn)
   const { shouldConsumeClick } = useWindowFocus() // 윈도우 포커스 상태 추적
 
@@ -205,6 +206,11 @@ export function KonvaImageViewer({
   }, [currentZoom, image])
 
   // Calculate image position and scale based on current zoom
+  // ⚠️ CRITICAL: Do not modify this effect without understanding the full interaction with zoom() function
+  // This effect must balance three requirements:
+  // 1. Allow zoom() to set custom positions (skip when isZoomingRef is true)
+  // 2. Recalculate position when container resizes (track previousContainerSize)
+  // 3. Avoid infinite loops (skip when scale matches AND container size unchanged)
   useLayoutEffect(() => {
     if (!image || zoomSteps.current.length === 0) return
 
@@ -215,25 +221,30 @@ export function KonvaImageViewer({
       return
     }
 
+    // Check if container size changed
+    const containerSizeChanged =
+      previousContainerSize.current.width !== containerWidth ||
+      previousContainerSize.current.height !== containerHeight
+
+    // Skip if imageScale already matches the target AND container size hasn't changed
+    // ⚠️ IMPORTANT: Both conditions must be checked to allow panel resize repositioning
+    if (imageScale.scale === targetScale && !containerSizeChanged) {
+      return
+    }
+
+    // Update previous container size
+    previousContainerSize.current = { width: containerWidth, height: containerHeight }
+
     const imgWidth = image.width
     const imgHeight = image.height
     const containerW = containerWidth
     const containerH = containerHeight
 
-    // Calculate new position (center the image)
-    const newX = (containerW - imgWidth * targetScale) / 2
-    const newY = (containerH - imgHeight * targetScale) / 2
+    // Center the image (initial position before panning)
+    const x = (containerW - imgWidth * targetScale) / 2
+    const y = (containerH - imgHeight * targetScale) / 2
 
-    // Update if scale changed OR if position significantly changed (> 1px tolerance)
-    // Don't include imageScale.x/y in dependencies to avoid infinite loop
-    const scaleChanged = imageScale.scale !== targetScale
-    const positionChanged =
-      Math.abs(imageScale.x - newX) > 1 ||
-      Math.abs(imageScale.y - newY) > 1
-
-    if (scaleChanged || positionChanged) {
-      setImageScale({ x: newX, y: newY, scale: targetScale })
-    }
+    setImageScale({ x, y, scale: targetScale })
   }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale])
 
   // Reset isZoomingRef after all state updates complete
@@ -417,6 +428,9 @@ export function KonvaImageViewer({
   }, [image, gridType, imageScale])
 
   // Zoom in/out function with position preservation
+  // ⚠️ CRITICAL: This function must use imageScale.scale/x/y to calculate zoom positions
+  // The useLayoutEffect above will skip execution when scale matches, allowing this function
+  // to control positioning during zoom operations via isZoomingRef flag
   const zoom = useCallback((direction: 'in' | 'out', mouseX?: number, mouseY?: number) => {
     if (!image || zoomSteps.current.length === 0) return
 
@@ -452,35 +466,32 @@ export function KonvaImageViewer({
 
       // Case 1: fit 이하 → zoom in (클릭한 위치가 중앙으로 오도록)
       if (oldScale <= fitScale && newScale > fitScale) {
-        // 마우스 좌표가 제공되면 클릭 위치 기준, 아니면 뷰포트 중앙 기준
-        if (mouseX !== undefined && mouseY !== undefined) {
-          // oldScale 기준으로 이미지 영역 계산
-          const imgLeft = imageScale.x
-          const imgTop = imageScale.y
-          const imgRight = imgLeft + image.width * oldScale
-          const imgBottom = imgTop + image.height * oldScale
+        const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
+        const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
 
-          // 마우스 포인터가 이미지 위에 있는지 확인
-          const isOnImage = (
-            mouseX >= imgLeft && mouseX <= imgRight &&
-            mouseY >= imgTop && mouseY <= imgBottom
-          )
+        // 현재 실제 적용된 스케일 사용 (imageScale.scale)
+        const currentScale = imageScale.scale
+        const imgLeft = imageScale.x
+        const imgTop = imageScale.y
+        const imgRight = imgLeft + image.width * currentScale
+        const imgBottom = imgTop + image.height * currentScale
 
-          if (isOnImage) {
-            // 클릭한 지점을 이미지 좌표로 변환 (oldScale 기준)
-            const imagePointX = (mouseX - imageScale.x) / oldScale
-            const imagePointY = (mouseY - imageScale.y) / oldScale
+        // 마우스 포인터가 이미지 위에 있는지 확인
+        const isOnImage = (
+          zoomPointX >= imgLeft && zoomPointX <= imgRight &&
+          zoomPointY >= imgTop && zoomPointY <= imgBottom
+        )
 
-            // 해당 지점이 뷰포트 중앙에 오도록 계산
-            newX = containerWidth / 2 - imagePointX * newScale
-            newY = containerHeight / 2 - imagePointY * newScale
-          } else {
-            // 빈 공간 클릭 시 이미지 중앙을 뷰포트 중앙에 배치
-            newX = containerWidth / 2 - (image.width / 2) * newScale
-            newY = containerHeight / 2 - (image.height / 2) * newScale
-          }
+        if (isOnImage) {
+          // 클릭한 지점을 이미지 좌표로 변환
+          const imagePointX = (zoomPointX - imageScale.x) / currentScale
+          const imagePointY = (zoomPointY - imageScale.y) / currentScale
+
+          // 해당 지점이 뷰포트 중앙에 오도록 계산
+          newX = containerWidth / 2 - imagePointX * newScale
+          newY = containerHeight / 2 - imagePointY * newScale
         } else {
-          // 키보드 줌인 등 마우스 좌표가 없는 경우: 이미지 중앙 기준
+          // 빈 공간 클릭 시 이미지 중앙을 뷰포트 중앙에 배치
           newX = containerWidth / 2 - (image.width / 2) * newScale
           newY = containerHeight / 2 - (image.height / 2) * newScale
         }
