@@ -215,22 +215,20 @@ export function KonvaImageViewer({
       return
     }
 
-    // Skip if imageScale already matches the target (zoom function already updated it)
-    if (imageScale.scale === targetScale) {
-      return
-    }
-
     const imgWidth = image.width
     const imgHeight = image.height
     const containerW = containerWidth
     const containerH = containerHeight
 
-    // Center the image (initial position before panning)
-    const x = (containerW - imgWidth * targetScale) / 2
-    const y = (containerH - imgHeight * targetScale) / 2
+    // Calculate new position (center the image)
+    const newX = (containerW - imgWidth * targetScale) / 2
+    const newY = (containerH - imgHeight * targetScale) / 2
 
-    setImageScale({ x, y, scale: targetScale })
-  }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale])
+    // Update if scale or position changed
+    if (imageScale.scale !== targetScale || imageScale.x !== newX || imageScale.y !== newY) {
+      setImageScale({ x: newX, y: newY, scale: targetScale })
+    }
+  }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale, imageScale.x, imageScale.y])
 
   // Reset isZoomingRef after all state updates complete
   useEffect(() => {
