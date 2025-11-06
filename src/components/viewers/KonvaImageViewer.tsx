@@ -224,11 +224,17 @@ export function KonvaImageViewer({
     const newX = (containerW - imgWidth * targetScale) / 2
     const newY = (containerH - imgHeight * targetScale) / 2
 
-    // Update if scale or position changed
-    if (imageScale.scale !== targetScale || imageScale.x !== newX || imageScale.y !== newY) {
+    // Update if scale changed OR if position significantly changed (> 1px tolerance)
+    // Don't include imageScale.x/y in dependencies to avoid infinite loop
+    const scaleChanged = imageScale.scale !== targetScale
+    const positionChanged =
+      Math.abs(imageScale.x - newX) > 1 ||
+      Math.abs(imageScale.y - newY) > 1
+
+    if (scaleChanged || positionChanged) {
       setImageScale({ x: newX, y: newY, scale: targetScale })
     }
-  }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale, imageScale.x, imageScale.y])
+  }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale])
 
   // Reset isZoomingRef after all state updates complete
   useEffect(() => {
