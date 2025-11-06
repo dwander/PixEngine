@@ -128,6 +128,14 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         width: window.innerWidth,
         height: window.innerHeight
       })
+
+      // 확장 모드 진입 시 자동으로 포커스 가져오기
+      // setTimeout으로 렌더링 후 포커스 설정
+      setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.focus()
+        }
+      }, 0)
     }
     // 일반 모드로 복귀: ResizeObserver가 자동으로 감지
   }, [isFullscreenMode])
