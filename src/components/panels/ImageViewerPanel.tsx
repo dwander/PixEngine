@@ -2,11 +2,11 @@ import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { useImageContext } from '../../contexts/ImageContext'
-import { Check, Shrink, Expand, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, Shrink, Expand, X, ChevronLeft, ChevronRight, Star } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 import { logError } from '../../lib/errorHandler'
-import { writeImageRating } from '../../lib/rating'
+import { readImageRating, writeImageRating } from '../../lib/rating'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -169,6 +169,8 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     return saved ? JSON.parse(saved) : 'left'
   })
   const [isInfoBarHovered, setIsInfoBarHovered] = useState(false)
+  const [currentRating, setCurrentRating] = useState<number>(0) // 현재 이미지 별점 (0-5)
+  const ratingJustSetRef = useRef<{ path: string; rating: number } | null>(null) // 방금 설정한 별점 추적
 
   // 줌 상태 변경 핸들러
   const handleZoomStateChange = useCallback((fitToScreen: boolean) => {
@@ -227,12 +229,20 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   useEffect(() => {
     if (!currentPath) return
 
+    let isProcessing = false
+
     const handleRatingKey = async (e: KeyboardEvent) => {
+      // 키 반복 무시 (키를 누르고 있을 때)
+      if (e.repeat) return
+
       // 입력 요소에서 타이핑 중이면 무시
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
         return
       }
+
+      // 이미 처리 중이면 무시
+      if (isProcessing) return
 
       // 0-5 숫자 키 감지 (일반 키, 넘패드, Ctrl 조합 모두 지원)
       const key = e.key
@@ -241,11 +251,17 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
 
       if (isNumberKey || isNumpadKey) {
         e.preventDefault()
+        isProcessing = true
 
         const rating = isNumpadKey
           ? parseInt(e.code.replace('Numpad', ''), 10)
           : parseInt(key, 10)
 
+        // 즉시 UI 업데이트 (낙관적 업데이트)
+        setCurrentRating(rating)
+        ratingJustSetRef.current = { path: currentPath, rating }
+
+        // 백그라운드에서 저장 및 이벤트 전송
         try {
           await writeImageRating(currentPath, rating)
           console.log(`별점 ${rating}으로 설정됨: ${currentPath}`)
@@ -254,12 +270,57 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
           await emit('rating-changed', { path: currentPath, rating })
         } catch (error) {
           logError(error as Error, `별점 설정 실패: ${currentPath}`)
+          // 실패 시 원래 별점으로 롤백
+          const originalRating = await readImageRating(currentPath).catch(() => 0)
+          setCurrentRating(originalRating)
+          ratingJustSetRef.current = null
+        } finally {
+          isProcessing = false
         }
       }
     }
 
     document.addEventListener('keydown', handleRatingKey)
     return () => document.removeEventListener('keydown', handleRatingKey)
+  }, [currentPath])
+
+  // 이미지 변경 시 별점 로드
+  useEffect(() => {
+    if (!currentPath) {
+      setCurrentRating(0)
+      ratingJustSetRef.current = null
+      return
+    }
+
+    // 방금 이 이미지에 별점을 설정했으면 로드 스킵
+    if (ratingJustSetRef.current?.path === currentPath) {
+      console.log(`별점 로드 스킵 (방금 설정함): ${currentPath}`)
+      return
+    }
+
+    let cancelled = false
+
+    const loadRating = async () => {
+      const pathToLoad = currentPath
+      try {
+        const rating = await readImageRating(pathToLoad)
+        // 로드 중에 다른 이미지로 변경되었거나, 방금 별점을 설정했으면 무시
+        if (!cancelled && pathToLoad === currentPath && ratingJustSetRef.current?.path !== currentPath) {
+          setCurrentRating(rating)
+        }
+      } catch (error) {
+        // 별점 읽기 실패는 무시 (XMP가 없는 파일일 수 있음)
+        if (!cancelled && pathToLoad === currentPath && ratingJustSetRef.current?.path !== currentPath) {
+          setCurrentRating(0)
+        }
+      }
+    }
+
+    loadRating()
+
+    return () => {
+      cancelled = true
+    }
   }, [currentPath])
 
   // 촬영 정보 토글 상태 저장
@@ -560,24 +621,37 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       >
         {/* 이미지 정보 오버레이 (상단) */}
         <div className="absolute top-0 left-0 right-0 z-10 px-[20px] py-2.5 text-sm text-neutral-300 flex justify-between items-start" style={{ textShadow: '1px 1px 0 rgb(0,0,0)' }}>
-          {/* 좌측: 카메라 + 렌즈 정보 */}
-          {metadata && (
-            <div className="flex items-center gap-2">
-              {(metadata.camera_make || metadata.camera_model) && (
-                <span>
-                  {metadata.camera_make && metadata.camera_model
-                    ? `${metadata.camera_make} ${metadata.camera_model}`
-                    : metadata.camera_model || metadata.camera_make || ''}
-                </span>
-              )}
-              {(metadata.camera_make || metadata.camera_model) && metadata.lens_model && (
-                <span className="text-gray-600">|</span>
-              )}
-              {metadata.lens_model && (
-                <span className="text-gray-400">{metadata.lens_model}</span>
-              )}
-            </div>
-          )}
+          {/* 좌측: 카메라 + 렌즈 정보 + 별점 */}
+          <div className="flex flex-col gap-1.5">
+            {metadata && (
+              <div className="flex items-center gap-2">
+                {(metadata.camera_make || metadata.camera_model) && (
+                  <span>
+                    {metadata.camera_make && metadata.camera_model
+                      ? `${metadata.camera_make} ${metadata.camera_model}`
+                      : metadata.camera_model || metadata.camera_make || ''}
+                  </span>
+                )}
+                {(metadata.camera_make || metadata.camera_model) && metadata.lens_model && (
+                  <span className="text-gray-600">|</span>
+                )}
+                {metadata.lens_model && (
+                  <span className="text-gray-400">{metadata.lens_model}</span>
+                )}
+              </div>
+            )}
+            {/* 별점 표시 (확장 모드에서만) */}
+            {isFullscreenMode && currentRating > 0 && (
+              <div className="flex items-center gap-0.5">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Star
+                    key={i}
+                    className={`w-4 h-4 ${i < currentRating ? 'fill-white text-white' : 'fill-none text-gray-500'}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
           {/* 우측: 전체화면 토글 버튼 */}
           <button
             onClick={(e) => {

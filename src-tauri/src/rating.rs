@@ -90,7 +90,8 @@ fn read_exif_datetime(file_path: &str) -> Result<Option<String>, String> {
 
     // DateTimeOriginal 찾기
     if let Some(field) = exif_reader.get_field(Tag::DateTimeOriginal, In::PRIMARY) {
-        Ok(Some(field.display_value().to_string()))
+        let datetime_str = field.display_value().to_string();
+        Ok(Some(datetime_str))
     } else {
         Ok(None)
     }
@@ -98,22 +99,35 @@ fn read_exif_datetime(file_path: &str) -> Result<Option<String>, String> {
 
 /// 파일 수정 시간 설정
 fn set_file_modified_time(file_path: &str, datetime_str: &str) -> Result<(), String> {
-    use chrono::{DateTime, NaiveDateTime};
-    use std::time::UNIX_EPOCH;
+    use chrono::{NaiveDateTime, TimeZone, Local};
 
-    // EXIF 날짜 형식: "2024-01-15 12:30:45"
-    let naive_dt = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S")
-        .or_else(|_| NaiveDateTime::parse_from_str(datetime_str, "%Y:%m:%d %H:%M:%S"))
+    // 날짜와 시간 분리
+    let parts: Vec<&str> = datetime_str.trim().split_whitespace().collect();
+    if parts.len() != 2 {
+        return Err(format!("잘못된 날짜 형식: {}", datetime_str));
+    }
+
+    let date_part = parts[0]; // "2024-01-15" 또는 "2024:01:15"
+    let time_part = parts[1]; // "12:30:45"
+
+    // 날짜 부분만 콜론을 하이픈으로 변환
+    let date_normalized = date_part.replace(":", "-");
+    let final_datetime_str = format!("{} {}", date_normalized, time_part);
+
+    // 파싱 및 Unix timestamp로 변환 (로컬 시간으로 처리)
+    let naive_dt = NaiveDateTime::parse_from_str(&final_datetime_str, "%Y-%m-%d %H:%M:%S")
         .map_err(|e| format!("날짜 파싱 실패: {}", e))?;
 
-    let datetime: DateTime<chrono::Utc> = DateTime::from_naive_utc_and_offset(naive_dt, chrono::Utc);
-    let duration = datetime.signed_duration_since(DateTime::<chrono::Utc>::from(UNIX_EPOCH));
-    let system_time = UNIX_EPOCH + std::time::Duration::from_secs(duration.num_seconds() as u64);
+    let local_dt = Local.from_local_datetime(&naive_dt)
+        .single()
+        .ok_or_else(|| format!("로컬 시간 변환 실패: {}", final_datetime_str))?;
+
+    let timestamp = local_dt.timestamp();
 
     // 파일 수정 시간 설정
     filetime::set_file_mtime(
         file_path,
-        filetime::FileTime::from_system_time(system_time)
+        filetime::FileTime::from_unix_time(timestamp, 0)
     ).map_err(|e| format!("파일 시간 설정 실패: {}", e))?;
 
     Ok(())
