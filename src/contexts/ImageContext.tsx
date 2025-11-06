@@ -94,8 +94,10 @@ export function ImageProvider({ children }: { children: ReactNode }) {
     if (cached) {
       // 타임스탬프 업데이트 (LRU)
       cached.timestamp = Date.now();
+      console.log('💾 [Cache] Retrieved from cache:', path);
       return cached.imageElement;
     }
+    console.log('🔍 [Cache] Not found in cache:', path);
     return undefined;
   }, []);
 
@@ -106,6 +108,8 @@ export function ImageProvider({ children }: { children: ReactNode }) {
 
     // 캐시에 이미 있는 이미지 개수 확인
     const cachedCount = paths.filter(path => cache.has(path)).length;
+
+    console.log(`📦 [Preload] Starting: ${cachedCount}/${total} already cached`);
 
     // 버퍼 상태 업데이트 (완료 후에도 유지)
     setPreloadProgress({ loaded: cachedCount, total });
@@ -118,6 +122,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        console.log(`⬇️ [Preload] Loading:`, path);
         // convertFileSrc를 사용하여 asset URL 생성
         const assetUrl = convertFileSrc(path);
 
@@ -151,6 +156,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
 
             // 버퍼 상태 업데이트
             const currentCached = paths.filter(p => cache.has(p)).length;
+            console.log(`✅ [Preload] Cached: ${currentCached}/${total}`, path);
             setPreloadProgress({ loaded: currentCached, total });
 
             resolve();
@@ -159,12 +165,14 @@ export function ImageProvider({ children }: { children: ReactNode }) {
           img.src = assetUrl;
         });
       } catch (error) {
+        console.error(`❌ [Preload] Failed:`, path, error);
         logError(error, `Preload image: ${path}`);
       }
     }
 
     // 최종 버퍼 상태 업데이트 (사라지지 않음)
     const finalCached = paths.filter(p => cache.has(p)).length;
+    console.log(`🎉 [Preload] Complete: ${finalCached}/${total} cached`);
     setPreloadProgress({ loaded: finalCached, total });
   }, []);
 

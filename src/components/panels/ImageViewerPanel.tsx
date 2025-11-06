@@ -333,7 +333,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
 
   // Konva.js가 모든 렌더링을 처리하므로 별도의 Canvas 렌더링 코드 불필요
 
-  // 이미지 URL 설정 (Konva가 렌더링 처리)
+  // 이미지 URL 설정 (캐시 우선 사용)
   useEffect(() => {
     if (!currentPath) {
       setImageUrl(null)
@@ -347,34 +347,39 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     const cachedImg = getCachedImage(currentPath)
 
     if (cachedImg) {
-      // 캐시된 이미지 - 히스토그램 계산
+      // 🟢 캐시 히트: 이미 로드된 HTMLImageElement 사용
+      console.log('🟢 [Cache HIT] Using cached image:', currentPath)
       currentImageRef.current = cachedImg
       calculateHistogram(cachedImg)
 
-      // Konva에 전달할 URL 설정
+      // Konva에 전달할 URL 설정 (브라우저 캐시 활용)
       const assetUrl = convertFileSrc(currentPath)
       setImageUrl(assetUrl)
+      setImageLoaded(true)
     } else {
-      // 캐시에 없으면 URL만 설정 (Konva가 로드)
+      // 🔴 캐시 미스: 새로 로드 필요
+      console.log('🔴 [Cache MISS] Loading new image:', currentPath)
       const assetUrl = convertFileSrc(currentPath)
-      setImageUrl(assetUrl)
+
+      // 이미지 로드
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+
+      img.onload = () => {
+        currentImageRef.current = img
+        calculateHistogram(img)
+        setImageUrl(assetUrl)
+        setImageLoaded(true)
+      }
+
+      img.onerror = () => {
+        console.error('❌ Failed to load image:', currentPath)
+        setImageLoaded(false)
+      }
+
+      img.src = assetUrl
     }
   }, [currentPath, getCachedImage, calculateHistogram])
-
-  // Konva에서 이미지 로드 완료 시 히스토그램 계산
-  useEffect(() => {
-    if (!imageUrl) return
-
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-
-    img.onload = () => {
-      currentImageRef.current = img
-      calculateHistogram(img)
-    }
-
-    img.src = imageUrl
-  }, [imageUrl, calculateHistogram])
 
   // 히스토그램 데이터 변경 시 렌더링
   useEffect(() => {
