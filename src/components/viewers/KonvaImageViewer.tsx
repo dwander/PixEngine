@@ -179,9 +179,15 @@ export function KonvaImageViewer({
   useLayoutEffect(() => {
     if (!image || zoomSteps.current.length === 0) return
 
+    const targetScale = zoomSteps.current[currentZoom]
+
     // Skip if zoom function is handling the position
     if (isZoomingRef.current) {
-      isZoomingRef.current = false
+      return
+    }
+
+    // Skip if imageScale already matches the target (zoom function already updated it)
+    if (imageScale.scale === targetScale) {
       return
     }
 
@@ -190,14 +196,23 @@ export function KonvaImageViewer({
     const containerW = containerWidth
     const containerH = containerHeight
 
-    const targetScale = zoomSteps.current[currentZoom]
-
     // Center the image (initial position before panning)
     const x = (containerW - imgWidth * targetScale) / 2
     const y = (containerH - imgHeight * targetScale) / 2
 
     setImageScale({ x, y, scale: targetScale })
-  }, [image, containerWidth, containerHeight, currentZoom])
+  }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale])
+
+  // Reset isZoomingRef after all state updates complete
+  useEffect(() => {
+    if (isZoomingRef.current) {
+      // Use setTimeout to ensure all state updates have completed
+      const timeoutId = setTimeout(() => {
+        isZoomingRef.current = false
+      }, 0)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [currentZoom])
 
   // Helper function to show zoom indicator
   const showZoomIndicatorTemporarily = useCallback(() => {
@@ -386,37 +401,67 @@ export function KonvaImageViewer({
       const newScale = zoomSteps.current[newZoom]
       const fitScale = fitToScreenScale.current
 
-      // Check if new zoom is fit-to-screen or smaller (zoomed out)
-      const isNewZoomFitOrSmaller = newScale <= fitScale
-
       let newX: number
       let newY: number
 
-      if (isNewZoomFitOrSmaller) {
-        // For fit-to-screen or zoomed out state, always center the image
+      // Case 1: fit 이하 → zoom in (클릭한 위치가 중앙으로 오도록)
+      if (oldScale <= fitScale && newScale > fitScale) {
+        const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
+        const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
+
+        // 현재 실제 적용된 스케일 사용 (imageScale.scale)
+        const currentScale = imageScale.scale
+        const imgLeft = imageScale.x
+        const imgTop = imageScale.y
+        const imgRight = imgLeft + image.width * currentScale
+        const imgBottom = imgTop + image.height * currentScale
+
+        // 마우스 포인터가 이미지 위에 있는지 확인
+        const isOnImage = (
+          zoomPointX >= imgLeft && zoomPointX <= imgRight &&
+          zoomPointY >= imgTop && zoomPointY <= imgBottom
+        )
+
+        if (isOnImage) {
+          // 클릭한 지점을 이미지 좌표로 변환
+          const imagePointX = (zoomPointX - imageScale.x) / currentScale
+          const imagePointY = (zoomPointY - imageScale.y) / currentScale
+
+          // 해당 지점이 뷰포트 중앙에 오도록 계산
+          newX = containerWidth / 2 - imagePointX * newScale
+          newY = containerHeight / 2 - imagePointY * newScale
+        } else {
+          // 빈 공간 클릭 시 이미지 중앙을 뷰포트 중앙에 배치
+          newX = containerWidth / 2 - (image.width / 2) * newScale
+          newY = containerHeight / 2 - (image.height / 2) * newScale
+        }
+      }
+      // Case 2: 이미 줌인된 상태에서 추가 줌 (클릭한 위치가 중앙으로 오도록)
+      else if (oldScale > fitScale && newScale > fitScale) {
+        const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
+        const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
+
+        // 현재 실제 적용된 스케일 사용
+        const currentScale = imageScale.scale
+
+        // 클릭한 지점을 이미지 좌표로 변환
+        const imagePointX = (zoomPointX - imageScale.x) / currentScale
+        const imagePointY = (zoomPointY - imageScale.y) / currentScale
+
+        // 해당 지점이 뷰포트 중앙에 오도록 계산
+        newX = containerWidth / 2 - imagePointX * newScale
+        newY = containerHeight / 2 - imagePointY * newScale
+      }
+      // Case 3: fit 이하로 줌아웃 시 중앙 정렬
+      else {
         const imgWidth = image.width
         const imgHeight = image.height
         newX = (containerWidth - imgWidth * newScale) / 2
         newY = (containerHeight - imgHeight * newScale) / 2
-      } else {
-        // For zoomed in state, preserve the zoom point
-        const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
-        const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
-
-        // Convert zoom point to image coordinates (before zoom)
-        const imagePointX = (zoomPointX - imageScale.x) / oldScale
-        const imagePointY = (zoomPointY - imageScale.y) / oldScale
-
-        // Calculate new position to keep the same point at zoom point
-        newX = zoomPointX - imagePointX * newScale
-        newY = zoomPointY - imagePointY * newScale
       }
 
       // Mark that zoom is handling the position
       isZoomingRef.current = true
-
-      // Update zoom level
-      setCurrentZoom(newZoom)
 
       // Update position
       setImageScale(prev => ({
@@ -425,6 +470,9 @@ export function KonvaImageViewer({
         y: newY,
         scale: newScale
       }))
+
+      // Update zoom level
+      setCurrentZoom(newZoom)
 
       // Show zoom indicator
       showZoomIndicatorTemporarily()
