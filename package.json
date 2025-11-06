@@ -6,7 +6,6 @@
   "scripts": {
     "predev": "node scripts/generate-config.js",
     "dev": "vite",
-    "prebuild": "node scripts/bump-version.js",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
