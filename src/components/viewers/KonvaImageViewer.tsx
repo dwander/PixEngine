@@ -452,32 +452,35 @@ export function KonvaImageViewer({
 
       // Case 1: fit 이하 → zoom in (클릭한 위치가 중앙으로 오도록)
       if (oldScale <= fitScale && newScale > fitScale) {
-        const zoomPointX = mouseX !== undefined ? mouseX : containerWidth / 2
-        const zoomPointY = mouseY !== undefined ? mouseY : containerHeight / 2
+        // 마우스 좌표가 제공되면 클릭 위치 기준, 아니면 뷰포트 중앙 기준
+        if (mouseX !== undefined && mouseY !== undefined) {
+          // oldScale 기준으로 이미지 영역 계산
+          const imgLeft = imageScale.x
+          const imgTop = imageScale.y
+          const imgRight = imgLeft + image.width * oldScale
+          const imgBottom = imgTop + image.height * oldScale
 
-        // 현재 실제 적용된 스케일 사용 (imageScale.scale)
-        const currentScale = imageScale.scale
-        const imgLeft = imageScale.x
-        const imgTop = imageScale.y
-        const imgRight = imgLeft + image.width * currentScale
-        const imgBottom = imgTop + image.height * currentScale
+          // 마우스 포인터가 이미지 위에 있는지 확인
+          const isOnImage = (
+            mouseX >= imgLeft && mouseX <= imgRight &&
+            mouseY >= imgTop && mouseY <= imgBottom
+          )
 
-        // 마우스 포인터가 이미지 위에 있는지 확인
-        const isOnImage = (
-          zoomPointX >= imgLeft && zoomPointX <= imgRight &&
-          zoomPointY >= imgTop && zoomPointY <= imgBottom
-        )
+          if (isOnImage) {
+            // 클릭한 지점을 이미지 좌표로 변환 (oldScale 기준)
+            const imagePointX = (mouseX - imageScale.x) / oldScale
+            const imagePointY = (mouseY - imageScale.y) / oldScale
 
-        if (isOnImage) {
-          // 클릭한 지점을 이미지 좌표로 변환
-          const imagePointX = (zoomPointX - imageScale.x) / currentScale
-          const imagePointY = (zoomPointY - imageScale.y) / currentScale
-
-          // 해당 지점이 뷰포트 중앙에 오도록 계산
-          newX = containerWidth / 2 - imagePointX * newScale
-          newY = containerHeight / 2 - imagePointY * newScale
+            // 해당 지점이 뷰포트 중앙에 오도록 계산
+            newX = containerWidth / 2 - imagePointX * newScale
+            newY = containerHeight / 2 - imagePointY * newScale
+          } else {
+            // 빈 공간 클릭 시 이미지 중앙을 뷰포트 중앙에 배치
+            newX = containerWidth / 2 - (image.width / 2) * newScale
+            newY = containerHeight / 2 - (image.height / 2) * newScale
+          }
         } else {
-          // 빈 공간 클릭 시 이미지 중앙을 뷰포트 중앙에 배치
+          // 키보드 줌인 등 마우스 좌표가 없는 경우: 이미지 중앙 기준
           newX = containerWidth / 2 - (image.width / 2) * newScale
           newY = containerHeight / 2 - (image.height / 2) * newScale
         }
