@@ -5,7 +5,7 @@ import { MainLayout } from "./components/layout/MainLayout";
 import { StatusBar } from "./components/layout/StatusBar";
 import { useWindowState } from "./hooks/useWindowState";
 import { theme } from "./lib/theme";
-import { FolderProvider } from "./contexts/FolderContext";
+import { FolderProvider, useFolderContext } from "./contexts/FolderContext";
 import { ImageProvider } from "./contexts/ImageContext";
 import { WindowFocusProvider } from "./contexts/WindowFocusContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -13,9 +13,8 @@ import { useViewerStore } from "./store/viewerStore";
 
 const appWindow = getCurrentWindow();
 
-function App() {
-  // 윈도우 상태 저장/복원
-  useWindowState();
+function AppContent() {
+  const { refreshCurrentFolder, currentFolder } = useFolderContext();
 
   // ViewerStore에서 setToggleFullscreen 가져오기
   const setToggleFullscreen = useViewerStore((state) => state.setToggleFullscreen);
@@ -32,6 +31,31 @@ function App() {
       window.removeEventListener('contextmenu', handleContextMenu);
     };
   }, []);
+
+  // F5 키로 폴더 새로고침, Ctrl+R은 차단
+  useEffect(() => {
+    const handleRefreshKey = (e: KeyboardEvent) => {
+      // F5: 커스텀 새로고침 실행
+      if (e.key === 'F5') {
+        e.preventDefault();
+        if (currentFolder) {
+          refreshCurrentFolder();
+          console.log('[App] Folder refreshed via F5');
+        }
+      }
+      // Ctrl+R 또는 Cmd+R: 전체 새로고침 차단
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        console.log('[App] Page refresh prevented - use F5 to refresh folder');
+      }
+    };
+
+    window.addEventListener('keydown', handleRefreshKey);
+
+    return () => {
+      window.removeEventListener('keydown', handleRefreshKey);
+    };
+  }, [currentFolder, refreshCurrentFolder]);
 
   const [visiblePanels, setVisiblePanels] = useState({
     folders: true,
@@ -142,35 +166,44 @@ function App() {
   }, [isFullscreenViewer]);
 
   return (
+    <div className={`flex flex-col h-screen ${theme.background.primary}`}>
+      {/* 커스텀 타이틀바 */}
+      {!isFullscreenViewer && (
+        <TitleBar
+          onTogglePanel={handleTogglePanel}
+          visiblePanels={visiblePanels}
+          onToggleGrid={handleToggleGrid}
+          activeGrid={gridType}
+        />
+      )}
+
+      {/* 메인 레이아웃 (dockview) */}
+      <main className="flex-1 overflow-hidden">
+        <MainLayout
+          onPanelVisibilityChange={handlePanelVisibilityChange}
+          togglePanelId={togglePanelId}
+          gridType={gridType}
+          isFullscreenViewer={isFullscreenViewer}
+          onToggleFullscreenViewer={handleToggleFullscreenViewer}
+        />
+      </main>
+
+      {/* 상태 표시 영역 */}
+      {!isFullscreenViewer && <StatusBar />}
+    </div>
+  );
+}
+
+function App() {
+  // 윈도우 상태 저장/복원
+  useWindowState();
+
+  return (
     <ErrorBoundary>
       <WindowFocusProvider>
         <FolderProvider>
           <ImageProvider>
-            <div className={`flex flex-col h-screen ${theme.background.primary}`}>
-              {/* 커스텀 타이틀바 */}
-              {!isFullscreenViewer && (
-                <TitleBar
-                  onTogglePanel={handleTogglePanel}
-                  visiblePanels={visiblePanels}
-                  onToggleGrid={handleToggleGrid}
-                  activeGrid={gridType}
-                />
-              )}
-
-              {/* 메인 레이아웃 (dockview) */}
-              <main className="flex-1 overflow-hidden">
-                <MainLayout
-                  onPanelVisibilityChange={handlePanelVisibilityChange}
-                  togglePanelId={togglePanelId}
-                  gridType={gridType}
-                  isFullscreenViewer={isFullscreenViewer}
-                  onToggleFullscreenViewer={handleToggleFullscreenViewer}
-                />
-              </main>
-
-              {/* 상태 표시 영역 */}
-              {!isFullscreenViewer && <StatusBar />}
-            </div>
+            <AppContent />
           </ImageProvider>
         </FolderProvider>
       </WindowFocusProvider>

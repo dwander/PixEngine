@@ -62,12 +62,25 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
   const isTransitioningRef = useRef<boolean>(false);
 
   // 그룹 내 모든 패널의 크기를 저장하는 함수
-  const savePanelSizes = useCallback(() => {
+  const savePanelSizes = useCallback(async () => {
     if (!api.current) return;
 
     // 전체화면 전환 중이면 저장하지 않음
     if (isTransitioningRef.current) {
       return;
+    }
+
+    // 확장 모드(전체화면)일 때는 저장하지 않음
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const appWindow = getCurrentWindow();
+      const isFullscreen = await appWindow.isFullscreen();
+
+      if (isFullscreen) {
+        return;
+      }
+    } catch (error) {
+      console.error('[Layout] Failed to check fullscreen state:', error);
     }
 
     // 전체화면 모드(maximize 상태)에서는 저장하지 않음
@@ -432,6 +445,15 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
 
       saveTimeoutRef.current = setTimeout(async () => {
         try {
+          // 확장 모드(전체화면)일 때는 저장하지 않음
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          const appWindow = getCurrentWindow();
+          const isFullscreen = await appWindow.isFullscreen();
+
+          if (isFullscreen) {
+            return;
+          }
+
           const { invoke } = await import("@tauri-apps/api/core");
           const layout = event.api.toJSON();
           await invoke("save_dockview_layout", { layout });
@@ -446,6 +468,15 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
         try {
+          // 확장 모드(전체화면)일 때는 저장하지 않음
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          const appWindow = getCurrentWindow();
+          const isFullscreen = await appWindow.isFullscreen();
+
+          if (isFullscreen) {
+            return;
+          }
+
           const { invoke } = await import("@tauri-apps/api/core");
           const layout = event.api.toJSON();
           await invoke("save_dockview_layout", { layout });

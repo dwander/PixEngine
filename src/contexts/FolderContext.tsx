@@ -20,6 +20,7 @@ interface FolderContextType {
   setFolderImages: (folder: string, files: string[], size: number) => void;
   setLoading: (loading: boolean) => void;
   loadLightMetadata: (imagePaths: string[]) => Promise<void>;
+  refreshCurrentFolder: () => Promise<void>;
 }
 
 const FolderContext = createContext<FolderContextType | undefined>(undefined);
@@ -66,6 +67,37 @@ export function FolderProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // 현재 폴더 새로고침 (이미지 목록 및 메타데이터 재로드)
+  const refreshCurrentFolder = useCallback(async () => {
+    if (!currentFolder) return;
+
+    try {
+      setIsLoading(true);
+
+      // 폴더의 이미지 파일 목록 다시 가져오기
+      const result = await invoke<{ files: string[]; total_size: number }>('scan_folder', {
+        folderPath: currentFolder
+      });
+
+      setImageFiles(result.files);
+      setImageCount(result.files.length);
+      setTotalSize(result.total_size);
+
+      // 경량 메타데이터 다시 로드
+      if (result.files.length > 0) {
+        await loadLightMetadata(result.files);
+      } else {
+        setLightMetadataMap(new Map());
+      }
+
+      console.log(`[FolderContext] Refreshed folder: ${currentFolder} (${result.files.length} images)`);
+    } catch (error) {
+      logError(error, 'Refresh current folder');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentFolder, loadLightMetadata]);
+
   return (
     <FolderContext.Provider value={{
       currentFolder,
@@ -77,6 +109,7 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       setFolderImages,
       setLoading,
       loadLightMetadata,
+      refreshCurrentFolder,
     }}>
       {children}
     </FolderContext.Provider>

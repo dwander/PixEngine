@@ -13,6 +13,7 @@ export function useWindowState() {
     let isMounted = true;
     let isShown = false;
     let previousMaximized = false;
+    let isFullscreen = false; // 확장 모드(전체화면) 상태 추적
 
     // 초기 렌더링 완료 후 윈도우 표시
     const showWindow = async () => {
@@ -30,6 +31,11 @@ export function useWindowState() {
 
     // 현재 윈도우 상태 저장 (Rust 커맨드 사용)
     const saveWindowState = async () => {
+      // 확장 모드(전체화면)일 때는 저장하지 않음
+      if (isFullscreen) {
+        return;
+      }
+
       try {
         const maximized = await appWindow.isMaximized();
         const position = await appWindow.outerPosition();
@@ -90,10 +96,22 @@ export function useWindowState() {
         debouncedSave();
       });
 
+      // 전체화면 상태 변경 감지 (확장 모드)
+      const checkFullscreen = async () => {
+        const currentFullscreen = await appWindow.isFullscreen();
+        if (currentFullscreen !== isFullscreen) {
+          isFullscreen = currentFullscreen;
+        }
+      };
+
+      // 주기적으로 전체화면 상태 체크 (100ms마다)
+      const fullscreenCheckInterval = setInterval(checkFullscreen, 100);
+
       // 정리 함수
       return () => {
         unlistenMove();
         unlistenResize();
+        clearInterval(fullscreenCheckInterval);
       };
     };
 

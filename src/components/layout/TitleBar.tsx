@@ -1,8 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useState, useEffect, useRef } from "react";
-import { Minus, Square, Copy, X } from "lucide-react";
+import { Minus, Square, Copy, X, RefreshCw } from "lucide-react";
 import { theme, getTitleBarColors } from "../../lib/theme";
 import { useWindowFocus } from "../../contexts/WindowFocusContext";
+import { useFolderContext } from "../../contexts/FolderContext";
 
 const appWindow = getCurrentWindow();
 
@@ -20,6 +21,7 @@ interface TitleBarProps {
 export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGrid = 'none' }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const { isFocused } = useWindowFocus(); // WindowFocusContext에서 포커스 상태 가져오기
+  const { refreshCurrentFolder, currentFolder, isLoading } = useFolderContext(); // 새로고침 함수
   const [isPanelMenuOpen, setIsPanelMenuOpen] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isAnyMenuOpen, setIsAnyMenuOpen] = useState(false); // 메뉴가 한 번이라도 열렸는지 추적
@@ -107,6 +109,13 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
 
     if (!isButton) {
       await appWindow.startDragging();
+    }
+  };
+
+  const handleRefresh = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (currentFolder && !isLoading) {
+      await refreshCurrentFolder();
     }
   };
 
@@ -254,6 +263,22 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
 
       {/* 중앙: 빈 공간 */}
       <div className="flex-1"></div>
+
+      {/* 새로고침 버튼 */}
+      <button
+        onClick={handleRefresh}
+        onMouseDown={(e) => e.stopPropagation()}
+        disabled={!currentFolder || isLoading}
+        className={`px-3 py-1 ${colors.menuButton} disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5`}
+        aria-label="새로고침"
+        title="현재 폴더 새로고침 (F5)"
+      >
+        <RefreshCw
+          size={14}
+          className={`${colors.icon} ${isLoading ? 'animate-spin' : ''}`}
+        />
+        <span className="text-xs">새로고침</span>
+      </button>
 
       {/* 오른쪽: 윈도우 컨트롤 버튼 */}
       <div className="flex items-center gap-0">
