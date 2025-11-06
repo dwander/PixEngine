@@ -153,11 +153,11 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
             return { id: p.id, height };
           });
 
-          const validPanelHeights = panelHeights.filter(p => p.height > 0);
+          const validPanelHeights = panelHeights.filter((p: { id: string; height: number }) => p.height > 0);
           if (validPanelHeights.length > 1) {
-            const maxHeightPanel = validPanelHeights.reduce((max, p) => p.height > max.height ? p : max);
+            const maxHeightPanel = validPanelHeights.reduce((max: { id: string; height: number }, p: { id: string; height: number }) => p.height > max.height ? p : max);
 
-            validPanelHeights.forEach((panelInfo) => {
+            validPanelHeights.forEach((panelInfo: { id: string; height: number }) => {
               if (panelInfo.id !== maxHeightPanel.id) {
                 panelSizesRef.current.set(panelInfo.id, {
                   width: g.width,
