@@ -391,7 +391,20 @@ export function KonvaImageViewer({
     let newZoom = oldZoom
 
     if (direction === 'in') {
-      newZoom = Math.min(oldZoom + 1, zoomSteps.current.length - 1)
+      const currentScale = zoomSteps.current[oldZoom]
+      const isClickZoom = mouseX !== undefined && mouseY !== undefined
+
+      // 마우스 클릭 줌이고 현재 배율이 100% 미만이면 100%로 바로 이동
+      if (isClickZoom && currentScale < 1.0) {
+        const zoom100Index = zoomSteps.current.findIndex(scale => scale >= 1.0)
+        if (zoom100Index !== -1) {
+          newZoom = zoom100Index
+        } else {
+          newZoom = Math.min(oldZoom + 1, zoomSteps.current.length - 1)
+        }
+      } else {
+        newZoom = Math.min(oldZoom + 1, zoomSteps.current.length - 1)
+      }
     } else {
       newZoom = Math.max(oldZoom - 1, 0)
     }
