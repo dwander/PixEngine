@@ -488,25 +488,8 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    // 창 리사이즈 시 패널 크기 복원
-    const handleWindowResize = () => {
-      restorePanelSizes();
-    };
-
-    // 리사이즈 이벤트 리스너 등록 (디바운스 적용)
-    let resizeTimeout: number | undefined;
-    const debouncedResize = () => {
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-      resizeTimeout = setTimeout(handleWindowResize, 100);
-    };
-
-    window.addEventListener('resize', debouncedResize);
-
     // 클린업
     return () => {
-      window.removeEventListener('resize', debouncedResize);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   };
