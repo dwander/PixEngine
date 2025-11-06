@@ -55,6 +55,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage } = useImageContext()
   const { imageFiles, lightMetadataMap } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
+  const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -523,6 +524,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Enter 키로 확장 모드 진입
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      toggleFullscreen?.()
+      return
+    }
+
     // 방향키 처리 (이미지 뷰어가 줌인 상태일 때는 무시)
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
       // 이미지 뷰어가 줌인 상태면 방향키를 썸네일 네비게이션에 사용하지 않음
@@ -633,7 +641,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [isZoomedIn, sortedImages.length, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay])
+  }, [isZoomedIn, sortedImages.length, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -1023,6 +1031,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                             setFocusedIndex(index)
                             loadImage(imagePath)
                           }}
+                          onDoubleClick={() => {
+                            toggleFullscreen?.()
+                          }}
                         >
                           <div
                             className={`group relative w-full h-full cursor-pointer overflow-hidden rounded-lg ${
@@ -1088,6 +1099,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                     // setSelectedImage(imagePath) // 임시 비활성화
                     setFocusedIndex(virtualItem.index)
                     loadImage(imagePath)
+                  }}
+                  onDoubleClick={() => {
+                    toggleFullscreen?.()
                   }}
                 >
                   <div

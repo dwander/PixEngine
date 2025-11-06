@@ -9,12 +9,16 @@ import { FolderProvider } from "./contexts/FolderContext";
 import { ImageProvider } from "./contexts/ImageContext";
 import { WindowFocusProvider } from "./contexts/WindowFocusContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useViewerStore } from "./store/viewerStore";
 
 const appWindow = getCurrentWindow();
 
 function App() {
   // 윈도우 상태 저장/복원
   useWindowState();
+
+  // ViewerStore에서 setToggleFullscreen 가져오기
+  const setToggleFullscreen = useViewerStore((state) => state.setToggleFullscreen);
 
   // 브라우저 기본 컨텍스트 메뉴 비활성화
   useEffect(() => {
@@ -93,10 +97,16 @@ function App() {
     }
   }, [isFullscreenViewer]);
 
-  // ESC 키로 전체화면 종료
+  // ViewerStore에 toggleFullscreen 함수 등록
+  useEffect(() => {
+    setToggleFullscreen(handleToggleFullscreenViewer);
+    return () => setToggleFullscreen(null);
+  }, [handleToggleFullscreenViewer, setToggleFullscreen]);
+
+  // ESC, Enter 키로 전체화면 종료
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullscreenViewer) {
+      if ((e.key === 'Escape' || e.key === 'Enter') && isFullscreenViewer) {
         e.preventDefault();
         setIsFullscreenViewer(false);
         try {
