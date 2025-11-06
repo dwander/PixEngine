@@ -17,6 +17,7 @@ interface KonvaImageViewerProps {
   containerHeight: number
   enableHardwareAcceleration?: boolean
   onZoomStateChange?: (isFitToScreen: boolean) => void
+  onRightClickZoomReset?: () => void
 }
 
 // Zoom levels: fit → dynamic steps to 100% → fixed steps after 100%
@@ -30,7 +31,8 @@ export function KonvaImageViewer({
   containerWidth,
   containerHeight,
   enableHardwareAcceleration = false,
-  onZoomStateChange
+  onZoomStateChange,
+  onRightClickZoomReset
 }: KonvaImageViewerProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [imageScale, setImageScale] = useState({ x: 0, y: 0, scale: 1 })
@@ -47,6 +49,8 @@ export function KonvaImageViewer({
   const fitToScreenScale = useRef<number>(1)
   const zoomSteps = useRef<number[]>([]) // Dynamic zoom steps
   const isZoomingRef = useRef<boolean>(false) // Track if zoom is in progress
+  const previousFitToScreenState = useRef<boolean>(true) // Track previous fit-to-screen state
+  const previousImageUrl = useRef<string | null>(null) // Track image changes
   const setIsZoomedIn = useViewerStore((state) => state.setIsZoomedIn)
 
   // Load image
@@ -146,18 +150,27 @@ export function KonvaImageViewer({
 
     zoomSteps.current = steps
 
-    // Reset to fit when steps change
-    const fitIndex = steps.indexOf(fitScale)
-    setCurrentZoom(fitIndex)
-  }, [image, containerWidth, containerHeight])
+    // Only reset zoom when image changes, not when container size changes
+    const imageChanged = previousImageUrl.current !== imageUrl
+    if (imageChanged) {
+      previousImageUrl.current = imageUrl
+      const fitIndex = steps.indexOf(fitScale)
+      setCurrentZoom(fitIndex)
+    }
+  }, [image, containerWidth, containerHeight, imageUrl])
 
-  // Notify parent when zoom state changes
+  // Notify parent when zoom state changes (only when it actually changes)
   useEffect(() => {
     if (!image || zoomSteps.current.length === 0) return
 
     const fitIndex = zoomSteps.current.indexOf(fitToScreenScale.current)
     const isFitToScreen = currentZoom === fitIndex
-    onZoomStateChange?.(isFitToScreen)
+
+    // Only call the callback if the state actually changed
+    if (previousFitToScreenState.current !== isFitToScreen) {
+      previousFitToScreenState.current = isFitToScreen
+      onZoomStateChange?.(isFitToScreen)
+    }
   }, [currentZoom, image])
 
   // Calculate image position and scale based on current zoom
@@ -588,23 +601,30 @@ export function KonvaImageViewer({
   const handleMouseUp = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isDragging) {
       setIsDragging(false)
-    } else if (mouseDownPos && mouseDownPos.button === 0) {
-      // Only perform zoom on left click (button 0), not right click (button 2)
+    } else if (mouseDownPos) {
       const stage = e.target.getStage()
       if (!stage) return
 
       const pointerPos = stage.getPointerPosition()
       if (!pointerPos) return
 
-      if (isCtrlPressed) {
-        zoom('out', pointerPos.x, pointerPos.y)
-      } else {
-        zoom('in', pointerPos.x, pointerPos.y)
+      if (mouseDownPos.button === 0) {
+        // Left click: zoom in/out based on Ctrl key
+        if (isCtrlPressed) {
+          zoom('out', pointerPos.x, pointerPos.y)
+        } else {
+          zoom('in', pointerPos.x, pointerPos.y)
+        }
+      } else if (mouseDownPos.button === 2 && !isFitToScreen()) {
+        // Right click: reset to fit-to-screen when zoomed in
+        resetToFit()
+        // Notify parent that zoom reset via right-click occurred
+        onRightClickZoomReset?.()
       }
     }
 
     setMouseDownPos(null)
-  }, [isDragging, mouseDownPos, isCtrlPressed, zoom])
+  }, [isDragging, mouseDownPos, isCtrlPressed, zoom, isFitToScreen, resetToFit, onRightClickZoomReset])
 
   // Handle mouse leave
   const handleMouseLeave = useCallback(() => {

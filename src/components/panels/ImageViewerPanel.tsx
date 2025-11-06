@@ -140,6 +140,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   // 컨텍스트 메뉴 및 표시 옵션
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [isFitToScreen, setIsFitToScreen] = useState(true) // 줌 상태 추적
+  const suppressContextMenuRef = useRef(false) // 우클릭 줌 해제 후 컨텍스트 메뉴 억제
   const [showShootingInfo, setShowShootingInfo] = useState(() => {
     const saved = localStorage.getItem('imageViewer.showShootingInfo')
     return saved ? JSON.parse(saved) : true
@@ -154,10 +155,24 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     setIsFitToScreen(fitToScreen)
   }, [])
 
+  // 우클릭 줌 해제 핸들러 - 컨텍스트 메뉴 억제
+  const handleRightClickZoomReset = useCallback(() => {
+    suppressContextMenuRef.current = true
+    // 100ms 후 억제 해제
+    setTimeout(() => {
+      suppressContextMenuRef.current = false
+    }, 100)
+  }, [])
+
   // 컨텍스트 메뉴 핸들러 - 스크린 핏 상태일 때만 표시
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    // 우클릭 줌 해제 후 억제 중이면 메뉴 표시 안 함
+    if (suppressContextMenuRef.current) {
+      return
+    }
 
     // 스크린 핏 상태일 때만 컨텍스트 메뉴 표시
     if (!isFitToScreen) {
@@ -481,6 +496,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               onRenderComplete={() => setImageLoaded(true)}
               onError={handleViewerError}
               onZoomStateChange={handleZoomStateChange}
+              onRightClickZoomReset={handleRightClickZoomReset}
               enableHardwareAcceleration={false}
             />
           )}
