@@ -65,6 +65,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [hqEnabled, setHqEnabled] = useState(false) // HQ 썸네일 생성 체크박스 상태
   const [hqClassification, setHqClassification] = useState<{ existing: string[]; missing: string[] } | null>(null) // HQ 썸네일 분류 결과
   // const [selectedImage, setSelectedImage] = useState<string | null>(null) // 임시 비활성화
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set()) // 다중 선택된 이미지들
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null) // Shift 클릭용
   const [thumbnailSize, setThumbnailSize] = useState(THUMBNAIL_SIZE_DEFAULT)
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
@@ -160,6 +162,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // imageFiles 변경 (폴더 변경) 시 focusedIndex 초기화 및 첫 이미지 로드
   useEffect(() => {
     setFocusedIndex(0)
+    setSelectedImages(new Set()) // 다중 선택 초기화
+    setLastSelectedIndex(null)
     if (sortedImages.length > 0) {
       loadImage(sortedImages[0], 0)
     }
@@ -545,6 +549,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Ctrl+A로 전체 선택
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      e.preventDefault()
+      setSelectedImages(new Set(sortedImages))
+      return
+    }
+
     // Enter 키로 확장 모드 진입
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -1098,13 +1109,44 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                       const isFocused = focusedIndex === index
                       const rating = ratings.get(imagePath) || 0
 
+                      const isSelected = selectedImages.has(imagePath)
+
                       return (
                         <div
                           key={imagePath}
                           data-index={index}
                           className="w-full aspect-square"
-                          onClick={() => {
-                            // setSelectedImage(imagePath) // 임시 비활성화
+                          onClick={(e) => {
+                            if (e.ctrlKey || e.metaKey) {
+                              // Ctrl 클릭: 개별 선택/해제
+                              setSelectedImages(prev => {
+                                const next = new Set(prev)
+                                if (next.has(imagePath)) {
+                                  next.delete(imagePath)
+                                } else {
+                                  next.add(imagePath)
+                                }
+                                return next
+                              })
+                              setLastSelectedIndex(index)
+                            } else if (e.shiftKey && lastSelectedIndex !== null) {
+                              // Shift 클릭: 범위 선택
+                              const start = Math.min(lastSelectedIndex, index)
+                              const end = Math.max(lastSelectedIndex, index)
+                              setSelectedImages(prev => {
+                                const next = new Set(prev)
+                                for (let i = start; i <= end; i++) {
+                                  if (sortedImages[i]) {
+                                    next.add(sortedImages[i])
+                                  }
+                                }
+                                return next
+                              })
+                            } else {
+                              // 일반 클릭: 단일 선택
+                              setSelectedImages(new Set([imagePath]))
+                              setLastSelectedIndex(index)
+                            }
                             setFocusedIndex(index)
                             loadImage(imagePath, index)
                           }}
@@ -1114,7 +1156,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                         >
                           <div
                             className={`group relative w-full h-full cursor-pointer overflow-hidden rounded-lg ${
-                              isFocused ? 'ring-2 ring-blue-500' : ''
+                              isFocused ? 'ring-2 ring-blue-500' : isSelected ? 'ring-2 ring-blue-400/60' : ''
                             } hover:bg-neutral-800/50 transition-colors`}
                           >
                             {thumbnail ? (
@@ -1170,6 +1212,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
               // const isSelected = selectedImage === imagePath
               const isFocused = focusedIndex === virtualItem.index
               const rating = ratings.get(imagePath) || 0
+              const isSelected = selectedImages.has(imagePath)
 
               return (
                 <div
@@ -1179,10 +1222,40 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                   style={{
                     marginRight: virtualItem.index < sortedImages.length - 1 ? '0.5rem' : '0',
                   }}
-                  onClick={() => {
-                    // setSelectedImage(imagePath) // 임시 비활성화
-                    setFocusedIndex(virtualItem.index)
-                    loadImage(imagePath, virtualItem.index)
+                  onClick={(e) => {
+                    const index = virtualItem.index
+                    if (e.ctrlKey || e.metaKey) {
+                      // Ctrl 클릭: 개별 선택/해제
+                      setSelectedImages(prev => {
+                        const next = new Set(prev)
+                        if (next.has(imagePath)) {
+                          next.delete(imagePath)
+                        } else {
+                          next.add(imagePath)
+                        }
+                        return next
+                      })
+                      setLastSelectedIndex(index)
+                    } else if (e.shiftKey && lastSelectedIndex !== null) {
+                      // Shift 클릭: 범위 선택
+                      const start = Math.min(lastSelectedIndex, index)
+                      const end = Math.max(lastSelectedIndex, index)
+                      setSelectedImages(prev => {
+                        const next = new Set(prev)
+                        for (let i = start; i <= end; i++) {
+                          if (sortedImages[i]) {
+                            next.add(sortedImages[i])
+                          }
+                        }
+                        return next
+                      })
+                    } else {
+                      // 일반 클릭: 단일 선택
+                      setSelectedImages(new Set([imagePath]))
+                      setLastSelectedIndex(index)
+                    }
+                    setFocusedIndex(index)
+                    loadImage(imagePath, index)
                   }}
                   onDoubleClick={() => {
                     toggleFullscreen?.()
@@ -1190,7 +1263,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                 >
                   <div
                     className={`group relative w-full h-full cursor-pointer overflow-hidden rounded-lg ${
-                      isFocused ? 'ring-2 ring-blue-500' : ''
+                      isFocused ? 'ring-2 ring-blue-500' : isSelected ? 'ring-2 ring-blue-400/60' : ''
                     } hover:bg-neutral-800/50 transition-colors`}
                   >
                     {thumbnail ? (
