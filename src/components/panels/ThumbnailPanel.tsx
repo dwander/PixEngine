@@ -10,7 +10,7 @@ import { useDebounce } from '../../hooks/useDebounce'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
-import { readImageRating } from '../../lib/rating'
+import { readImageRating, writeImageRating } from '../../lib/rating'
 import {
   THUMBNAIL_SIZE_DEFAULT,
   THUMBNAIL_SIZE_MIN,
@@ -664,8 +664,31 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           setFocusedIndex(virtualItems[virtualItems.length - 1].index)
         }
       }
-    } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
-      // 알파벳/숫자 키: 단일 문자로 시작하는 다음 파일 검색
+    } else if (e.key.length === 1 && /^[0-5]$/.test(e.key)) {
+      // 0-5 숫자 키: 선택된 이미지들에 별점 설정
+      e.preventDefault()
+
+      const rating = parseInt(e.key, 10)
+      const imagesToRate = Array.from(selectedImages)
+
+      // 선택된 이미지가 없으면 현재 포커스된 이미지에 별점 설정
+      if (imagesToRate.length === 0 && sortedImages[focusedIndex]) {
+        imagesToRate.push(sortedImages[focusedIndex])
+      }
+
+      // 모든 선택된 이미지에 별점 설정 (병렬 처리)
+      Promise.allSettled(
+        imagesToRate.map(async (filePath) => {
+          try {
+            await writeImageRating(filePath, rating)
+            // rating-changed 이벤트는 백엔드에서 발생하므로 자동으로 UI 업데이트됨
+          } catch (error) {
+            console.error(`Failed to set rating for ${filePath}:`, error)
+          }
+        })
+      )
+    } else if (e.key.length === 1 && /^[a-zA-Z6-9]$/.test(e.key)) {
+      // 알파벳/6-9 숫자 키: 단일 문자로 시작하는 다음 파일 검색
       e.preventDefault()
 
       const searchChar = e.key.toLowerCase()
@@ -700,7 +723,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [isZoomedIn, sortedImages.length, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen])
+  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -1546,8 +1569,18 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                   <button
                     key={rating}
                     className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
-                    onClick={() => {
-                      // TODO: 별점 설정 구현 (여기서는 UI만)
+                    onClick={async () => {
+                      // 선택된 모든 이미지에 별점 설정
+                      const imagesToRate = Array.from(selectedImages)
+                      await Promise.allSettled(
+                        imagesToRate.map(async (filePath) => {
+                          try {
+                            await writeImageRating(filePath, rating)
+                          } catch (error) {
+                            console.error(`Failed to set rating for ${filePath}:`, error)
+                          }
+                        })
+                      )
                       setContextMenu(null)
                       setShowRatingSubmenu(false)
                     }}
