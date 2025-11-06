@@ -162,6 +162,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     const saved = localStorage.getItem('imageViewer.infoBarPosition')
     return saved ? JSON.parse(saved) : 'right'
   })
+  const [histogramPosition, setHistogramPosition] = useState<'left' | 'right'>(() => {
+    const saved = localStorage.getItem('imageViewer.histogramPosition')
+    return saved ? JSON.parse(saved) : 'left'
+  })
   const [isInfoBarHovered, setIsInfoBarHovered] = useState(false)
 
   // 줌 상태 변경 핸들러
@@ -232,20 +236,39 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     localStorage.setItem('imageViewer.infoBarPosition', JSON.stringify(infoBarPosition))
   }, [infoBarPosition])
 
+  // 히스토그램 위치 저장
+  useEffect(() => {
+    localStorage.setItem('imageViewer.histogramPosition', JSON.stringify(histogramPosition))
+  }, [histogramPosition])
+
   // 정보 바 위치 이동 핸들러
   const moveInfoBarPosition = useCallback((direction: 'left' | 'right') => {
     setInfoBarPosition(prev => {
-      if (direction === 'left') {
-        if (prev === 'right') return 'center'
-        if (prev === 'center') return 'left'
-        return prev
-      } else {
-        if (prev === 'left') return 'center'
-        if (prev === 'center') return 'right'
-        return prev
+      const newPosition = (() => {
+        if (direction === 'left') {
+          if (prev === 'right') return 'center'
+          if (prev === 'center') return 'left'
+          return prev
+        } else {
+          if (prev === 'left') return 'center'
+          if (prev === 'center') return 'right'
+          return prev
+        }
+      })()
+
+      // 정보 바가 왼쪽으로 이동하면 히스토그램을 오른쪽으로
+      if (newPosition === 'left' && histogramPosition === 'left') {
+        setHistogramPosition('right')
       }
+      // 정보 바가 오른쪽으로 이동하면 히스토그램을 왼쪽으로
+      else if (newPosition === 'right' && histogramPosition === 'right') {
+        setHistogramPosition('left')
+      }
+      // 정보 바가 중앙일 때는 히스토그램 위치 유지 (사용자가 선택 가능)
+
+      return newPosition
     })
-  }, [])
+  }, [histogramPosition])
 
   // Web Worker 초기화 및 정리
   useEffect(() => {
@@ -588,7 +611,15 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         )}
 
         {showHistogram && (
-          <div className="absolute left-4 bottom-4 w-64 rounded border border-neutral-700 overflow-hidden z-20" style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)', height: '80px' }}>
+          <div
+            className="absolute bottom-4 w-64 rounded border border-neutral-700 overflow-hidden z-20"
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              height: '80px',
+              left: histogramPosition === 'left' ? '16px' : 'auto',
+              right: histogramPosition === 'right' ? '16px' : 'auto'
+            }}
+          >
             <canvas
               ref={histogramCanvasRef}
               width={256}
