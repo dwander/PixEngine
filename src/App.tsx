@@ -8,6 +8,8 @@ import { theme } from "./lib/theme";
 import { FolderProvider, useFolderContext } from "./contexts/FolderContext";
 import { ImageProvider } from "./contexts/ImageContext";
 import { WindowFocusProvider } from "./contexts/WindowFocusContext";
+import { DialogProvider } from "./contexts/DialogContext";
+import { ToastProvider } from "./contexts/ToastContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useViewerStore } from "./store/viewerStore";
 
@@ -208,13 +210,17 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <WindowFocusProvider>
-        <FolderProvider>
-          <ImageProvider>
-            <AppContent />
-          </ImageProvider>
-        </FolderProvider>
-      </WindowFocusProvider>
+      <ToastProvider>
+        <DialogProvider>
+          <WindowFocusProvider>
+            <FolderProvider>
+              <ImageProvider>
+                <AppContent />
+              </ImageProvider>
+            </FolderProvider>
+          </WindowFocusProvider>
+        </DialogProvider>
+      </ToastProvider>
     </ErrorBoundary>
   );
 }

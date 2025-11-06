@@ -1046,6 +1046,48 @@ async fn write_image_rating(file_path: String, rating: i32) -> Result<(), String
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// 폴더 생성
+#[tauri::command]
+async fn create_folder(parent_path: String, folder_name: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let new_path = PathBuf::from(&parent_path).join(&folder_name);
+        fs::create_dir(&new_path)
+            .map_err(|e| format!("폴더 생성 실패: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+// 폴더 이름 변경
+#[tauri::command]
+async fn rename_folder(old_path: String, new_name: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let old_path_buf = PathBuf::from(&old_path);
+        let parent = old_path_buf.parent()
+            .ok_or("부모 디렉토리를 찾을 수 없습니다")?;
+        let new_path = parent.join(&new_name);
+
+        fs::rename(&old_path, &new_path)
+            .map_err(|e| format!("이름 변경 실패: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+// 폴더 삭제
+#[tauri::command]
+async fn delete_folder(path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        fs::remove_dir_all(&path)
+            .map_err(|e| format!("폴더 삭제 실패: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1115,7 +1157,10 @@ pub fn run() {
             get_exif_metadata,
             get_images_light_metadata,
             read_image_rating,
-            write_image_rating
+            write_image_rating,
+            create_folder,
+            rename_folder,
+            delete_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

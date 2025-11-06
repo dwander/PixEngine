@@ -10,6 +10,7 @@ import { FolderTreePanel } from "../panels/FolderTreePanel";
 import { ThumbnailPanel as ThumbnailPanelComponent } from "../panels/ThumbnailPanel";
 import { ImageViewerPanel as ImageViewerPanelComponent } from "../panels/ImageViewerPanel";
 import { MetadataPanel as MetadataPanelComponent } from "../panels/MetadataPanel";
+import { UITestPanel } from "../dev/UITestPanel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -30,12 +31,17 @@ function ThumbnailPanelWrapper(_props: IDockviewPanelProps) {
   return <ThumbnailPanelComponent />;
 }
 
+function UITestPanelWrapper(_props: IDockviewPanelProps) {
+  return <UITestPanel />;
+}
+
 // 컴포넌트 맵
 const components = {
   imageViewer: ImageViewerPanelWrapper,
   folderTree: FolderTreePanelWrapper,
   metadata: MetadataPanelWrapper,
   thumbnails: ThumbnailPanelWrapper,
+  devTools: UITestPanelWrapper,
 };
 
 interface MainLayoutProps {
@@ -260,6 +266,7 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
         folders: { id: 'folders', component: 'folderTree', title: '폴더' },
         metadata: { id: 'metadata', component: 'metadata', title: '메타데이터' },
         thumbnails: { id: 'thumbnails', component: 'thumbnails', title: '썸네일' },
+        devTools: { id: 'devTools', component: 'devTools', title: 'UI 테스트' },
       };
 
       const config = panelConfig[panelId as keyof typeof panelConfig];

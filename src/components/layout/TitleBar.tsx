@@ -24,9 +24,12 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
   const { refreshCurrentFolder, currentFolder, isLoading } = useFolderContext(); // 새로고침 함수
   const [isPanelMenuOpen, setIsPanelMenuOpen] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const [isDevMenuOpen, setIsDevMenuOpen] = useState(false);
   const [isAnyMenuOpen, setIsAnyMenuOpen] = useState(false); // 메뉴가 한 번이라도 열렸는지 추적
   const panelMenuRef = useRef<HTMLDivElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
+  const devMenuRef = useRef<HTMLDivElement>(null);
+  const isDev = import.meta.env.DEV;
 
   useEffect(() => {
     // 윈도우 상태 감지
@@ -60,12 +63,12 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
 
   // 메뉴 열림 상태 추적
   useEffect(() => {
-    if (isPanelMenuOpen || isViewMenuOpen) {
+    if (isPanelMenuOpen || isViewMenuOpen || isDevMenuOpen) {
       setIsAnyMenuOpen(true);
     } else {
       setIsAnyMenuOpen(false);
     }
-  }, [isPanelMenuOpen, isViewMenuOpen]);
+  }, [isPanelMenuOpen, isViewMenuOpen, isDevMenuOpen]);
 
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
@@ -76,9 +79,12 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
       if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
         setIsViewMenuOpen(false);
       }
+      if (devMenuRef.current && !devMenuRef.current.contains(event.target as Node)) {
+        setIsDevMenuOpen(false);
+      }
     };
 
-    if (isPanelMenuOpen || isViewMenuOpen) {
+    if (isPanelMenuOpen || isViewMenuOpen || isDevMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
@@ -254,6 +260,50 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
               </div>
             )}
           </div>
+
+          {/* 개발자 도구 메뉴 (개발 모드에서만) */}
+          {isDev && (
+            <div className="relative" ref={devMenuRef}>
+              <button
+                className={colors.menuButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDevMenuOpen(!isDevMenuOpen);
+                  setIsPanelMenuOpen(false);
+                  setIsViewMenuOpen(false);
+                }}
+                onMouseEnter={() => {
+                  if (isAnyMenuOpen) {
+                    setIsDevMenuOpen(true);
+                    setIsPanelMenuOpen(false);
+                    setIsViewMenuOpen(false);
+                  }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                개발
+              </button>
+
+              {isDevMenuOpen && (
+                <div
+                  className="absolute top-full left-0 mt-1 bg-neutral-800 border border-neutral-700 rounded shadow-lg py-1 min-w-[160px] z-50"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <button
+                    className="w-full px-3 py-2 text-left hover:bg-neutral-700"
+                    style={{ fontSize: '1rem' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePanel?.('devTools');
+                      setIsDevMenuOpen(false);
+                    }}
+                  >
+                    UI 컴포넌트 테스트
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <button className={colors.menuButton}>
             도움말
