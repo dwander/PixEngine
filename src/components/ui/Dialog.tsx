@@ -137,9 +137,12 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
               className="w-full px-3 py-2 bg-neutral-900 border border-neutral-600 rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           )}
+        </div>
 
-          {/* Don't Ask Again Option */}
-          {options.showDontAskAgain && (
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-2 px-4 py-3">
+          {/* Don't Ask Again Option (Left) */}
+          {options.showDontAskAgain ? (
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -151,27 +154,29 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
                 {options.type === 'alert' ? '다시 알리지 않기' : '다시 묻지 않기'}
               </span>
             </label>
+          ) : (
+            <div />
           )}
-        </div>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-2 px-4 py-3">
-          {options.type !== 'alert' && (
+          {/* Buttons (Right) */}
+          <div className="flex gap-2">
+            {options.type !== 'alert' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancel}
+              >
+                {options.cancelText || '취소'}
+              </Button>
+            )}
             <Button
-              variant="ghost"
+              variant={options.type === 'confirm' && options.icon === 'error' ? 'danger' : 'primary'}
               size="sm"
-              onClick={handleCancel}
+              onClick={handleConfirm}
             >
-              {options.cancelText || '취소'}
+              {options.confirmText || getDefaultConfirmText()}
             </Button>
-          )}
-          <Button
-            variant={options.type === 'confirm' && options.icon === 'error' ? 'danger' : 'primary'}
-            size="sm"
-            onClick={handleConfirm}
-          >
-            {options.confirmText || getDefaultConfirmText()}
-          </Button>
+          </div>
         </div>
       </div>
     </div>
