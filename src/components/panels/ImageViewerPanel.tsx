@@ -114,6 +114,24 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   // Konva.js viewer container size
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 
+  // Track fullscreen mode in ref to avoid stale closures
+  const isFullscreenModeRef = useRef(isFullscreenMode)
+
+  // Update ref when prop changes and immediately update size
+  useEffect(() => {
+    isFullscreenModeRef.current = isFullscreenMode
+
+    // 전체화면 모드 변경 시 즉시 크기 업데이트
+    if (isFullscreenMode) {
+      // 전체화면으로 전환: window 크기 사용
+      setContainerSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      })
+    }
+    // 일반 모드로 복귀: ResizeObserver가 자동으로 감지
+  }, [isFullscreenMode])
+
   // Handle viewer errors
   const handleViewerError = useCallback((error: Error) => {
     console.error('Konva viewer error:', error)
@@ -333,15 +351,32 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     if (!container) return
 
     const updateSize = () => {
-      // containerRef의 가장 가까운 부모 dv-content-container를 찾기
-      const dvContainer = container.closest('.dv-content-container')
-      if (dvContainer) {
-        const rect = dvContainer.getBoundingClientRect()
-        setContainerSize({ width: rect.width, height: rect.height })
+      const currentFullscreenMode = isFullscreenModeRef.current
+
+      if (currentFullscreenMode) {
+        // 전체화면 모드: window 크기 직접 사용
+        setContainerSize({
+          width: window.innerWidth,
+          height: window.innerHeight
+        })
       } else {
-        // fallback to containerRef
-        const { width, height } = container.getBoundingClientRect()
-        setContainerSize({ width, height })
+        // 일반 모드: containerRef의 가장 가까운 부모 dv-content-container를 찾기
+        const dvContainer = container.closest('.dv-content-container')
+        if (dvContainer) {
+          const rect = dvContainer.getBoundingClientRect()
+          setContainerSize({ width: rect.width, height: rect.height })
+        } else {
+          // fallback to containerRef
+          const { width, height } = container.getBoundingClientRect()
+          setContainerSize({ width, height })
+        }
+      }
+    }
+
+    // 전체화면 모드에서는 window resize만 감지
+    const handleWindowResize = () => {
+      if (isFullscreenModeRef.current) {
+        updateSize()
       }
     }
 
@@ -349,17 +384,24 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     const dvContainer = container.closest('.dv-content-container')
     const targetElement = (dvContainer as Element) || container
 
-    // ResizeObserver는 maximize/minimize를 포함한 모든 크기 변경을 감지
+    // ResizeObserver: 일반 모드에서만 처리
     const resizeObserver = new ResizeObserver(() => {
-      updateSize()
+      // 전체화면 모드에서는 무시 (window resize 이벤트가 처리)
+      if (!isFullscreenModeRef.current) {
+        updateSize()
+      }
     })
 
     resizeObserver.observe(targetElement)
+
+    // Window resize 이벤트 등록 (전체화면용)
+    window.addEventListener('resize', handleWindowResize)
 
     // Initial size
     updateSize()
 
     return () => {
+      window.removeEventListener('resize', handleWindowResize)
       resizeObserver.disconnect()
     }
   }, [])

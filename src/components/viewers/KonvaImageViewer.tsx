@@ -3,7 +3,7 @@
  * High-performance Canvas 2D rendering with hardware acceleration
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react'
 import { Stage, Layer, Image as KonvaImage, Line } from 'react-konva'
 import Konva from 'konva'
 import { useViewerStore } from '../../store/viewerStore'
@@ -101,7 +101,7 @@ export function KonvaImageViewer({
   }, [containerWidth, containerHeight])
 
   // Calculate fit-to-screen scale and zoom steps
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!image) return
 
     const imgWidth = image.width
@@ -150,7 +150,7 @@ export function KonvaImageViewer({
   }, [image, containerWidth, containerHeight])
 
   // Calculate image position and scale based on current zoom
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!image || zoomSteps.current.length === 0) return
 
     // Skip if zoom function is handling the position

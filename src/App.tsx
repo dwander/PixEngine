@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TitleBar } from "./components/layout/TitleBar";
 import { MainLayout } from "./components/layout/MainLayout";
 import { StatusBar } from "./components/layout/StatusBar";
@@ -7,6 +8,8 @@ import { theme } from "./lib/theme";
 import { FolderProvider } from "./contexts/FolderContext";
 import { ImageProvider } from "./contexts/ImageContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+
+const appWindow = getCurrentWindow();
 
 function App() {
   // 윈도우 상태 저장/복원
@@ -68,9 +71,37 @@ function App() {
   }, [gridType]);
 
   // 전체화면 뷰어 토글 핸들러
-  const handleToggleFullscreenViewer = useCallback(() => {
-    setIsFullscreenViewer(prev => !prev);
-  }, []);
+  const handleToggleFullscreenViewer = useCallback(async () => {
+    const newFullscreenState = !isFullscreenViewer;
+    setIsFullscreenViewer(newFullscreenState);
+
+    // 타우리 네이티브 전체화면 API 호출
+    try {
+      await appWindow.setFullscreen(newFullscreenState);
+    } catch (error) {
+      console.error('Failed to toggle fullscreen:', error);
+    }
+  }, [isFullscreenViewer]);
+
+  // ESC 키로 전체화면 종료
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreenViewer) {
+        e.preventDefault();
+        setIsFullscreenViewer(false);
+        try {
+          await appWindow.setFullscreen(false);
+        } catch (error) {
+          console.error('Failed to exit fullscreen:', error);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullscreenViewer]);
 
   return (
     <ErrorBoundary>
