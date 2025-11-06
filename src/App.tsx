@@ -123,6 +123,24 @@ function App() {
     };
   }, [isFullscreenViewer]);
 
+  // 앱 종료 전 확장 모드 해제 (패널 크기 깨짐 방지)
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (isFullscreenViewer) {
+        try {
+          await appWindow.setFullscreen(false);
+        } catch (error) {
+          console.error('Failed to exit fullscreen before unload:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isFullscreenViewer]);
+
   return (
     <ErrorBoundary>
       <WindowFocusProvider>
