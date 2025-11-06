@@ -32,10 +32,18 @@ function AppContent() {
     };
   }, []);
 
-  // F5 키로 폴더 새로고침, Ctrl+R은 차단
+  // 새로고침 키 처리: 개발 환경에서는 모두 허용, 프로덕션에서는 커스텀 동작
   useEffect(() => {
+    const isDev = import.meta.env.DEV;
+
+    // 개발 환경에서는 새로고침 키를 가로채지 않음
+    if (isDev) {
+      return;
+    }
+
+    // 프로덕션: 커스텀 새로고침 동작
     const handleRefreshKey = (e: KeyboardEvent) => {
-      // F5: 커스텀 새로고침 실행
+      // F5: 폴더 새로고침
       if (e.key === 'F5') {
         e.preventDefault();
         if (currentFolder) {

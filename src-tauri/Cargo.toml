@@ -1,6 +1,6 @@
 [package]
 name = "pixengine"
-version = "0.1.0"
+version = "0.1.7"
 description = "PixEngine - 고성능 이미지 뷰어 & 컬링 툴"
 authors = ["you"]
 edition = "2021"
