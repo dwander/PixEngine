@@ -77,6 +77,15 @@ function App() {
 
     // 타우리 네이티브 전체화면 API 호출
     try {
+      if (newFullscreenState) {
+        // 전체화면 진입 전에 최대화 상태 해제 (OS 작업 표시줄 덮기 위해)
+        const isMaximized = await appWindow.isMaximized();
+        if (isMaximized) {
+          await appWindow.toggleMaximize();
+          // 최대화 해제 후 약간의 딜레이를 주고 전체화면 설정
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
       await appWindow.setFullscreen(newFullscreenState);
     } catch (error) {
       console.error('Failed to toggle fullscreen:', error);
