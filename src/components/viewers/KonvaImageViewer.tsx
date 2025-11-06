@@ -16,6 +16,7 @@ interface KonvaImageViewerProps {
   containerWidth: number
   containerHeight: number
   enableHardwareAcceleration?: boolean
+  onZoomStateChange?: (isFitToScreen: boolean) => void
 }
 
 // Zoom levels: fit → dynamic steps to 100% → fixed steps after 100%
@@ -28,7 +29,8 @@ export function KonvaImageViewer({
   onError,
   containerWidth,
   containerHeight,
-  enableHardwareAcceleration = false
+  enableHardwareAcceleration = false,
+  onZoomStateChange
 }: KonvaImageViewerProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [imageScale, setImageScale] = useState({ x: 0, y: 0, scale: 1 })
@@ -148,6 +150,15 @@ export function KonvaImageViewer({
     const fitIndex = steps.indexOf(fitScale)
     setCurrentZoom(fitIndex)
   }, [image, containerWidth, containerHeight])
+
+  // Notify parent when zoom state changes
+  useEffect(() => {
+    if (!image || zoomSteps.current.length === 0) return
+
+    const fitIndex = zoomSteps.current.indexOf(fitToScreenScale.current)
+    const isFitToScreen = currentZoom === fitIndex
+    onZoomStateChange?.(isFitToScreen)
+  }, [currentZoom, image])
 
   // Calculate image position and scale based on current zoom
   useLayoutEffect(() => {

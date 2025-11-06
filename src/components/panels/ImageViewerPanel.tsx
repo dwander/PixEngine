@@ -139,6 +139,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
 
   // 컨텍스트 메뉴 및 표시 옵션
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [isFitToScreen, setIsFitToScreen] = useState(true) // 줌 상태 추적
   const [showShootingInfo, setShowShootingInfo] = useState(() => {
     const saved = localStorage.getItem('imageViewer.showShootingInfo')
     return saved ? JSON.parse(saved) : true
@@ -148,10 +149,20 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     return saved ? JSON.parse(saved) : false
   })
 
-  // 컨텍스트 메뉴 핸들러
+  // 줌 상태 변경 핸들러
+  const handleZoomStateChange = useCallback((fitToScreen: boolean) => {
+    setIsFitToScreen(fitToScreen)
+  }, [])
+
+  // 컨텍스트 메뉴 핸들러 - 스크린 핏 상태일 때만 표시
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    // 스크린 핏 상태일 때만 컨텍스트 메뉴 표시
+    if (!isFitToScreen) {
+      return
+    }
 
     // containerRef 기준 상대 좌표로 변환
     const container = containerRef.current
@@ -162,7 +173,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         y: e.clientY - rect.top
       })
     }
-  }, [])
+  }, [isFitToScreen])
 
   // 컨텍스트 메뉴 닫기 (ESC 키만)
   useEffect(() => {
@@ -469,6 +480,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               containerHeight={containerSize.height}
               onRenderComplete={() => setImageLoaded(true)}
               onError={handleViewerError}
+              onZoomStateChange={handleZoomStateChange}
               enableHardwareAcceleration={false}
             />
           )}
