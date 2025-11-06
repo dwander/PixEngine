@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
-import { Check, Shrink, Expand, X } from 'lucide-react'
+import { Check, Shrink, Expand, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 import { logError } from '../../lib/errorHandler'
@@ -158,6 +158,11 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     const saved = localStorage.getItem('imageViewer.showHistogram')
     return saved ? JSON.parse(saved) : false
   })
+  const [infoBarPosition, setInfoBarPosition] = useState<'left' | 'center' | 'right'>(() => {
+    const saved = localStorage.getItem('imageViewer.infoBarPosition')
+    return saved ? JSON.parse(saved) : 'right'
+  })
+  const [isInfoBarHovered, setIsInfoBarHovered] = useState(false)
 
   // 줌 상태 변경 핸들러
   const handleZoomStateChange = useCallback((fitToScreen: boolean) => {
@@ -221,6 +226,26 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
   useEffect(() => {
     localStorage.setItem('imageViewer.showHistogram', JSON.stringify(showHistogram))
   }, [showHistogram])
+
+  // 정보 바 위치 저장
+  useEffect(() => {
+    localStorage.setItem('imageViewer.infoBarPosition', JSON.stringify(infoBarPosition))
+  }, [infoBarPosition])
+
+  // 정보 바 위치 이동 핸들러
+  const moveInfoBarPosition = useCallback((direction: 'left' | 'right') => {
+    setInfoBarPosition(prev => {
+      if (direction === 'left') {
+        if (prev === 'right') return 'center'
+        if (prev === 'center') return 'left'
+        return prev
+      } else {
+        if (prev === 'left') return 'center'
+        if (prev === 'center') return 'right'
+        return prev
+      }
+    })
+  }, [])
 
   // Web Worker 초기화 및 정리
   useEffect(() => {
@@ -574,7 +599,31 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         )}
 
         {showShootingInfo && metadata && (
-          <div className="absolute right-4 bottom-4 px-3 py-1 rounded-xl border border-neutral-700 z-20 flex items-center gap-2 text-gray-300" style={{ fontSize: '16px', backgroundColor: 'rgba(0, 0, 0, 0.75)' }}>
+          <div
+            className="absolute bottom-4 px-3 py-1 rounded-xl border border-neutral-700 z-20 flex items-center gap-2 text-gray-300 transition-all duration-300"
+            style={{
+              fontSize: '16px',
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              left: infoBarPosition === 'left' ? '16px' : infoBarPosition === 'center' ? '50%' : 'auto',
+              right: infoBarPosition === 'right' ? '16px' : 'auto',
+              transform: infoBarPosition === 'center' ? 'translateX(-50%)' : 'none',
+              paddingLeft: isInfoBarHovered && infoBarPosition !== 'left' ? '2.5rem' : '0.75rem',
+              paddingRight: isInfoBarHovered && infoBarPosition !== 'right' ? '2.5rem' : '0.75rem'
+            }}
+            onMouseEnter={() => setIsInfoBarHovered(true)}
+            onMouseLeave={() => setIsInfoBarHovered(false)}
+          >
+            {/* 왼쪽 화살표 (중앙, 오른쪽 위치일 때 표시) */}
+            {isInfoBarHovered && infoBarPosition !== 'left' && (
+              <button
+                onClick={() => moveInfoBarPosition('left')}
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center hover:bg-neutral-700/50 rounded-full transition-all"
+                aria-label="왼쪽으로 이동"
+              >
+                <ChevronLeft size={18} className="text-neutral-400 hover:text-neutral-200" />
+              </button>
+            )}
+
             {metadata.shutter_speed && (
               <div className="flex items-center gap-0.5" style={{ width: '90px' }} title="셔터 속도">
                 <img src="/icons/shutter.svg" alt="shutter" className="w-10 h-10 opacity-60 invert" />
@@ -639,6 +688,17 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
                 <span>--</span>
               </div>
             ) : null}
+
+            {/* 오른쪽 화살표 (왼쪽, 중앙 위치일 때 표시) */}
+            {isInfoBarHovered && infoBarPosition !== 'right' && (
+              <button
+                onClick={() => moveInfoBarPosition('right')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center hover:bg-neutral-700/50 rounded-full transition-all"
+                aria-label="오른쪽으로 이동"
+              >
+                <ChevronRight size={18} className="text-neutral-400 hover:text-neutral-200" />
+              </button>
+            )}
           </div>
         )}
       </div>
