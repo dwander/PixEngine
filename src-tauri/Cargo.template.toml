@@ -1,6 +1,6 @@
 [package]
 name = "pixengine"
-version = "0.1.11"
+version = "{{VERSION}}"
 description = "PixEngine - 고성능 이미지 뷰어 & 컬링 툴"
 authors = ["you"]
 edition = "2021"
@@ -72,4 +72,3 @@ lto = true           # Link Time Optimization
 codegen-units = 1    # 단일 코드 생성 유닛 (더 나은 최적화)
 strip = true         # 심볼 제거 (파일 크기 감소)
 panic = "abort"      # 패닉 시 언와인딩 대신 즉시 종료
-

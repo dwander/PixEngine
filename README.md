@@ -52,12 +52,17 @@
 # 의존성 설치
 npm install
 
+# 설정 파일 생성 (템플릿에서)
+npm run config
+
 # 개발 서버 시작
 npm run dev
 
 # Tauri 개발 모드
 npm run tauri dev
 ```
+
+> **참고**: `npm run dev` 또는 `npm run tauri` 실행 시 자동으로 템플릿 파일에서 설정 파일이 생성됩니다.
 
 ### 빌드
 
@@ -91,6 +96,31 @@ npm run format
 
 # Prettier 검사
 npm run format:check
+```
+
+## 버전 관리
+
+이 프로젝트는 템플릿 기반 버전 관리를 사용합니다:
+
+- **템플릿 파일** (Git 추적):
+  - `src-tauri/Cargo.template.toml`
+  - `src-tauri/tauri.conf.template.json`
+  - 설정 변경 시 이 파일들을 수정하세요
+
+- **생성된 파일** (Git 무시):
+  - `src-tauri/Cargo.toml`
+  - `src-tauri/tauri.conf.json`
+  - `version.json`
+  - 템플릿에서 자동 생성되므로 직접 수정하지 마세요
+
+### 버전 업데이트
+
+```bash
+# 빌드 시 자동으로 버전 증가
+npm run tauri:build
+
+# 또는 수동으로 설정 파일 재생성
+npm run config
 ```
 
 ## 성능 최적화
