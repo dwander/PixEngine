@@ -10,6 +10,8 @@ import { FolderTreePanel } from "../panels/FolderTreePanel";
 import { ThumbnailPanel as ThumbnailPanelComponent } from "../panels/ThumbnailPanel";
 import { ImageViewerPanel as ImageViewerPanelComponent } from "../panels/ImageViewerPanel";
 import { MetadataPanel as MetadataPanelComponent } from "../panels/MetadataPanel";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 
 // 패널 래퍼 컴포넌트
 function ImageViewerPanelWrapper(props: IDockviewPanelProps<{ gridType?: 'none' | '3div' | '6div'; isFullscreenMode?: boolean; onToggleFullscreen?: () => void }>) {
@@ -72,7 +74,6 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
 
     // 확장 모드(전체화면)일 때는 저장하지 않음
     try {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const appWindow = getCurrentWindow();
       const isFullscreen = await appWindow.isFullscreen();
 
@@ -365,7 +366,6 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
     // 저장된 dockview 레이아웃 복원 시도
     let layoutRestored = false;
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       const savedLayout = await invoke<any>("load_dockview_layout");
 
       if (savedLayout) {
@@ -428,8 +428,7 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
         updatePanelVisibility();
 
         // 기본 레이아웃을 AppData에 저장
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke("save_dockview_layout", { layout: defaultLayout });
+          await invoke("save_dockview_layout", { layout: defaultLayout });
 
         console.log('[Layout] Default layout saved to AppData');
       } catch (error) {
@@ -446,16 +445,14 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
       saveTimeoutRef.current = setTimeout(async () => {
         try {
           // 확장 모드(전체화면)일 때는 저장하지 않음
-          const { getCurrentWindow } = await import("@tauri-apps/api/window");
-          const appWindow = getCurrentWindow();
+              const appWindow = getCurrentWindow();
           const isFullscreen = await appWindow.isFullscreen();
 
           if (isFullscreen) {
             return;
           }
 
-          const { invoke } = await import("@tauri-apps/api/core");
-          const layout = event.api.toJSON();
+              const layout = event.api.toJSON();
           await invoke("save_dockview_layout", { layout });
         } catch (error) {
           console.error('[Layout] Save failed:', error);
@@ -469,16 +466,14 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
         clearTimeout(saveTimeoutRef.current);
         try {
           // 확장 모드(전체화면)일 때는 저장하지 않음
-          const { getCurrentWindow } = await import("@tauri-apps/api/window");
-          const appWindow = getCurrentWindow();
+              const appWindow = getCurrentWindow();
           const isFullscreen = await appWindow.isFullscreen();
 
           if (isFullscreen) {
             return;
           }
 
-          const { invoke } = await import("@tauri-apps/api/core");
-          const layout = event.api.toJSON();
+              const layout = event.api.toJSON();
           await invoke("save_dockview_layout", { layout });
         } catch (error) {
           console.error('[Layout] Save on unload failed:', error);

@@ -29,4 +29,23 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  // Build optimization
+  build: {
+    // Increase chunk size warning limit
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Vendor chunk: React and related libraries
+          'vendor-react': ['react', 'react-dom', 'react/jsx-runtime'],
+          // Tauri API chunk
+          'vendor-tauri': ['@tauri-apps/api/core', '@tauri-apps/api/window', '@tauri-apps/api/webviewWindow'],
+          // Konva graphics library
+          'vendor-konva': ['react-konva', 'konva'],
+          // UI libraries
+          'vendor-ui': ['lucide-react', 'dockview-core'],
+        },
+      },
+    },
+  },
 }));
