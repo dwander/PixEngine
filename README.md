@@ -25,12 +25,26 @@
 - 병렬 처리 (Rayon, Tokio)
 - 이미지 처리 (image, jpeg-decoder)
 
+## 시스템 요구사항
+
+### Windows
+- **운영체제**: Windows 10 (1803+) 또는 Windows 11
+- **WebView2**: Microsoft Edge WebView2 Runtime
+  - 설치되지 않은 경우 앱 실행 시 자동 다운로드됩니다
+  - [수동 다운로드](https://developer.microsoft.com/microsoft-edge/webview2/)
+
+### 권장 사양
+- **CPU**: 멀티코어 프로세서 (4코어 이상 권장)
+- **RAM**: 8GB 이상
+- **GPU**: DirectX 11 지원 그래픽 카드 (Canvas 렌더링 가속)
+
 ## 개발 환경 설정
 
 ### 필수 요구사항
 - Node.js 18+
 - Rust 1.70+
 - Tauri CLI
+- pnpm (패키지 매니저)
 
 ### 설치
 

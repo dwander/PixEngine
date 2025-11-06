@@ -827,6 +827,7 @@ export function KonvaImageViewer({
           ref={layerRef}
           imageSmoothingEnabled={true}
           listening={false}
+          clearBeforeDraw={true}
         >
           {image && (
             <KonvaImage
