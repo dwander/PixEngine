@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { load } from "@tauri-apps/plugin-store";
 import { useFolderContext } from "../../contexts/FolderContext";
 import { useImageContext } from "../../contexts/ImageContext";
+import { useDialog } from "../../contexts/DialogContext";
+import { useToast } from "../../contexts/ToastContext";
 import { normalizePath } from "../../lib/pathUtils";
 
 interface FolderNode {
@@ -304,6 +306,8 @@ function FolderTreeItem({
 }) {
   const { setFolderImages, currentFolder, loadLightMetadata } = useFolderContext();
   const { clearCache } = useImageContext();
+  const dialog = useDialog();
+  const toast = useToast();
   const [isOpen, setIsOpen] = useState(node.isOpen || false);
   const [children, setChildren] = useState<FolderNode[]>(node.children || []);
   const [isLoading, setIsLoading] = useState(false);
@@ -607,18 +611,24 @@ function FolderTreeItem({
 
   const handleCreateFolder = async () => {
     setContextMenu(null);
-    const folderName = prompt('새 폴더 이름:', '새 폴더');
-    if (!folderName || !folderName.trim()) return;
+    const result = await dialog.showPrompt('새 폴더 이름을 입력하세요:', {
+      icon: 'none',
+      placeholder: '새 폴더',
+      defaultValue: '새 폴더'
+    });
+
+    if (!result.confirmed || !result.value || !result.value.trim()) return;
 
     try {
       await invoke('create_folder', {
         parentPath: node.path,
-        folderName: folderName.trim()
+        folderName: result.value.trim()
       });
       // 폴더 생성 후 새로고침
       await loadFolderContents();
+      toast.success(`폴더 "${result.value.trim()}"가 생성되었습니다`);
     } catch (error) {
-      alert(`폴더 생성 실패: ${error}`);
+      toast.error(`폴더 생성 실패: ${error}`);
     }
   };
 
@@ -651,11 +661,12 @@ function FolderTreeItem({
         oldPath: node.path,
         newName: newName.trim()
       });
+      toast.success(`폴더 이름이 "${newName.trim()}"로 변경되었습니다`);
       // 이름 변경 후 부모 폴더를 새로고침해야 함
       // 임시로 페이지 새로고침을 사용하거나, 부모에게 알림을 보내야 함
       window.location.reload();
     } catch (error) {
-      alert(`이름 변경 실패: ${error}`);
+      toast.error(`이름 변경 실패: ${error}`);
     } finally {
       setIsRenaming(false);
     }
@@ -663,16 +674,23 @@ function FolderTreeItem({
 
   const handleDelete = async () => {
     setContextMenu(null);
-    if (!confirm(`정말로 "${node.name}" 폴더를 삭제하시겠습니까?\n\n⚠️ 폴더 내의 모든 파일과 하위 폴더가 함께 삭제됩니다.`)) {
-      return;
-    }
+    const result = await dialog.showConfirm(
+      `정말로 "${node.name}" 폴더를 삭제하시겠습니까?\n\n⚠️ 폴더 내의 모든 파일과 하위 폴더가 함께 삭제됩니다.`,
+      {
+        icon: 'error',
+        confirmText: '삭제'
+      }
+    );
+
+    if (!result.confirmed) return;
 
     try {
       await invoke('delete_folder', { path: node.path });
+      toast.success(`폴더 "${node.name}"가 삭제되었습니다`);
       // 삭제 후 부모 폴더를 새로고침해야 함
       window.location.reload();
     } catch (error) {
-      alert(`폴더 삭제 실패: ${error}`);
+      toast.error(`폴더 삭제 실패: ${error}`);
     }
   };
 

@@ -16,6 +16,7 @@ export interface DialogOptions {
   cancelText?: string
   showDontAskAgain?: boolean // "다시 묻지 않기" 옵션
   dontAskAgainKey?: string // localStorage 저장 키
+  showHeader?: boolean // 헤더 표시 여부 (기본값: false)
 }
 
 export interface DialogResult {
@@ -98,17 +99,11 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={handleCancel}
-      />
-
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       {/* Dialog */}
       <div className="relative bg-neutral-800 border border-neutral-700 rounded-lg shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        {options.title && (
+        {/* Header (선택적) */}
+        {options.showHeader && options.title && (
           <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
             <h2 className="text-base font-semibold text-gray-100">{options.title}</h2>
             <button
@@ -121,7 +116,7 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
         )}
 
         {/* Content */}
-        <div className="px-4 py-4 space-y-4">
+        <div className={`px-4 space-y-4 ${options.showHeader ? 'py-4' : 'pt-5 pb-4'}`}>
           {/* Message with Icon */}
           <div className="flex gap-3">
             {renderIcon()}
@@ -160,7 +155,7 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 px-4 py-3 border-t border-neutral-700">
+        <div className="flex justify-end gap-2 px-4 py-3">
           {options.type !== 'alert' && (
             <Button
               variant="ghost"
