@@ -54,9 +54,10 @@ export interface ExifMetadata {
 
 interface ImageContextType {
   currentPath: string | null;
+  currentSortedIndex: number; // 썸네일 패널의 정렬된 순서 인덱스
   isLoading: boolean;
   metadata: ExifMetadata | null;
-  loadImage: (path: string) => Promise<void>;
+  loadImage: (path: string, sortedIndex?: number) => Promise<void>;
   getCachedImage: (path: string) => HTMLImageElement | undefined;
   preloadImages: (paths: string[]) => Promise<void>;
   clearCache: () => void;
@@ -66,6 +67,7 @@ const ImageContext = createContext<ImageContextType | undefined>(undefined);
 
 export function ImageProvider({ children }: { children: ReactNode }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [currentSortedIndex, setCurrentSortedIndex] = useState<number>(-1);
   const [isLoading, setIsLoading] = useState(false);
   const [metadata, setMetadata] = useState<ExifMetadata | null>(null);
 
@@ -145,11 +147,13 @@ export function ImageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loadImage = useCallback(async (path: string) => {
+  const loadImage = useCallback(async (path: string, sortedIndex?: number) => {
     setIsLoading(true);
     try {
       // 상태 업데이트
       setCurrentPath(path);
+      // 정렬된 인덱스 업데이트 (제공되지 않으면 -1)
+      setCurrentSortedIndex(sortedIndex ?? -1);
 
       // EXIF 메타데이터 로드 (백그라운드)
       invoke<ExifMetadata>('get_exif_metadata', { filePath: path })
@@ -168,6 +172,7 @@ export function ImageProvider({ children }: { children: ReactNode }) {
     <ImageContext.Provider
       value={{
         currentPath,
+        currentSortedIndex,
         isLoading,
         metadata,
         loadImage,

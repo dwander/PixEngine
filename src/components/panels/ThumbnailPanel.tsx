@@ -159,7 +159,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   useEffect(() => {
     setFocusedIndex(0)
     if (sortedImages.length > 0) {
-      loadImage(sortedImages[0])
+      loadImage(sortedImages[0], 0)
     }
   }, [imageFiles, loadImage, sortedImages])
 
@@ -167,7 +167,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   useEffect(() => {
     setFocusedIndex(0)
     if (sortedImages.length > 0) {
-      loadImage(sortedImages[0])
+      loadImage(sortedImages[0], 0)
     }
   }, [sortField, sortOrder])
 
@@ -444,7 +444,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   useEffect(() => {
     if (debouncedFocusedIndex >= 0 && debouncedFocusedIndex < sortedImages.length) {
       const imagePath = sortedImages[debouncedFocusedIndex]
-      loadImage(imagePath)
+      loadImage(imagePath, debouncedFocusedIndex)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedFocusedIndex])
@@ -1029,7 +1029,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                           onClick={() => {
                             // setSelectedImage(imagePath) // 임시 비활성화
                             setFocusedIndex(index)
-                            loadImage(imagePath)
+                            loadImage(imagePath, index)
                           }}
                           onDoubleClick={() => {
                             toggleFullscreen?.()
@@ -1098,7 +1098,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                   onClick={() => {
                     // setSelectedImage(imagePath) // 임시 비활성화
                     setFocusedIndex(virtualItem.index)
-                    loadImage(imagePath)
+                    loadImage(imagePath, virtualItem.index)
                   }}
                   onDoubleClick={() => {
                     toggleFullscreen?.()
