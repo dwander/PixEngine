@@ -1,7 +1,7 @@
 {
   "activeGroup": "3",
   "grid": {
-    "height": 1083,
+    "height": 948,
     "orientation": "HORIZONTAL",
     "root": {
       "data": [
@@ -15,7 +15,7 @@
                   "folders"
                 ]
               },
-              "size": 541,
+              "size": 460,
               "type": "leaf"
             },
             {
@@ -26,11 +26,11 @@
                   "metadata"
                 ]
               },
-              "size": 542,
+              "size": 488,
               "type": "leaf"
             }
           ],
-          "size": 335,
+          "size": 316,
           "type": "branch"
         },
         {
@@ -42,7 +42,7 @@
               "center"
             ]
           },
-          "size": 1112,
+          "size": 1127,
           "type": "leaf"
         },
         {
@@ -53,19 +53,23 @@
               "thumbnails"
             ]
           },
-          "size": 489,
+          "size": 453,
           "type": "leaf"
         }
       ],
-      "size": 1083,
+      "size": 948,
       "type": "branch"
     },
-    "width": 1936
+    "width": 1896
   },
   "panels": {
     "center": {
       "contentComponent": "imageViewer",
       "id": "center",
+      "params": {
+        "gridType": "none",
+        "isFullscreenMode": false
+      },
       "title": "Viewer"
     },
     "folders": {

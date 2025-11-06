@@ -115,7 +115,6 @@ function App() {
                 visiblePanels={visiblePanels}
                 onToggleGrid={handleToggleGrid}
                 activeGrid={gridType}
-                onToggleFullscreenViewer={handleToggleFullscreenViewer}
               />
             )}
 
@@ -126,7 +125,7 @@ function App() {
                 togglePanelId={togglePanelId}
                 gridType={gridType}
                 isFullscreenViewer={isFullscreenViewer}
-                onExitFullscreenViewer={handleToggleFullscreenViewer}
+                onToggleFullscreenViewer={handleToggleFullscreenViewer}
               />
             </main>
 

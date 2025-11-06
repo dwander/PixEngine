@@ -12,8 +12,8 @@ import { ImageViewerPanel as ImageViewerPanelComponent } from "../panels/ImageVi
 import { MetadataPanel as MetadataPanelComponent } from "../panels/MetadataPanel";
 
 // 패널 래퍼 컴포넌트
-function ImageViewerPanelWrapper(props: IDockviewPanelProps<{ gridType?: 'none' | '3div' | '6div'; isFullscreenMode?: boolean; onExitFullscreen?: () => void }>) {
-  return <ImageViewerPanelComponent gridType={props.params?.gridType} isFullscreenMode={props.params?.isFullscreenMode} onExitFullscreen={props.params?.onExitFullscreen} />;
+function ImageViewerPanelWrapper(props: IDockviewPanelProps<{ gridType?: 'none' | '3div' | '6div'; isFullscreenMode?: boolean; onToggleFullscreen?: () => void }>) {
+  return <ImageViewerPanelComponent gridType={props.params?.gridType} isFullscreenMode={props.params?.isFullscreenMode} onToggleFullscreen={props.params?.onToggleFullscreen} />;
 }
 
 function FolderTreePanelWrapper(_props: IDockviewPanelProps) {
@@ -45,10 +45,10 @@ interface MainLayoutProps {
   togglePanelId?: string | null;
   gridType?: 'none' | '3div' | '6div';
   isFullscreenViewer?: boolean;
-  onExitFullscreenViewer?: () => void;
+  onToggleFullscreenViewer?: () => void;
 }
 
-export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 'none', isFullscreenViewer = false, onExitFullscreenViewer }: MainLayoutProps) {
+export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 'none', isFullscreenViewer = false, onToggleFullscreenViewer }: MainLayoutProps) {
   const api = useRef<DockviewReadyEvent | null>(null);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
 
@@ -276,9 +276,9 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
 
     const centerPanel = api.current.api.getPanel('center');
     if (centerPanel) {
-      centerPanel.api.updateParameters({ gridType, isFullscreenMode: isFullscreenViewer, onExitFullscreen: onExitFullscreenViewer });
+      centerPanel.api.updateParameters({ gridType, isFullscreenMode: isFullscreenViewer, onToggleFullscreen: onToggleFullscreenViewer });
     }
-  }, [gridType, isFullscreenViewer, onExitFullscreenViewer]);
+  }, [gridType, isFullscreenViewer, onToggleFullscreenViewer]);
 
   // 전체화면 뷰어 모드: center 패널을 maximize/restore
   useEffect(() => {
@@ -358,10 +358,19 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
       if (savedLayout) {
         event.api.fromJSON(savedLayout);
 
-        // 이미지 뷰어 탭 헤더 숨기기 (복원 후)
+        // 이미지 뷰어 탭 헤더 숨기기 및 파라미터 업데이트 (복원 후)
         const centerPanel = event.api.getPanel("center");
         if (centerPanel?.group) {
           (centerPanel.group as any).header.hidden = true;
+        }
+
+        // 레이아웃 복원 후 center 패널의 콜백 재설정 (JSON에서 함수는 복원 불가)
+        if (centerPanel) {
+          centerPanel.api.updateParameters({
+            gridType,
+            isFullscreenMode: isFullscreenViewer,
+            onToggleFullscreen: onToggleFullscreenViewer
+          });
         }
 
         // 초기 패널 가시성 체크
@@ -387,10 +396,19 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
         // 기본 레이아웃 적용
         event.api.fromJSON(defaultLayout);
 
-        // 이미지 뷰어 탭 헤더 숨기기
+        // 이미지 뷰어 탭 헤더 숨기기 및 파라미터 업데이트
         const centerPanel = event.api.getPanel("center");
         if (centerPanel?.group) {
           (centerPanel.group as any).header.hidden = true;
+        }
+
+        // 레이아웃 복원 후 center 패널의 콜백 재설정 (JSON에서 함수는 복원 불가)
+        if (centerPanel) {
+          centerPanel.api.updateParameters({
+            gridType,
+            isFullscreenMode: isFullscreenViewer,
+            onToggleFullscreen: onToggleFullscreenViewer
+          });
         }
 
         // 초기 패널 가시성 체크

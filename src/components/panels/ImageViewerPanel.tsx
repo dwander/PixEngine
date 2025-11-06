@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useImageContext } from '../../contexts/ImageContext'
-import { Check, Shrink } from 'lucide-react'
+import { Check, Shrink, Expand } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 
@@ -96,10 +96,10 @@ interface HistogramData {
 interface ImageViewerPanelProps {
   gridType?: 'none' | '3div' | '6div';
   isFullscreenMode?: boolean;
-  onExitFullscreen?: () => void;
+  onToggleFullscreen?: () => void;
 }
 
-export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'none', isFullscreenMode = false, onExitFullscreen }: ImageViewerPanelProps) {
+export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'none', isFullscreenMode = false, onToggleFullscreen }: ImageViewerPanelProps) {
   const { currentPath, getCachedImage, metadata } = useImageContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [_imageLoaded, setImageLoaded] = useState(false)
@@ -437,19 +437,22 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               )}
             </div>
           )}
-          {/* 우측: 전체화면 모드일 때 복귀 버튼 */}
-          {isFullscreenMode && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onExitFullscreen?.();
-              }}
-              className="p-2 hover:bg-neutral-700/50 rounded-lg transition-colors"
-              aria-label="전체화면 종료"
-            >
-              <Shrink size={20} className="text-neutral-300" />
-            </button>
-          )}
+          {/* 우측: 전체화면 토글 버튼 */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFullscreen?.();
+            }}
+            className="p-1.5 hover:bg-neutral-700/50 rounded-lg transition-all group"
+            aria-label={isFullscreenMode ? "전체화면 종료" : "전체화면 확장"}
+            title={isFullscreenMode ? "전체화면 종료" : "전체화면 확장"}
+          >
+            {isFullscreenMode ? (
+              <Shrink size={16} className="text-neutral-400/50 group-hover:text-neutral-300 transition-colors" />
+            ) : (
+              <Expand size={16} className="text-neutral-400/50 group-hover:text-neutral-300 transition-colors" />
+            )}
+          </button>
         </div>
 
         {/* Konva.js 이미지 렌더링 */}

@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useState, useEffect, useRef } from "react";
-import { Minus, Square, Copy, X, Expand } from "lucide-react";
+import { Minus, Square, Copy, X } from "lucide-react";
 import { theme, getTitleBarColors } from "../../lib/theme";
 
 const appWindow = getCurrentWindow();
@@ -14,10 +14,9 @@ interface TitleBarProps {
   };
   onToggleGrid?: (gridType: 'none' | '3div' | '6div') => void;
   activeGrid?: 'none' | '3div' | '6div';
-  onToggleFullscreenViewer?: () => void;
 }
 
-export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGrid = 'none', onToggleFullscreenViewer }: TitleBarProps) {
+export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGrid = 'none' }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFocused, setIsFocused] = useState(true);
   const [isPanelMenuOpen, setIsPanelMenuOpen] = useState(false);
@@ -275,22 +274,6 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
 
       {/* 오른쪽: 윈도우 컨트롤 버튼 */}
       <div className="flex items-center gap-0">
-        {/* 전체화면 뷰어 */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFullscreenViewer?.();
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          className={`${colors.controlButton} ${colors.minimizeHover}`}
-          aria-label="전체화면 뷰어"
-        >
-          <Expand
-            size={14}
-            className={colors.icon}
-          />
-        </button>
-
         {/* 최소화 */}
         <button
           onClick={handleMinimize}
