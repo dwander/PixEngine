@@ -7,6 +7,7 @@ import { useWindowState } from "./hooks/useWindowState";
 import { theme } from "./lib/theme";
 import { FolderProvider } from "./contexts/FolderContext";
 import { ImageProvider } from "./contexts/ImageContext";
+import { WindowFocusProvider } from "./contexts/WindowFocusContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const appWindow = getCurrentWindow();
@@ -114,35 +115,37 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <FolderProvider>
-        <ImageProvider>
-          <div className={`flex flex-col h-screen ${theme.background.primary}`}>
-            {/* 커스텀 타이틀바 */}
-            {!isFullscreenViewer && (
-              <TitleBar
-                onTogglePanel={handleTogglePanel}
-                visiblePanels={visiblePanels}
-                onToggleGrid={handleToggleGrid}
-                activeGrid={gridType}
-              />
-            )}
+      <WindowFocusProvider>
+        <FolderProvider>
+          <ImageProvider>
+            <div className={`flex flex-col h-screen ${theme.background.primary}`}>
+              {/* 커스텀 타이틀바 */}
+              {!isFullscreenViewer && (
+                <TitleBar
+                  onTogglePanel={handleTogglePanel}
+                  visiblePanels={visiblePanels}
+                  onToggleGrid={handleToggleGrid}
+                  activeGrid={gridType}
+                />
+              )}
 
-            {/* 메인 레이아웃 (dockview) */}
-            <main className="flex-1 overflow-hidden">
-              <MainLayout
-                onPanelVisibilityChange={handlePanelVisibilityChange}
-                togglePanelId={togglePanelId}
-                gridType={gridType}
-                isFullscreenViewer={isFullscreenViewer}
-                onToggleFullscreenViewer={handleToggleFullscreenViewer}
-              />
-            </main>
+              {/* 메인 레이아웃 (dockview) */}
+              <main className="flex-1 overflow-hidden">
+                <MainLayout
+                  onPanelVisibilityChange={handlePanelVisibilityChange}
+                  togglePanelId={togglePanelId}
+                  gridType={gridType}
+                  isFullscreenViewer={isFullscreenViewer}
+                  onToggleFullscreenViewer={handleToggleFullscreenViewer}
+                />
+              </main>
 
-            {/* 상태 표시 영역 */}
-            {!isFullscreenViewer && <StatusBar />}
-          </div>
-        </ImageProvider>
-      </FolderProvider>
+              {/* 상태 표시 영역 */}
+              {!isFullscreenViewer && <StatusBar />}
+            </div>
+          </ImageProvider>
+        </FolderProvider>
+      </WindowFocusProvider>
     </ErrorBoundary>
   );
 }

@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useState, useEffect, useRef } from "react";
 import { Minus, Square, Copy, X } from "lucide-react";
 import { theme, getTitleBarColors } from "../../lib/theme";
+import { useWindowFocus } from "../../contexts/WindowFocusContext";
 
 const appWindow = getCurrentWindow();
 
@@ -18,11 +19,10 @@ interface TitleBarProps {
 
 export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGrid = 'none' }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
-  const [isFocused, setIsFocused] = useState(true);
+  const { isFocused } = useWindowFocus(); // WindowFocusContext에서 포커스 상태 가져오기
   const [isPanelMenuOpen, setIsPanelMenuOpen] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isAnyMenuOpen, setIsAnyMenuOpen] = useState(false); // 메뉴가 한 번이라도 열렸는지 추적
-  const [initialFocusForced, setInitialFocusForced] = useState(false); // 초기 포커스 강제 활성화 여부
   const panelMenuRef = useRef<HTMLDivElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
 
@@ -33,19 +33,7 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
       setIsMaximized(maximized);
     };
 
-    const checkFocused = async () => {
-      const focused = await appWindow.isFocused();
-      setIsFocused(focused);
-    };
-
     checkMaximized();
-    checkFocused();
-
-    // 앱 시작 시 포커스가 없을 경우를 대비하여 강제로 활성화 상태로 설정
-    if (!initialFocusForced) {
-      setIsFocused(true);
-      setInitialFocusForced(true);
-    }
 
     // 이벤트 리스너 등록
     const setupListeners = async () => {
@@ -53,13 +41,8 @@ export function TitleBar({ onTogglePanel, visiblePanels, onToggleGrid, activeGri
         checkMaximized();
       });
 
-      const unlistenFocus = await appWindow.onFocusChanged(({ payload: focused }) => {
-        setIsFocused(focused);
-      });
-
       return () => {
         unlistenResize();
-        unlistenFocus();
       };
     };
 

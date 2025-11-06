@@ -7,6 +7,7 @@ import { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react
 import { Stage, Layer, Image as KonvaImage, Line } from 'react-konva'
 import Konva from 'konva'
 import { useViewerStore } from '../../store/viewerStore'
+import { useWindowFocus } from '../../contexts/WindowFocusContext'
 
 interface KonvaImageViewerProps {
   imageUrl: string | null
@@ -52,6 +53,7 @@ export function KonvaImageViewer({
   const previousFitToScreenState = useRef<boolean>(true) // Track previous fit-to-screen state
   const previousImageUrl = useRef<string | null>(null) // Track image changes
   const setIsZoomedIn = useViewerStore((state) => state.setIsZoomedIn)
+  const { shouldConsumeClick } = useWindowFocus() // 윈도우 포커스 상태 추적
 
   // Load image
   useEffect(() => {
@@ -602,6 +604,12 @@ export function KonvaImageViewer({
     if (isDragging) {
       setIsDragging(false)
     } else if (mouseDownPos) {
+      // 윈도우 포커스가 없었던 경우 첫 클릭은 포커스 복원용으로 소비
+      if (shouldConsumeClick()) {
+        setMouseDownPos(null)
+        return
+      }
+
       const stage = e.target.getStage()
       if (!stage) return
 
@@ -624,7 +632,7 @@ export function KonvaImageViewer({
     }
 
     setMouseDownPos(null)
-  }, [isDragging, mouseDownPos, isCtrlPressed, zoom, isFitToScreen, resetToFit, onRightClickZoomReset])
+  }, [isDragging, mouseDownPos, isCtrlPressed, zoom, isFitToScreen, resetToFit, onRightClickZoomReset, shouldConsumeClick])
 
   // Handle mouse leave
   const handleMouseLeave = useCallback(() => {
