@@ -61,6 +61,9 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
   // 전체화면 전환 중 플래그 (이 동안은 저장하지 않음)
   const isTransitioningRef = useRef<boolean>(false);
 
+  // 윈도우 최대화 상태 추적
+  const previousMaximizedRef = useRef<boolean>(false);
+
   // 그룹 내 모든 패널의 크기를 저장하는 함수
   const savePanelSizes = useCallback(async () => {
     if (!api.current) return;
@@ -488,9 +491,41 @@ export function MainLayout({ onPanelVisibilityChange, togglePanelId, gridType = 
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
+    // 윈도우 최대화/복원 감지 및 패널 크기 복원
+    const setupWindowListeners = async () => {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const appWindow = getCurrentWindow();
+
+      // 초기 최대화 상태 저장
+      previousMaximizedRef.current = await appWindow.isMaximized();
+
+      const unlisten = await appWindow.onResized(async () => {
+        const isMaximized = await appWindow.isMaximized();
+
+        // 최대화 상태가 변경된 경우에만 패널 크기 복원
+        if (isMaximized !== previousMaximizedRef.current) {
+          console.log('[Layout] Window maximize state changed:', isMaximized);
+          previousMaximizedRef.current = isMaximized;
+
+          // 약간의 딜레이 후 패널 크기 복원
+          setTimeout(() => {
+            restorePanelSizes();
+          }, 100);
+        }
+      });
+
+      return unlisten;
+    };
+
+    let windowUnlisten: (() => void) | undefined;
+    setupWindowListeners().then((fn) => {
+      windowUnlisten = fn;
+    });
+
     // 클린업
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (windowUnlisten) windowUnlisten();
     };
   };
 
