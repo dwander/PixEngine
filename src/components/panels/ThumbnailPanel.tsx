@@ -581,8 +581,14 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         const [first, ...rest] = duplicates
         setConflictDialog({ file: first, remainingFiles: rest })
       } else {
-        // 성공 메시지
-        success('파일을 붙여넣었습니다.')
+        // 실제로 붙여넣은 파일이 있는지 확인
+        // overwrite가 있거나, skip만 있지 않은 경우에만 성공 메시지 표시
+        const hasActualPaste = overwriteFiles.length > 0 || skipFiles.length === 0
+
+        if (hasActualPaste) {
+          success('파일을 붙여넣었습니다.')
+        }
+
         // 상태 초기화
         setOverwriteFiles([])
         setSkipFiles([])
@@ -937,8 +943,6 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 네비게이션 (방향키 + Home/End + PageUp/PageDown + 검색)
   useEffect(() => {
-    if (sortedImages.length === 0) return
-
     // 포커스 손실 시 연속 재생 중지
     const handleBlur = () => {
       stopContinuousPlay()
@@ -954,7 +958,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       window.removeEventListener('blur', handleBlur)
       stopContinuousPlay() // 클린업 시 연속 재생 중지
     }
-  }, [sortedImages.length, handleKeyDown, handleKeyUp, stopContinuousPlay])
+  }, [handleKeyDown, handleKeyUp, stopContinuousPlay])
 
   // 썸네일 생성 시작
   useEffect(() => {

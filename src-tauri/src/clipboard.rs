@@ -56,43 +56,41 @@ pub fn copy_files_to_clipboard(file_paths: Vec<String>, is_cut: bool) -> Result<
     formats::FileList.write_clipboard(&path_refs)
         .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
 
-    // 잘라내기 모드인 경우 Preferred DropEffect 설정
-    if is_cut {
-        unsafe {
-            // "Preferred DropEffect" 포맷 등록
-            let format_name = b"Preferred DropEffect\0";
-            let format = RegisterClipboardFormatA(PCSTR::from_raw(format_name.as_ptr()));
+    // Preferred DropEffect 설정 (복사/잘라내기 구분)
+    unsafe {
+        // "Preferred DropEffect" 포맷 등록
+        let format_name = b"Preferred DropEffect\0";
+        let format = RegisterClipboardFormatA(PCSTR::from_raw(format_name.as_ptr()));
 
-            if format == 0 {
-                return Err("Failed to register clipboard format".to_string());
-            }
-
-            // DROPEFFECT_MOVE = 2
-            let drop_effect: u32 = 2;
-
-            // 글로벌 메모리 할당
-            let h_mem = GlobalAlloc(GMEM_MOVEABLE, 4)
-                .map_err(|e| format!("Failed to allocate memory: {}", e))?;
-
-            // 메모리 잠금 및 데이터 쓰기
-            let ptr = GlobalLock(h_mem);
-            if ptr.is_null() {
-                return Err("Failed to lock memory".to_string());
-            }
-
-            std::ptr::copy_nonoverlapping(
-                &drop_effect as *const u32 as *const u8,
-                ptr as *mut u8,
-                4
-            );
-
-            // GlobalUnlock은 성공 시에도 0을 반환할 수 있으므로 에러 체크하지 않음
-            let _ = GlobalUnlock(h_mem);
-
-            // 클립보드에 데이터 설정 (HGLOBAL을 HANDLE로 변환)
-            SetClipboardData(format, HANDLE(h_mem.0))
-                .map_err(|e| format!("Failed to set clipboard data: {}", e))?;
+        if format == 0 {
+            return Err("Failed to register clipboard format".to_string());
         }
+
+        // DROPEFFECT_COPY = 1, DROPEFFECT_MOVE = 2
+        let drop_effect: u32 = if is_cut { 2 } else { 1 };
+
+        // 글로벌 메모리 할당
+        let h_mem = GlobalAlloc(GMEM_MOVEABLE, 4)
+            .map_err(|e| format!("Failed to allocate memory: {}", e))?;
+
+        // 메모리 잠금 및 데이터 쓰기
+        let ptr = GlobalLock(h_mem);
+        if ptr.is_null() {
+            return Err("Failed to lock memory".to_string());
+        }
+
+        std::ptr::copy_nonoverlapping(
+            &drop_effect as *const u32 as *const u8,
+            ptr as *mut u8,
+            4
+        );
+
+        // GlobalUnlock은 성공 시에도 0을 반환할 수 있으므로 에러 체크하지 않음
+        let _ = GlobalUnlock(h_mem);
+
+        // 클립보드에 데이터 설정 (HGLOBAL을 HANDLE로 변환)
+        SetClipboardData(format, HANDLE(h_mem.0))
+            .map_err(|e| format!("Failed to set clipboard data: {}", e))?;
     }
 
     Ok(())
