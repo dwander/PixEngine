@@ -91,6 +91,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [ratings, setRatings] = useState<Map<string, number>>(new Map()) // 이미지 별점 (경로 -> 0-5)
   const [renamingImage, setRenamingImage] = useState<string | null>(null) // 이름 변경 중인 이미지 경로
   const [newFileName, setNewFileName] = useState('') // 새 파일명
+  const [lastRenamedPath, setLastRenamedPath] = useState<string | null>(null) // 마지막으로 이름 변경된 파일 경로
+  const [preserveScrollPosition, setPreserveScrollPosition] = useState(false) // 스크롤 위치 보존 플래그
 
 
   // 정렬 상태
@@ -175,7 +177,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     return sorted
   }, [imageFiles, sortField, sortOrder, lightMetadataMap])
 
-  // imageFiles 변경 (폴더 변경) 시 focusedIndex 초기화 및 첫 이미지 로드
+  // currentFolder 변경 (폴더 변경) 시에만 focusedIndex 초기화 및 첫 이미지 로드
   useEffect(() => {
     setFocusedIndex(0)
     // 첫 번째 이미지를 선택 상태로 초기화
@@ -187,7 +189,20 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       setSelectedImages(new Set())
       setLastSelectedIndex(null)
     }
-  }, [imageFiles, loadImage, sortedImages])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFolder])
+
+  // 파일명 변경 후 포커스 복원
+  useEffect(() => {
+    if (lastRenamedPath && sortedImages.includes(lastRenamedPath)) {
+      const newIndex = sortedImages.indexOf(lastRenamedPath)
+      setFocusedIndex(newIndex)
+      setSelectedImages(new Set([lastRenamedPath]))
+      setLastSelectedIndex(newIndex)
+      loadImage(lastRenamedPath, newIndex)
+      setLastRenamedPath(null) // 한 번 사용 후 초기화
+    }
+  }, [sortedImages, lastRenamedPath, loadImage])
 
   // 정렬 조건 변경 시 focusedIndex 초기화 및 첫 이미지 로드
   useEffect(() => {
@@ -378,16 +393,40 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // rowHeight 변경 시 가상화 재측정 (세로 모드)
   useEffect(() => {
     if (isVertical) {
+      // 스크롤 위치 보존이 필요한 경우 현재 위치 저장
+      const scrollArea = scrollAreaRef.current
+      const savedScrollTop = preserveScrollPosition && scrollArea ? scrollArea.scrollTop : null
+
       rowVirtualizer.measure()
+
+      // 스크롤 위치 복원
+      if (savedScrollTop !== null && scrollArea) {
+        requestAnimationFrame(() => {
+          scrollArea.scrollTop = savedScrollTop
+          setPreserveScrollPosition(false)
+        })
+      }
     }
-  }, [rowHeight, isVertical, rows.length])
+  }, [rowHeight, isVertical, rows.length, preserveScrollPosition, rowVirtualizer])
 
   // horizontalItemSize 변경 시 가상화 재측정 (가로 모드)
   useEffect(() => {
     if (!isVertical) {
+      // 스크롤 위치 보존이 필요한 경우 현재 위치 저장
+      const scrollArea = scrollAreaRef.current
+      const savedScrollLeft = preserveScrollPosition && scrollArea ? scrollArea.scrollLeft : null
+
       horizontalVirtualizer.measure()
+
+      // 스크롤 위치 복원
+      if (savedScrollLeft !== null && scrollArea) {
+        requestAnimationFrame(() => {
+          scrollArea.scrollLeft = savedScrollLeft
+          setPreserveScrollPosition(false)
+        })
+      }
     }
-  }, [horizontalItemSize, isVertical])
+  }, [horizontalItemSize, isVertical, preserveScrollPosition, horizontalVirtualizer])
 
   // 뷰포트 내 이미지 인덱스 추적 및 HQ 생성 우선순위 업데이트
   useEffect(() => {
@@ -760,10 +799,16 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       success(`파일명을 변경했습니다.`)
 
-      // 3. FolderContext의 imageFiles 즉시 업데이트
+      // 3. 스크롤 위치 보존 플래그 설정
+      setPreserveScrollPosition(true)
+
+      // 4. 이름 변경된 파일 경로 저장 (포커스 유지용)
+      setLastRenamedPath(newPath)
+
+      // 5. FolderContext의 imageFiles 즉시 업데이트
       renameFileInList(oldPath, newPath)
 
-      // 4. 로컬 상태를 일괄 업데이트하여 리렌더링 최소화
+      // 6. 로컬 상태를 일괄 업데이트하여 리렌더링 최소화
       setThumbnails((prev) => {
         const thumbnail = prev.get(oldPath)
         if (!thumbnail) return prev
@@ -792,7 +837,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         return next
       })
 
-      // 5. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
+      // 7. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
       setTimeout(() => {
         resumeFolderWatch()
       }, 600)
