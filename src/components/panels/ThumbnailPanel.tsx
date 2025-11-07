@@ -60,7 +60,6 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage, preloadImages } = useImageContext()
   const { imageFiles, lightMetadataMap, currentFolder, renameFileInList, pauseFolderWatch, resumeFolderWatch } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
-  const isFullscreenViewer = useViewerStore((state) => state.isFullscreenViewer)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const { success, error } = useToast()
   const { showConfirm } = useDialog()
@@ -928,19 +927,25 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // 전체화면 모드일 때는 포커스 체크 우회
-    // 일반 모드일 때만 포커스 체크 (폴더 트리의 키 이벤트와 충돌 방지)
-    if (!isFullscreenViewer) {
-      const hasFocus = scrollAreaRef.current?.contains(document.activeElement)
+    // F2, Delete 키만 포커스 체크 (폴더 트리의 키 이벤트와 충돌 방지)
+    // 나머지 키들은 항상 썸네일 패널에서 처리 (전역 우선)
+    const hasFocus = scrollAreaRef.current?.contains(document.activeElement)
 
-      // F2, Delete 키는 반드시 포커스가 있어야 동작
-      if (e.key === 'F2' || e.key === 'Delete') {
-        if (!hasFocus) {
-          return
-        }
+    if (e.key === 'F2' || e.key === 'Delete') {
+      // F2, Delete는 반드시 썸네일 패널에 포커스가 있어야 동작
+      if (!hasFocus) {
+        return
       }
-      // 나머지 키들은 포커스 없으면 무시
-      else if (!hasFocus) {
+    }
+    // 나머지 키들은 전체화면 모드이거나, 입력 필드에 포커스가 없을 때만 처리
+    else {
+      // 입력 필드(input, textarea)에 포커스가 있으면 무시
+      const activeElement = document.activeElement
+      if (activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.getAttribute('contenteditable') === 'true'
+      )) {
         return
       }
     }
@@ -1217,7 +1222,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [isFullscreenViewer, isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error, handlePaste, handleDelete])
+  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error, handlePaste, handleDelete])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
