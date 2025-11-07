@@ -195,9 +195,17 @@ pub fn paste_files(
 
         // 중복 파일 발견
         if dest_path.exists() {
+            // 대상 경로에서 \\?\ 접두사 제거
+            let dest_str = dest_path.to_string_lossy().to_string();
+            let clean_dest = if dest_str.starts_with("\\\\?\\") {
+                dest_str[4..].to_string()
+            } else {
+                dest_str
+            };
+
             duplicates.push(DuplicateFileInfo {
                 source: source.clone(),
-                destination: dest_path.to_string_lossy().to_string(),
+                destination: clean_dest,
                 file_name,
             });
         }

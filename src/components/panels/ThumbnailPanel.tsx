@@ -608,37 +608,78 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       const { file, remainingFiles } = conflictDialog
 
-      // 현재 파일 처리
-      if (resolution === 'overwrite') {
-        setOverwriteFiles((prev) => [...prev, file.file_name])
-      } else {
-        setSkipFiles((prev) => [...prev, file.file_name])
-      }
-
       // 모든 파일에 적용
-      if (applyToAll && remainingFiles.length > 0) {
+      if (applyToAll) {
+        // 모든 충돌 파일 목록 (현재 + 남은 파일들)
+        const allConflictFiles = [file, ...remainingFiles].map((f) => f.file_name)
+
         if (resolution === 'overwrite') {
-          setOverwriteFiles((prev) => [...prev, file.file_name, ...remainingFiles.map((f) => f.file_name)])
+          const newOverwriteFiles = [...overwriteFiles, ...allConflictFiles]
+          setOverwriteFiles(newOverwriteFiles)
+          setConflictDialog(null)
+
+          // 업데이트된 값으로 바로 붙여넣기
+          try {
+            const duplicates = await invoke<DuplicateFileInfo[]>('paste_files_from_clipboard', {
+              destinationDir: currentFolder!,
+              overwriteFiles: newOverwriteFiles,
+              skipFiles,
+            })
+
+            if (duplicates.length === 0) {
+              success('파일을 붙여넣었습니다.')
+              setOverwriteFiles([])
+              setSkipFiles([])
+              setCutImages(new Set())
+            }
+          } catch (err) {
+            error(err as string)
+          }
         } else {
-          setSkipFiles((prev) => [...prev, file.file_name, ...remainingFiles.map((f) => f.file_name)])
+          const newSkipFiles = [...skipFiles, ...allConflictFiles]
+          setSkipFiles(newSkipFiles)
+          setConflictDialog(null)
+
+          // 업데이트된 값으로 바로 붙여넣기
+          try {
+            const duplicates = await invoke<DuplicateFileInfo[]>('paste_files_from_clipboard', {
+              destinationDir: currentFolder!,
+              overwriteFiles,
+              skipFiles: newSkipFiles,
+            })
+
+            if (duplicates.length === 0) {
+              success('파일을 붙여넣었습니다.')
+              setOverwriteFiles([])
+              setSkipFiles([])
+              setCutImages(new Set())
+            }
+          } catch (err) {
+            error(err as string)
+          }
         }
-        setConflictDialog(null)
-
-        // 바로 붙여넣기 재시도
-        setTimeout(() => handlePaste(), 0)
-      } else if (remainingFiles.length > 0) {
-        // 다음 충돌 파일 표시
-        const [next, ...rest] = remainingFiles
-        setConflictDialog({ file: next, remainingFiles: rest })
       } else {
-        // 마지막 파일 처리 완료
-        setConflictDialog(null)
+        // 현재 파일만 처리
+        if (resolution === 'overwrite') {
+          setOverwriteFiles((prev) => [...prev, file.file_name])
+        } else {
+          setSkipFiles((prev) => [...prev, file.file_name])
+        }
 
-        // 붙여넣기 재시도
-        setTimeout(() => handlePaste(), 0)
+        if (remainingFiles.length > 0) {
+          // 다음 충돌 파일 표시
+          const [next, ...rest] = remainingFiles
+          setConflictDialog({ file: next, remainingFiles: rest })
+        } else {
+          // 마지막 파일 처리 완료
+          setConflictDialog(null)
+
+          // 붙여넣기 재시도
+          setTimeout(() => handlePaste(), 0)
+        }
       }
     },
-    [conflictDialog, handlePaste]
+    [conflictDialog, handlePaste, overwriteFiles, skipFiles, currentFolder, success, error]
   )
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
