@@ -742,6 +742,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // 패널에 포커스가 없으면 무시 (폴더 트리의 키 이벤트와 충돌 방지)
+    if (!scrollAreaRef.current?.contains(document.activeElement)) {
+      return
+    }
+
     // Ctrl+C로 클립보드 복사
     if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
       e.preventDefault()
@@ -1384,7 +1389,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       {/* 썸네일 영역 */}
       <div
         ref={scrollAreaRef}
-        className={isVertical ? 'flex-1 overflow-auto p-2' : 'flex-1 overflow-x-auto overflow-y-hidden py-2'}
+        tabIndex={0}
+        className={isVertical ? 'flex-1 overflow-auto p-2 outline-none' : 'flex-1 overflow-x-auto overflow-y-hidden py-2 outline-none'}
       >
         {isVertical ? (
           /* 세로형: 가상화된 그리드 */

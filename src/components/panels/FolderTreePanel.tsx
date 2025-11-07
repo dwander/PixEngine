@@ -60,6 +60,7 @@ export function FolderTreePanel() {
   const folderRefreshCallbacks = useRef<Map<string, () => void>>(new Map());
   const [renamingNode, setRenamingNode] = useState<FolderNode | null>(null);
   const [selectedNode, setSelectedNode] = useState<FolderNode | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const initialize = async () => {
@@ -104,6 +105,9 @@ export function FolderTreePanel() {
       // 입력 요소에 포커스가 있으면 무시
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      // 패널에 포커스가 없으면 무시
+      if (!panelRef.current?.contains(document.activeElement)) return;
 
       if (selectedNode && !selectedNode.isCategory) {
         if (e.key === 'F2') {
@@ -420,7 +424,7 @@ export function FolderTreePanel() {
   };
 
   return (
-    <div className="h-full bg-neutral-900 overflow-y-auto overflow-x-hidden py-2">
+    <div ref={panelRef} tabIndex={0} className="h-full bg-neutral-900 overflow-y-auto overflow-x-hidden py-2 outline-none">
       {isLoading ? (
         <div className="flex flex-col items-center justify-center h-full text-gray-400">
           <HardDrive className="h-12 w-12 mb-2 opacity-50 animate-pulse" />
