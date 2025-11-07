@@ -597,6 +597,17 @@ export function KonvaImageViewer({
     }
   }, [showZoomIndicatorTemporarily])
 
+  // Set zoom to 100%
+  const setZoom100 = useCallback(() => {
+    if (zoomSteps.current.length === 0) return
+    const zoom100Index = zoomSteps.current.findIndex(scale => scale === 1.0)
+    if (zoom100Index !== -1) {
+      setCurrentZoom(zoom100Index)
+      // Show zoom indicator
+      showZoomIndicatorTemporarily()
+    }
+  }, [showZoomIndicatorTemporarily])
+
   // Handle keyboard shortcuts and Ctrl key state
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -607,6 +618,16 @@ export function KonvaImageViewer({
 
       // ESC: Reset to fit-to-screen
       if (e.key === 'Escape') {
+        e.preventDefault()
+        resetToFit()
+      }
+      // / key: Set zoom to 100%
+      else if (e.key === '/') {
+        e.preventDefault()
+        setZoom100()
+      }
+      // * key: Reset to fit-to-screen
+      else if (e.key === '*') {
         e.preventDefault()
         resetToFit()
       }
@@ -653,7 +674,7 @@ export function KonvaImageViewer({
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [zoom, pan, isFitToScreen, resetToFit])
+  }, [zoom, pan, isFitToScreen, resetToFit, setZoom100])
 
   // Handle mouse down
   const handleMouseDown = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
