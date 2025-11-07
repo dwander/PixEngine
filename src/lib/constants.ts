@@ -15,6 +15,8 @@ export const THUMBNAIL_SIZE_STEP = 25; // 썸네일 크기 조정 단계 (px)
 export const DEBOUNCE_FOCUS_INDEX = 150; // 포커스 인덱스 변경 디바운스
 export const DEBOUNCE_WINDOW_STATE = 500; // 윈도우 상태 저장 디바운스
 export const DEBOUNCE_LAYOUT_STATE = 500; // 레이아웃 상태 저장 디바운스
+export const FOLDER_WATCH_DEBOUNCE = 500; // 폴더 감시 디바운스 시간
+export const FOLDER_WATCH_RESUME_DELAY = 600; // 폴더 감시 재개 대기 시간 (디바운스 + 여유)
 
 // 가상 스크롤
 export const VIRTUAL_SCROLL_OVERSCAN = 5; // 가상 스크롤 오버스캔 아이템 수

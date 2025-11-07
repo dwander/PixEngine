@@ -589,8 +589,8 @@ fn extract_webp_dimensions(webp_data: &[u8]) -> Option<(u32, u32)> {
                 return None;
             }
             let bits = u32::from_le_bytes([webp_data[21], webp_data[22], webp_data[23], webp_data[24]]);
-            let width = ((bits & 0x3FFF) + 1) as u32;
-            let height = (((bits >> 14) & 0x3FFF) + 1) as u32;
+            let width = (bits & 0x3FFF) + 1;
+            let height = ((bits >> 14) & 0x3FFF) + 1;
             Some((width, height))
         }
         b"VP8X" => {

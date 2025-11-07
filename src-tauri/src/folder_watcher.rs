@@ -11,6 +11,7 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::enum_variant_names)]
 pub enum FolderChangeEvent {
     FileAdded { path: String },
     FileRemoved { path: String },
@@ -122,6 +123,7 @@ impl FolderWatcher {
         *self.current_path.lock().unwrap() = None;
     }
 
+    #[allow(dead_code)]
     pub fn get_current_path(&self) -> Option<PathBuf> {
         self.current_path.lock().unwrap().clone()
     }

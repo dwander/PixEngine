@@ -20,7 +20,8 @@ import {
   THUMBNAIL_SIZE_MAX,
   THUMBNAIL_GAP,
   DEBOUNCE_FOCUS_INDEX,
-  VIRTUAL_SCROLL_OVERSCAN
+  VIRTUAL_SCROLL_OVERSCAN,
+  FOLDER_WATCH_RESUME_DELAY
 } from '../../lib/constants'
 
 type SortField = 'filename' | 'filesize' | 'date_taken' | 'modified_time'
@@ -837,10 +838,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         return next
       })
 
-      // 7. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
+      // 7. 디바운스 시간 + 여유 시간 대기 후 폴더 감시 재개
       setTimeout(() => {
         resumeFolderWatch()
-      }, 600)
+      }, FOLDER_WATCH_RESUME_DELAY)
 
       // 이름 변경 상태 초기화
       setRenamingImage(null)
@@ -857,7 +858,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       // 에러 발생 시에도 폴더 감시 재개
       setTimeout(() => {
         resumeFolderWatch()
-      }, 600)
+      }, FOLDER_WATCH_RESUME_DELAY)
       // 스크롤 영역에 포커스 복원
       requestAnimationFrame(() => {
         scrollAreaRef.current?.focus()
@@ -1186,10 +1187,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             }
           }
         } finally {
-          // 2. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
+          // 2. 디바운스 시간 + 여유 시간 대기 후 폴더 감시 재개
           setTimeout(() => {
             resumeFolderWatch()
-          }, 600)
+          }, FOLDER_WATCH_RESUME_DELAY)
         }
       })()
     } else if (e.key.length === 1 && /^[a-zA-Z6-9]$/.test(e.key)) {

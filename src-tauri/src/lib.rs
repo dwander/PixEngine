@@ -621,13 +621,12 @@ async fn get_image_info(file_path: String) -> Result<ImageInfo, String> {
         .and_then(|time| {
             time.duration_since(SystemTime::UNIX_EPOCH).ok()
         })
-        .map(|duration| {
+        .and_then(|duration| {
             use chrono::{DateTime, Local};
             let datetime = DateTime::from_timestamp(duration.as_secs() as i64, 0)?;
             let local_time: DateTime<Local> = datetime.into();
             Some(local_time.format("%Y-%m-%d %H:%M:%S").to_string())
-        })
-        .flatten();
+        });
 
     // EXIF에서 촬영 날짜 가져오기
     let date_taken = extract_date_taken(&file_path);
@@ -981,10 +980,10 @@ async fn get_images_light_metadata(file_paths: Vec<String>) -> Result<Vec<LightM
             let file_size = file_metadata.as_ref().map(|m| m.len());
 
             let modified_time = file_metadata.as_ref().and_then(|m| {
-                m.modified().ok().and_then(|time| {
+                m.modified().ok().map(|time| {
                     use chrono::{DateTime, Utc};
                     let datetime: DateTime<Utc> = time.into();
-                    Some(datetime.format("%Y-%m-%d %H:%M:%S").to_string())
+                    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
                 })
             });
 
@@ -1199,13 +1198,13 @@ pub fn run() {
                 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
                 if let Ok(handle) = window.window_handle() {
                     if let RawWindowHandle::Win32(win32_handle) = handle.as_raw() {
-                        idle_detector::set_app_window_handle(win32_handle.hwnd.get() as isize);
+                        idle_detector::set_app_window_handle(win32_handle.hwnd.get());
                     }
                 }
             }
 
             // 저장된 윈도우 상태 복원
-            if let Some(state) = load_window_state(&app.handle()) {
+            if let Some(state) = load_window_state(app.handle()) {
                 // 최대화 상태일 때도 먼저 일반 위치/크기를 설정해야 함
                 // (복원 시 사용할 크기/위치를 Tauri에 알려주기 위함)
                 let _ = window.set_size(PhysicalSize::new(state.width, state.height));

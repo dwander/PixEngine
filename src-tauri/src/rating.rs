@@ -29,7 +29,7 @@ pub fn read_rating(file_path: &str) -> Result<i32, String> {
 /// XMP Rating 쓰기 (파일 수정 시간 복원 포함)
 pub fn write_rating(file_path: &str, rating: i32) -> Result<(), String> {
     // 유효성 검사
-    if rating < 0 || rating > 5 {
+    if !(0..=5).contains(&rating) {
         return Err(format!("유효하지 않은 별점: {}. 0-5 사이여야 합니다.", rating));
     }
 
@@ -94,11 +94,7 @@ fn read_exif_datetime(file_path: &str) -> Result<Option<String>, String> {
             .map_err(|e| format!("EXIF 읽기 실패: {}", e))?;
 
         // DateTimeOriginal 찾기
-        if let Some(field) = exif_reader.get_field(Tag::DateTimeOriginal, In::PRIMARY) {
-            Some(field.display_value().to_string())
-        } else {
-            None
-        }
+        exif_reader.get_field(Tag::DateTimeOriginal, In::PRIMARY).map(|field| field.display_value().to_string())
         // 이 블록이 끝나면 file과 bufreader가 drop되어 파일 핸들이 닫힘
     };
 
@@ -110,7 +106,7 @@ fn set_file_modified_time(file_path: &str, datetime_str: &str) -> Result<(), Str
     use chrono::{NaiveDateTime, TimeZone, Local};
 
     // 날짜와 시간 분리
-    let parts: Vec<&str> = datetime_str.trim().split_whitespace().collect();
+    let parts: Vec<&str> = datetime_str.split_whitespace().collect();
     if parts.len() != 2 {
         return Err(format!("잘못된 날짜 형식: {}", datetime_str));
     }

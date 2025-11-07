@@ -8,6 +8,7 @@ import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../worker
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 import { logError } from '../../lib/errorHandler'
 import { readImageRating, writeImageRating } from '../../lib/rating'
+import { FOLDER_WATCH_RESUME_DELAY } from '../../lib/constants'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -282,10 +283,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         } finally {
           isProcessing = false
 
-          // 3. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
+          // 3. 디바운스 시간 + 여유 시간 대기 후 폴더 감시 재개
           setTimeout(() => {
             resumeFolderWatch()
-          }, 600)
+          }, FOLDER_WATCH_RESUME_DELAY)
         }
       }
     }
