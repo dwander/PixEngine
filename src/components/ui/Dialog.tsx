@@ -36,14 +36,20 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
   const [dontAskAgain, setDontAskAgain] = useState(false)
   const [isTabPressed, setIsTabPressed] = useState(false)
   const [focusedButton, setFocusedButton] = useState<'cancel' | 'confirm' | null>(null)
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isOpen) {
       setInputValue(options.defaultValue || '')
       setDontAskAgain(false)
       setIsTabPressed(false)
+      setPosition({ x: 0, y: 0 })
+      setIsDragging(false)
 
       // 다이얼로그가 열릴 때 취소 버튼에 포커스 (실수 방지)
       // prompt 타입이 아닐 때만 (prompt는 input이 autoFocus 받음)
@@ -125,6 +131,59 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
     return () => document.removeEventListener('keydown', handleKeyboard)
   }, [isOpen, options.type])
 
+  // 드래그 핸들러
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // 버튼이나 입력 필드를 클릭한 경우 드래그 시작하지 않음
+    const target = e.target as HTMLElement
+    if (
+      target.tagName === 'BUTTON' ||
+      target.tagName === 'INPUT' ||
+      target.closest('button') ||
+      target.closest('input')
+    ) {
+      return
+    }
+
+    e.preventDefault()
+
+    // 단순화된 오프셋 계산 - 현재 position 기준
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    })
+    setIsDragging(true)
+  }
+
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // 상태 업데이트 없이 직접 DOM 조작
+      if (dialogRef.current) {
+        const newX = e.clientX - dragStart.x
+        const newY = e.clientY - dragStart.y
+        dialogRef.current.style.transform = `translate(${newX}px, ${newY}px)`
+      }
+    }
+
+    const handleMouseUp = (e: MouseEvent) => {
+      setIsDragging(false)
+      // 마지막 위치를 상태에 저장
+      setPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      })
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, dragStart])
+
   if (!isOpen) return null
 
   const handleConfirm = () => {
@@ -173,7 +232,15 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       {/* Dialog */}
-      <div className="relative bg-neutral-800 border border-neutral-700 rounded-lg shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
+      <div
+        ref={dialogRef}
+        className="relative bg-neutral-800 border border-neutral-700 rounded-lg shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200"
+        style={{
+          transform: `translate(${position.x}px, ${position.y}px)`,
+          willChange: isDragging ? 'transform' : 'auto',
+        }}
+        onMouseDown={handleMouseDown}
+      >
         {/* Header (선택적) */}
         {options.showHeader && options.title && (
           <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
