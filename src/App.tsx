@@ -83,6 +83,9 @@ function AppContent() {
     return (saved as 'none' | '3div' | '6div') || 'none';
   });
 
+  // 전체화면 진입 전 윈도우 최대화 상태 저장
+  const [wasMaximizedBeforeFullscreen, setWasMaximizedBeforeFullscreen] = useState(false);
+
   // 전체화면 뷰어 상태는 ViewerStore에서 관리
 
   const handleTogglePanel = useCallback((panelId: string) => {
@@ -118,19 +121,28 @@ function AppContent() {
     // 타우리 네이티브 전체화면 API 호출
     try {
       if (newFullscreenState) {
-        // 전체화면 진입 전에 최대화 상태 해제 (OS 작업 표시줄 덮기 위해)
+        // 전체화면 진입 전에 최대화 상태 저장 및 해제 (OS 작업 표시줄 덮기 위해)
         const isMaximized = await appWindow.isMaximized();
+        setWasMaximizedBeforeFullscreen(isMaximized);
+
         if (isMaximized) {
           await appWindow.toggleMaximize();
           // 최대화 해제 후 약간의 딜레이를 주고 전체화면 설정
           await new Promise(resolve => setTimeout(resolve, 50));
         }
       }
+
       await appWindow.setFullscreen(newFullscreenState);
+
+      // 전체화면 종료 후 최대화 상태 복원
+      if (!newFullscreenState && wasMaximizedBeforeFullscreen) {
+        // 전체화면 해제 직후 즉시 최대화 (딜레이 최소화)
+        await appWindow.toggleMaximize();
+      }
     } catch (error) {
       console.error('Failed to toggle fullscreen:', error);
     }
-  }, [isFullscreenViewer]);
+  }, [isFullscreenViewer, wasMaximizedBeforeFullscreen]);
 
   // ViewerStore에 toggleFullscreen 함수 등록
   useEffect(() => {
@@ -146,6 +158,11 @@ function AppContent() {
         setIsFullscreenViewer(false);
         try {
           await appWindow.setFullscreen(false);
+
+          // 전체화면 해제 직후 즉시 최대화 (딜레이 최소화)
+          if (wasMaximizedBeforeFullscreen) {
+            await appWindow.toggleMaximize();
+          }
         } catch (error) {
           console.error('Failed to exit fullscreen:', error);
         }
@@ -156,7 +173,7 @@ function AppContent() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isFullscreenViewer]);
+  }, [isFullscreenViewer, wasMaximizedBeforeFullscreen]);
 
   // 앱 종료 전 확장 모드 해제 (패널 크기 깨짐 방지)
   useEffect(() => {
