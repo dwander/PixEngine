@@ -845,6 +845,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       // 이름 변경 상태 초기화
       setRenamingImage(null)
       setNewFileName('')
+
+      // 8. 스크롤 영역에 포커스 복원 (키보드 네비게이션 활성화)
+      requestAnimationFrame(() => {
+        scrollAreaRef.current?.focus()
+      })
     } catch (err) {
       error(err as string)
       setRenamingImage(null)
@@ -853,6 +858,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       setTimeout(() => {
         resumeFolderWatch()
       }, 600)
+      // 스크롤 영역에 포커스 복원
+      requestAnimationFrame(() => {
+        scrollAreaRef.current?.focus()
+      })
     }
   }, [renamingImage, newFileName, success, error, renameFileInList, pauseFolderWatch, resumeFolderWatch])
 
@@ -860,6 +869,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const handleRenameCancel = useCallback(() => {
     setRenamingImage(null)
     setNewFileName('')
+    // 스크롤 영역에 포커스 복원
+    requestAnimationFrame(() => {
+      scrollAreaRef.current?.focus()
+    })
   }, [])
 
   // 파일 삭제 핸들러
@@ -1055,6 +1068,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       // 단일 탭: e.repeat === false
       if (!e.repeat) {
+        // 방향키 네비게이션 시작 시 선택 해제 (포커스링만 표시)
+        setSelectedImages(new Set())
+        setLastSelectedIndex(null)
+
         // 연속 재생 모드 종료 (혹시 모를 상태 정리)
         stopContinuousPlay()
 
@@ -1084,12 +1101,18 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     // 나머지 키들 (Home, End, PageUp/Down, 검색)
     if (e.key === 'Home') {
       e.preventDefault()
+      setSelectedImages(new Set())
+      setLastSelectedIndex(null)
       setFocusedIndex(0)
     } else if (e.key === 'End') {
       e.preventDefault()
+      setSelectedImages(new Set())
+      setLastSelectedIndex(null)
       setFocusedIndex(sortedImages.length - 1)
     } else if (e.key === 'PageUp') {
       e.preventDefault()
+      setSelectedImages(new Set())
+      setLastSelectedIndex(null)
       if (isVertical) {
         const virtualRows = rowVirtualizer.getVirtualItems()
         if (virtualRows.length > 0) {
@@ -1105,6 +1128,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       }
     } else if (e.key === 'PageDown') {
       e.preventDefault()
+      setSelectedImages(new Set())
+      setLastSelectedIndex(null)
       if (isVertical) {
         const virtualRows = rowVirtualizer.getVirtualItems()
         if (virtualRows.length > 0) {
@@ -1144,6 +1169,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     } else if (e.key.length === 1 && /^[a-zA-Z6-9]$/.test(e.key)) {
       // 알파벳/6-9 숫자 키: 단일 문자로 시작하는 다음 파일 검색
       e.preventDefault()
+
+      // 키보드 네비게이션 시 선택 해제
+      setSelectedImages(new Set())
+      setLastSelectedIndex(null)
 
       const searchChar = e.key.toLowerCase()
 
