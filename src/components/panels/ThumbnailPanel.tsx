@@ -60,6 +60,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage, preloadImages } = useImageContext()
   const { imageFiles, lightMetadataMap, currentFolder, renameFileInList, pauseFolderWatch, resumeFolderWatch } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
+  const isFullscreenViewer = useViewerStore((state) => state.isFullscreenViewer)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const { success, error } = useToast()
   const { showConfirm } = useDialog()
@@ -927,11 +928,21 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // 패널에 포커스가 없으면 무시 (폴더 트리의 키 이벤트와 충돌 방지)
-    const hasFocus = scrollAreaRef.current?.contains(document.activeElement)
+    // 전체화면 모드일 때는 포커스 체크 우회
+    // 일반 모드일 때만 포커스 체크 (폴더 트리의 키 이벤트와 충돌 방지)
+    if (!isFullscreenViewer) {
+      const hasFocus = scrollAreaRef.current?.contains(document.activeElement)
 
-    if (!hasFocus) {
-      return
+      // F2, Delete 키는 반드시 포커스가 있어야 동작
+      if (e.key === 'F2' || e.key === 'Delete') {
+        if (!hasFocus) {
+          return
+        }
+      }
+      // 나머지 키들은 포커스 없으면 무시
+      else if (!hasFocus) {
+        return
+      }
     }
 
     // Ctrl+C로 클립보드 복사
@@ -1206,7 +1217,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error, handlePaste, handleDelete])
+  }, [isFullscreenViewer, isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error, handlePaste, handleDelete])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {

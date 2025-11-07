@@ -18,8 +18,10 @@ const appWindow = getCurrentWindow();
 function AppContent() {
   const { refreshCurrentFolder, currentFolder } = useFolderContext();
 
-  // ViewerStore에서 setToggleFullscreen 가져오기
+  // ViewerStore에서 필요한 함수들 가져오기
   const setToggleFullscreen = useViewerStore((state) => state.setToggleFullscreen);
+  const isFullscreenViewer = useViewerStore((state) => state.isFullscreenViewer);
+  const setIsFullscreenViewer = useViewerStore((state) => state.setIsFullscreenViewer);
 
   // 브라우저 기본 컨텍스트 메뉴 비활성화
   useEffect(() => {
@@ -81,8 +83,7 @@ function AppContent() {
     return (saved as 'none' | '3div' | '6div') || 'none';
   });
 
-  // 전체화면 뷰어 상태 관리
-  const [isFullscreenViewer, setIsFullscreenViewer] = useState(false);
+  // 전체화면 뷰어 상태는 ViewerStore에서 관리
 
   const handleTogglePanel = useCallback((panelId: string) => {
     setTogglePanelId(panelId);
