@@ -173,6 +173,32 @@ pub fn paste_files(
     // 잘라내기 모드인지 확인
     let is_cut = is_clipboard_cut_mode()?;
 
+    // 대상 디렉토리 정규화
+    let dest_dir_canonical = PathBuf::from(&destination_dir)
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve destination directory: {}", e))?;
+
+    // 자기 자신에게 복사하는지 확인
+    let mut self_copy_detected = false;
+    for source in &source_files {
+        let source_path = PathBuf::from(source);
+
+        // 소스 파일의 부모 디렉토리 확인
+        if let Some(source_parent) = source_path.parent() {
+            if let Ok(source_parent_canonical) = source_parent.canonicalize() {
+                if source_parent_canonical == dest_dir_canonical {
+                    self_copy_detected = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // 자기 자신에게 복사하려는 경우 에러 반환
+    if self_copy_detected && !is_cut {
+        return Err("같은 폴더에 파일을 복사할 수 없습니다.".to_string());
+    }
+
     // 중복 파일 확인
     let mut duplicates = Vec::new();
 
