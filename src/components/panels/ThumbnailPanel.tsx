@@ -12,6 +12,7 @@ import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
 import { readImageRating, writeImageRating } from '../../lib/rating'
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuSubmenu } from '../common/ContextMenu'
+import { FileConflictDialog, DuplicateFileInfo } from '../common/FileConflictDialog'
 import {
   THUMBNAIL_SIZE_DEFAULT,
   THUMBNAIL_SIZE_MIN,
@@ -73,6 +74,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null) // Shift 클릭용
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null) // 컨텍스트 메뉴 위치
   const [showRatingSubmenu, setShowRatingSubmenu] = useState(false) // 별점 서브메뉴 표시 여부
+  const [conflictDialog, setConflictDialog] = useState<{ file: DuplicateFileInfo; remainingFiles: DuplicateFileInfo[] } | null>(null) // 파일 충돌 다이얼로그
+  const [overwriteFiles, setOverwriteFiles] = useState<string[]>([]) // 덮어쓰기할 파일 목록
+  const [skipFiles, setSkipFiles] = useState<string[]>([]) // 건너뛸 파일 목록
   const [thumbnailSize, setThumbnailSize] = useState(THUMBNAIL_SIZE_DEFAULT)
   const [isVertical, setIsVertical] = useState(true)
   const [containerWidth, setContainerWidth] = useState(0)
@@ -558,6 +562,86 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     return () => clearTimeout(timer)
   }, [focusedIndex, continuousPlayState, sortedImages, isVertical, columnCount, getCachedImage, stopContinuousPlay])
 
+  // 붙여넣기 함수
+  const handlePaste = useCallback(async () => {
+    const { currentFolder } = useFolderContext.getState()
+    if (!currentFolder) {
+      error('폴더가 선택되지 않았습니다.')
+      return
+    }
+
+    try {
+      const duplicates = await invoke<DuplicateFileInfo[]>('paste_files_from_clipboard', {
+        destinationDir: currentFolder,
+        overwriteFiles,
+        skipFiles,
+      })
+
+      // 중복 파일이 있으면 다이얼로그 표시
+      if (duplicates.length > 0) {
+        const [first, ...rest] = duplicates
+        setConflictDialog({ file: first, remainingFiles: rest })
+      } else {
+        // 성공 메시지
+        success('파일을 붙여넣었습니다.')
+        // 상태 초기화
+        setOverwriteFiles([])
+        setSkipFiles([])
+        setCutImages(new Set())
+      }
+    } catch (err) {
+      error(err as string)
+    }
+  }, [overwriteFiles, skipFiles, success, error])
+
+  // 파일 충돌 해결 핸들러
+  const handleConflictResolve = useCallback(
+    async (resolution: 'overwrite' | 'skip' | 'cancel', applyToAll: boolean) => {
+      if (!conflictDialog) return
+
+      // 취소
+      if (resolution === 'cancel') {
+        setConflictDialog(null)
+        setOverwriteFiles([])
+        setSkipFiles([])
+        return
+      }
+
+      const { file, remainingFiles } = conflictDialog
+
+      // 현재 파일 처리
+      if (resolution === 'overwrite') {
+        setOverwriteFiles((prev) => [...prev, file.file_name])
+      } else {
+        setSkipFiles((prev) => [...prev, file.file_name])
+      }
+
+      // 모든 파일에 적용
+      if (applyToAll && remainingFiles.length > 0) {
+        if (resolution === 'overwrite') {
+          setOverwriteFiles((prev) => [...prev, file.file_name, ...remainingFiles.map((f) => f.file_name)])
+        } else {
+          setSkipFiles((prev) => [...prev, file.file_name, ...remainingFiles.map((f) => f.file_name)])
+        }
+        setConflictDialog(null)
+
+        // 바로 붙여넣기 재시도
+        setTimeout(() => handlePaste(), 0)
+      } else if (remainingFiles.length > 0) {
+        // 다음 충돌 파일 표시
+        const [next, ...rest] = remainingFiles
+        setConflictDialog({ file: next, remainingFiles: rest })
+      } else {
+        // 마지막 파일 처리 완료
+        setConflictDialog(null)
+
+        // 붙여넣기 재시도
+        setTimeout(() => handlePaste(), 0)
+      }
+    },
+    [conflictDialog, handlePaste]
+  )
+
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Ctrl+C로 클립보드 복사
@@ -652,6 +736,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         }
       })
       setSelectedImages(newSelection)
+      return
+    }
+
+    // Ctrl+V로 붙여넣기
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      e.preventDefault()
+      handlePaste()
       return
     }
 
@@ -795,7 +886,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error])
+  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error, handlePaste])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -1566,7 +1657,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             icon={<Copy className="w-4 h-4 scale-x-[-1]" />}
             label="붙여넣기"
             shortcut="Ctrl+V"
-            onClick={() => setContextMenu(null)}
+            onClick={() => {
+              handlePaste()
+              setContextMenu(null)
+            }}
           />
           <ContextMenuItem
             icon={<Trash2 className="w-4 h-4" />}
@@ -1647,6 +1741,14 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             ))}
           </ContextMenuSubmenu>
         </ContextMenu>
+      )}
+
+      {/* 파일 충돌 다이얼로그 */}
+      {conflictDialog && (
+        <FileConflictDialog
+          duplicateFile={conflictDialog.file}
+          onResolve={handleConflictResolve}
+        />
       )}
     </div>
   )

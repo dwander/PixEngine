@@ -1109,6 +1109,20 @@ async fn copy_files_to_clipboard(file_paths: Vec<String>, is_cut: bool) -> Resul
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// 클립보드에서 파일 붙여넣기
+#[tauri::command]
+async fn paste_files_from_clipboard(
+    destination_dir: String,
+    overwrite_files: Vec<String>,
+    skip_files: Vec<String>,
+) -> Result<Vec<clipboard::DuplicateFileInfo>, String> {
+    tokio::task::spawn_blocking(move || {
+        clipboard::paste_files(destination_dir, overwrite_files, skip_files)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1182,7 +1196,8 @@ pub fn run() {
             create_folder,
             rename_folder,
             delete_folder,
-            copy_files_to_clipboard
+            copy_files_to_clipboard,
+            paste_files_from_clipboard
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
