@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Loader2, Check, ChevronDown, Scissors, Copy, FolderInput, Trash2, Edit3, Star } from 'lucide-react'
+import { Loader2, Check, ChevronDown, Scissors, Copy, Trash2, Edit3, Star } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -1491,23 +1491,60 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             icon={<Scissors className="w-4 h-4" />}
             label="잘라내기"
             shortcut="Ctrl+X"
-            onClick={() => setContextMenu(null)}
+            onClick={() => {
+              const imagesToCut = Array.from(selectedImages)
+              if (imagesToCut.length === 0) return
+
+              const fileCount = imagesToCut.length
+              invoke('copy_files_to_clipboard', { filePaths: imagesToCut, isCut: true })
+                .then(() => {
+                  let message: string
+                  if (fileCount === 1) {
+                    const fileName = imagesToCut[0].split(/[/\\]/).pop() || '파일'
+                    message = `${fileName}을(를) 잘라냈습니다.`
+                  } else {
+                    message = `파일 ${fileCount}개를 잘라냈습니다.`
+                  }
+                  setCutImages(new Set(imagesToCut))
+                  success(message)
+                })
+                .catch(() => {
+                  error('클립보드 잘라내기 실패')
+                })
+              setContextMenu(null)
+            }}
           />
           <ContextMenuItem
             icon={<Copy className="w-4 h-4" />}
             label="복사"
             shortcut="Ctrl+C"
-            onClick={() => setContextMenu(null)}
+            onClick={() => {
+              const imagesToCopy = Array.from(selectedImages)
+              if (imagesToCopy.length === 0) return
+
+              const fileCount = imagesToCopy.length
+              invoke('copy_files_to_clipboard', { filePaths: imagesToCopy, isCut: false })
+                .then(() => {
+                  let message: string
+                  if (fileCount === 1) {
+                    const fileName = imagesToCopy[0].split(/[/\\]/).pop() || '파일'
+                    message = `${fileName}을(를) 클립보드에 복사했습니다.`
+                  } else {
+                    message = `파일 ${fileCount}개를 클립보드에 복사했습니다.`
+                  }
+                  setCutImages(new Set())
+                  success(message)
+                })
+                .catch(() => {
+                  error('클립보드 복사 실패')
+                })
+              setContextMenu(null)
+            }}
           />
           <ContextMenuItem
             icon={<Copy className="w-4 h-4 scale-x-[-1]" />}
             label="붙여넣기"
             shortcut="Ctrl+V"
-            onClick={() => setContextMenu(null)}
-          />
-          <ContextMenuItem
-            icon={<FolderInput className="w-4 h-4" />}
-            label="이동하기"
             onClick={() => setContextMenu(null)}
           />
           <ContextMenuItem
