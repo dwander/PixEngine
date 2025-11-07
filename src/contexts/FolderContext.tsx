@@ -95,8 +95,6 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       } else {
         setLightMetadataMap(new Map());
       }
-
-      console.log(`[FolderContext] Refreshed folder: ${currentFolder} (${result.files.length} images)`);
     } catch (error) {
       logError(error, 'Refresh current folder');
     } finally {
@@ -108,8 +106,6 @@ export function FolderProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unlisten = listen<{ type: string; path: string }>('folder-change', (event) => {
       const { type, path } = event.payload;
-
-      console.log(`[FolderContext] Folder change detected: ${type} - ${path}`);
 
       if (type === 'file_added') {
         // 파일 추가: 목록에 추가하고 메타데이터 로드

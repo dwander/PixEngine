@@ -58,7 +58,7 @@ interface ThumbnailProgress {
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage, preloadImages } = useImageContext()
-  const { imageFiles, lightMetadataMap, currentFolder } = useFolderContext()
+  const { imageFiles, lightMetadataMap, currentFolder, loadLightMetadata } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const { success, error } = useToast()
@@ -91,6 +91,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [ratings, setRatings] = useState<Map<string, number>>(new Map()) // 이미지 별점 (경로 -> 0-5)
   const [renamingImage, setRenamingImage] = useState<string | null>(null) // 이름 변경 중인 이미지 경로
   const [newFileName, setNewFileName] = useState('') // 새 파일명
+
 
   // 정렬 상태
   const [sortField, setSortField] = useState<SortField>('filename')
@@ -703,9 +704,29 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     const fileName = imagePath.split(/[/\\]/).pop() || ''
     const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.')) || fileName
 
-    setRenamingImage(imagePath)
-    setNewFileName(fileNameWithoutExt)
-  }, [selectedImages])
+    // 선택된 이미지의 인덱스 찾기
+    const imageIndex = sortedImages.findIndex(img => img === imagePath)
+
+    // 해당 이미지로 스크롤 (가상 스크롤에 렌더링되도록)
+    if (imageIndex !== -1) {
+      if (isVertical) {
+        // 세로 모드: 행 인덱스로 스크롤
+        const rowIndex = Math.floor(imageIndex / columnCount)
+        rowVirtualizer.scrollToIndex(rowIndex, { align: 'center' })
+      } else {
+        // 가로 모드: 직접 인덱스로 스크롤
+        horizontalVirtualizer.scrollToIndex(imageIndex, { align: 'center' })
+      }
+    }
+
+    // requestAnimationFrame을 2번 사용하여 브라우저가 렌더링할 시간 확보
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setRenamingImage(imagePath)
+        setNewFileName(fileNameWithoutExt)
+      })
+    })
+  }, [selectedImages, sortedImages, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer])
 
   // 파일명 변경 완료 핸들러
   const handleRenameComplete = useCallback(async () => {
@@ -735,18 +756,49 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       success(`파일명을 변경했습니다.`)
 
-      // 선택 상태 업데이트
+      // 로컬 상태를 일괄 업데이트하여 리렌더링 최소화
+      setThumbnails((prev) => {
+        const thumbnail = prev.get(oldPath)
+        if (!thumbnail) return prev
+        const next = new Map(prev)
+        next.delete(oldPath)
+        next.set(newPath, { ...thumbnail, path: newPath })
+        return next
+      })
+
+      setRatings((prev) => {
+        const rating = prev.get(oldPath)
+        if (rating === undefined) return prev
+        const next = new Map(prev)
+        next.delete(oldPath)
+        next.set(newPath, rating)
+        return next
+      })
+
       setSelectedImages(new Set([newPath]))
+
+      setCutImages((prev) => {
+        if (!prev.has(oldPath)) return prev
+        const next = new Set(prev)
+        next.delete(oldPath)
+        next.add(newPath)
+        return next
+      })
 
       // 이름 변경 상태 초기화
       setRenamingImage(null)
       setNewFileName('')
+
+      // 메타데이터 새로 로드 (비동기, 백그라운드에서 실행)
+      loadLightMetadata([newPath]).catch((err) => {
+        console.error('Failed to load metadata for renamed file:', err)
+      })
     } catch (err) {
       error(err as string)
       setRenamingImage(null)
       setNewFileName('')
     }
-  }, [renamingImage, newFileName, success, error])
+  }, [renamingImage, newFileName, success, error, loadLightMetadata])
 
   // 파일명 변경 취소 핸들러
   const handleRenameCancel = useCallback(() => {
@@ -807,7 +859,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // 패널에 포커스가 없으면 무시 (폴더 트리의 키 이벤트와 충돌 방지)
-    if (!scrollAreaRef.current?.contains(document.activeElement)) {
+    const hasFocus = scrollAreaRef.current?.contains(document.activeElement)
+
+    if (!hasFocus) {
       return
     }
 
@@ -1582,8 +1636,28 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                                 {rating}
                               </div>
                             )}
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                              <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
+                            <div className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 transition-opacity ${renamingImage === imagePath ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                              {renamingImage === imagePath ? (
+                                <input
+                                  type="text"
+                                  value={newFileName}
+                                  onChange={(e) => setNewFileName(e.target.value)}
+                                  onBlur={handleRenameComplete}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleRenameComplete()
+                                    } else if (e.key === 'Escape') {
+                                      handleRenameCancel()
+                                    }
+                                    e.stopPropagation() // 부모의 키 이벤트 방지
+                                  }}
+                                  onClick={(e) => e.stopPropagation()} // 클릭 이벤트 전파 방지
+                                  autoFocus
+                                  className="w-full px-1 py-0.5 text-xs text-white bg-neutral-900/90 border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              ) : (
+                                <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1865,7 +1939,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           <ContextMenuDivider />
           <ContextMenuItem
             icon={<Edit3 className="w-4 h-4" />}
-            label="이름 바꾸기"
+            label="파일명 변경"
             shortcut="F2"
             disabled={selectedImages.size !== 1}
             onClick={() => {
@@ -1881,12 +1955,6 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
               handleDelete()
               setContextMenu(null)
             }}
-          />
-          <ContextMenuItem
-            icon={<Edit3 className="w-4 h-4" />}
-            label="이름변경"
-            shortcut="F2"
-            onClick={() => setContextMenu(null)}
           />
 
           <ContextMenuDivider />
