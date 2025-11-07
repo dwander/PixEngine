@@ -1310,6 +1310,34 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
   }, [handleKeyDown, handleKeyUp, stopContinuousPlay])
 
+  // 전역 휠 이벤트 핸들러 (이미지 뷰어에서 휠 네비게이션)
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      // Ctrl 키가 눌렸거나 줌인 상태면 무시 (줌 컨트롤용)
+      if (e.ctrlKey || isZoomedIn) return
+
+      // 이벤트 타겟이 이미지 뷰어 영역 내부인지 확인
+      const target = e.target as HTMLElement
+      const imageViewerContainer = document.querySelector('.image-viewer-container')
+
+      if (!imageViewerContainer?.contains(target)) return
+
+      // 이미지 뷰어 영역에서만 휠 네비게이션 작동
+      e.preventDefault()
+
+      if (e.deltaY < 0) {
+        // 휠 업: 이전 이미지
+        setFocusedIndex(prev => Math.max(0, prev - 1))
+      } else if (e.deltaY > 0) {
+        // 휠 다운: 다음 이미지
+        setFocusedIndex(prev => Math.min(sortedImages.length - 1, prev + 1))
+      }
+    }
+
+    window.addEventListener('wheel', handleWheel, { passive: false })
+    return () => window.removeEventListener('wheel', handleWheel)
+  }, [isZoomedIn, sortedImages.length])
+
   // 썸네일 생성 시작
   useEffect(() => {
     // 폴더 변경 시 스크롤 위치 초기화 (focusedIndex는 별도 useEffect에서 처리)

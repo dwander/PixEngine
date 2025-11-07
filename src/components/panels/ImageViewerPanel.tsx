@@ -626,7 +626,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       {/* 메인 뷰어 영역 (Canvas + 오버레이) */}
       <div
         ref={containerRef}
-        className="flex-1 relative focus:outline-none"
+        className="flex-1 relative focus:outline-none image-viewer-container"
         tabIndex={0}
         onContextMenu={handleContextMenu}
       >
