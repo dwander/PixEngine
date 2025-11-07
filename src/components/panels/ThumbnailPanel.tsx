@@ -634,6 +634,27 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       return
     }
 
+    // Ctrl+D로 선택 해제
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      e.preventDefault()
+      setSelectedImages(new Set())
+      setCutImages(new Set())
+      return
+    }
+
+    // Ctrl+I로 선택 반전
+    if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+      e.preventDefault()
+      const newSelection = new Set<string>()
+      sortedImages.forEach(img => {
+        if (!selectedImages.has(img)) {
+          newSelection.add(img)
+        }
+      })
+      setSelectedImages(newSelection)
+      return
+    }
+
     // Enter 키로 확장 모드 진입
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -1575,6 +1596,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             shortcut="Ctrl+D"
             onClick={() => {
               setSelectedImages(new Set())
+              setCutImages(new Set())
               setContextMenu(null)
             }}
           />
