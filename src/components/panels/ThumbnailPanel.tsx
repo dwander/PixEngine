@@ -6,6 +6,7 @@ import { Loader2, Check, ChevronDown, Scissors, Copy, FolderInput, Trash2, Edit3
 import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useToast } from '../../contexts/ToastContext'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
@@ -58,6 +59,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { imageFiles, lightMetadataMap } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
+  const { success, error } = useToast()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -557,6 +559,48 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Ctrl+C로 클립보드 복사
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      e.preventDefault()
+      // 선택된 이미지들을 클립보드에 복사
+      const imagesToCopy = Array.from(selectedImages)
+
+      if (imagesToCopy.length === 0) {
+        console.log('[클립보드 복사] 선택된 이미지가 없습니다.')
+        return
+      }
+
+      const fileCount = imagesToCopy.length
+      const timestamp = new Date().toLocaleTimeString('ko-KR')
+
+      console.log(`[클립보드 복사 시작] ${timestamp}`)
+      console.log(`선택된 파일 수: ${fileCount}개`)
+      console.log('파일 목록:', imagesToCopy.map(path => {
+        const fileName = path.split(/[/\\]/).pop() || path
+        return `\n  - ${fileName}`
+      }).join(''))
+
+      invoke('copy_files_to_clipboard', { filePaths: imagesToCopy })
+        .then(() => {
+          let message: string
+          if (fileCount === 1) {
+            const fileName = imagesToCopy[0].split(/[/\\]/).pop() || '파일'
+            message = `${fileName}을(를) 클립보드에 복사했습니다.`
+          } else {
+            message = `파일 ${fileCount}개를 클립보드에 복사했습니다.`
+          }
+
+          success(message)
+          console.log(`[클립보드 복사 완료] ${timestamp} - ${fileCount}개 파일 복사 성공`)
+        })
+        .catch((err) => {
+          error('클립보드 복사 실패')
+          console.error(`[클립보드 복사 실패] ${timestamp}`, err)
+        })
+
+      return
+    }
+
     // Ctrl+A로 전체 선택
     if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       e.preventDefault()
@@ -704,7 +748,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages])
+  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {

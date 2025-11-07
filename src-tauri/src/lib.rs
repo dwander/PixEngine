@@ -9,6 +9,7 @@ mod thumbnail;
 mod thumbnail_queue;
 mod idle_detector;
 mod rating;
+mod clipboard;
 
 use thumbnail_queue::ThumbnailQueueManager;
 
@@ -1098,6 +1099,16 @@ async fn delete_folder(path: String) -> Result<(), String> {
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// 파일 경로들을 클립보드에 복사
+#[tauri::command]
+async fn copy_files_to_clipboard(file_paths: Vec<String>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        clipboard::copy_files_to_clipboard(file_paths)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1170,7 +1181,8 @@ pub fn run() {
             write_image_rating,
             create_folder,
             rename_folder,
-            delete_folder
+            delete_folder,
+            copy_files_to_clipboard
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
