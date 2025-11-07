@@ -1,9 +1,8 @@
 import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react'
-import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Loader2, Check, ChevronDown, ChevronRight, Scissors, Copy, FolderInput, Trash2, Edit3, Star } from 'lucide-react'
+import { Loader2, Check, ChevronDown, Scissors, Copy, FolderInput, Trash2, Edit3, Star } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -11,6 +10,7 @@ import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
 import { readImageRating, writeImageRating } from '../../lib/rating'
+import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuSubmenu } from '../common/ContextMenu'
 import {
   THUMBNAIL_SIZE_DEFAULT,
   THUMBNAIL_SIZE_MIN,
@@ -116,29 +116,6 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
   }, [isDropdownOpen])
 
-  // 컨텍스트 메뉴 외부 클릭 감지
-  useEffect(() => {
-    const handleClick = () => {
-      setContextMenu(null)
-      setShowRatingSubmenu(false)
-    }
-    const handleScroll = () => {
-      setContextMenu(null)
-      setShowRatingSubmenu(false)
-    }
-
-    if (contextMenu) {
-      document.addEventListener('click', handleClick)
-      document.addEventListener('contextmenu', handleClick)
-      scrollAreaRef.current?.addEventListener('scroll', handleScroll)
-    }
-
-    return () => {
-      document.removeEventListener('click', handleClick)
-      document.removeEventListener('contextmenu', handleClick)
-      scrollAreaRef.current?.removeEventListener('scroll', handleScroll)
-    }
-  }, [contextMenu])
 
   // 정렬된 이미지 리스트 (ThumbnailPanel 내부에서 독립적으로 관리)
   const sortedImages = useMemo(() => {
@@ -1212,7 +1189,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                               setSelectedImages(new Set([imagePath]))
                               setLastSelectedIndex(index)
                             }
-                            console.log('Context menu triggered at', e.clientX, e.clientY)
+                            setShowRatingSubmenu(false) // 서브메뉴 초기화
                             setContextMenu({ x: e.clientX, y: e.clientY })
                           }}
                           onDoubleClick={() => {
@@ -1331,7 +1308,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                       setSelectedImages(new Set([imagePath]))
                       setLastSelectedIndex(index)
                     }
-                    console.log('Context menu triggered at', e.clientX, e.clientY)
+                    setShowRatingSubmenu(false) // 서브메뉴 초기화
                     setContextMenu({ x: e.clientX, y: e.clientY })
                   }}
                   onDoubleClick={() => {
@@ -1429,117 +1406,66 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         </div>
       )}
 
-      {/* 컨텍스트 메뉴 - Portal로 body에 렌더링 */}
+      {/* 컨텍스트 메뉴 */}
       {contextMenu && (
-        console.log('Rendering context menu at', contextMenu),
-        createPortal(
-          <div
-            className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-[9998] min-w-[12rem]"
-            style={{
-              left: `${contextMenu.x}px`,
-              top: `${contextMenu.y}px`
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-          {/* 잘라내기 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
-            onClick={() => {
-              setContextMenu(null)
-              // TODO: 잘라내기 구현
-            }}
-          >
-            <Scissors className="w-4 h-4" />
-            <span>잘라내기</span>
-          </button>
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => {
+            setContextMenu(null)
+            setShowRatingSubmenu(false)
+          }}
+          scrollRef={scrollAreaRef}
+        >
+          <ContextMenuItem
+            icon={<Scissors className="w-4 h-4" />}
+            label="잘라내기"
+            onClick={() => setContextMenu(null)}
+          />
+          <ContextMenuItem
+            icon={<Copy className="w-4 h-4" />}
+            label="복사"
+            onClick={() => setContextMenu(null)}
+          />
+          <ContextMenuItem
+            icon={<Copy className="w-4 h-4 scale-x-[-1]" />}
+            label="붙여넣기"
+            onClick={() => setContextMenu(null)}
+          />
+          <ContextMenuItem
+            icon={<FolderInput className="w-4 h-4" />}
+            label="이동하기"
+            onClick={() => setContextMenu(null)}
+          />
+          <ContextMenuItem
+            icon={<Trash2 className="w-4 h-4" />}
+            label="삭제"
+            onClick={() => setContextMenu(null)}
+          />
+          <ContextMenuItem
+            icon={<Edit3 className="w-4 h-4" />}
+            label="이름변경"
+            onClick={() => setContextMenu(null)}
+          />
 
-          {/* 복사 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
-            onClick={() => {
-              setContextMenu(null)
-              // TODO: 복사 구현
-            }}
-          >
-            <Copy className="w-4 h-4" />
-            <span>복사</span>
-          </button>
+          <ContextMenuDivider />
 
-          {/* 붙여넣기 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
-            onClick={() => {
-              setContextMenu(null)
-              // TODO: 붙여넣기 구현
-            }}
-          >
-            <Copy className="w-4 h-4 scale-x-[-1]" />
-            <span>붙여넣기</span>
-          </button>
-
-          {/* 이동하기 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
-            onClick={() => {
-              setContextMenu(null)
-              // TODO: 이동하기 구현
-            }}
-          >
-            <FolderInput className="w-4 h-4" />
-            <span>이동하기</span>
-          </button>
-
-          {/* 삭제 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
-            onClick={() => {
-              setContextMenu(null)
-              // TODO: 삭제 구현
-            }}
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>삭제</span>
-          </button>
-
-          {/* 이름변경 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
-            onClick={() => {
-              setContextMenu(null)
-              // TODO: 이름변경 구현
-            }}
-          >
-            <Edit3 className="w-4 h-4" />
-            <span>이름변경</span>
-          </button>
-
-          <div className="h-px bg-neutral-700 my-1" />
-
-          {/* 전체선택 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
+          <ContextMenuItem
+            label="전체선택"
             onClick={() => {
               setSelectedImages(new Set(sortedImages))
               setContextMenu(null)
             }}
-          >
-            전체선택
-          </button>
-
-          {/* 선택해제 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
+          />
+          <ContextMenuItem
+            label="선택해제"
             onClick={() => {
               setSelectedImages(new Set())
               setContextMenu(null)
             }}
-          >
-            선택해제
-          </button>
-
-          {/* 선택반전 */}
-          <button
-            className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
+          />
+          <ContextMenuItem
+            label="선택반전"
             onClick={() => {
               const newSelection = new Set<string>()
               sortedImages.forEach(img => {
@@ -1550,59 +1476,39 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
               setSelectedImages(newSelection)
               setContextMenu(null)
             }}
+          />
+
+          <ContextMenuDivider />
+
+          <ContextMenuSubmenu
+            icon={<Star className="w-4 h-4" />}
+            label="별점주기"
+            isOpen={showRatingSubmenu}
+            onOpenChange={setShowRatingSubmenu}
+            menuX={contextMenu.x}
           >
-            선택반전
-          </button>
-
-          <div className="h-px bg-neutral-700 my-1" />
-
-          {/* 별점주기 - 서브메뉴 */}
-          <div className="relative">
-            <button
-              className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center justify-between"
-              onMouseEnter={() => setShowRatingSubmenu(true)}
-            >
-              <div className="flex items-center gap-2">
-                <Star className="w-4 h-4" />
-                <span>별점주기</span>
-              </div>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-
-            {/* 별점 서브메뉴 */}
-            {showRatingSubmenu && (
-              <div
-                className="absolute left-full top-0 ml-1 bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 min-w-[8rem]"
-                onMouseLeave={() => setShowRatingSubmenu(false)}
-              >
-                {[0, 1, 2, 3, 4, 5].map(rating => (
-                  <button
-                    key={rating}
-                    className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700"
-                    onClick={async () => {
-                      // 선택된 모든 이미지에 별점 설정
-                      const imagesToRate = Array.from(selectedImages)
-                      await Promise.allSettled(
-                        imagesToRate.map(async (filePath) => {
-                          try {
-                            await writeImageRating(filePath, rating)
-                          } catch (error) {
-                            console.error(`Failed to set rating for ${filePath}:`, error)
-                          }
-                        })
-                      )
-                      setContextMenu(null)
-                      setShowRatingSubmenu(false)
-                    }}
-                  >
-                    {rating === 0 ? '별점 해제' : `★ ${rating}`}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>,
-          document.body
-        )
+            {[0, 1, 2, 3, 4, 5].map(rating => (
+              <ContextMenuItem
+                key={rating}
+                label={rating === 0 ? '별점 해제' : `★ ${rating}`}
+                onClick={async () => {
+                  const imagesToRate = Array.from(selectedImages)
+                  await Promise.allSettled(
+                    imagesToRate.map(async (filePath) => {
+                      try {
+                        await writeImageRating(filePath, rating)
+                      } catch (error) {
+                        console.error(`Failed to set rating for ${filePath}:`, error)
+                      }
+                    })
+                  )
+                  setContextMenu(null)
+                  setShowRatingSubmenu(false)
+                }}
+              />
+            ))}
+          </ContextMenuSubmenu>
+        </ContextMenu>
       )}
     </div>
   )
