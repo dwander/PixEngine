@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Loader2, Check, ChevronDown, Scissors, Copy, Trash2, Edit3, Star } from 'lucide-react'
+import { Loader2, Check, ChevronDown, Scissors, Copy, Trash2, Edit3, Star, Filter } from 'lucide-react'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -26,6 +26,8 @@ import {
 
 type SortField = 'filename' | 'filesize' | 'date_taken' | 'modified_time'
 type SortOrder = 'asc' | 'desc'
+type RatingMatchMode = 'exact' | 'higher'
+type RatingFilter = 'all' | 'all_ratings' | '1' | '2' | '3' | '4' | '5' | 'unrated'
 
 interface ThumbnailResult {
   path: string
@@ -102,6 +104,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  // 필터링 상태
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all') // 기본값: 전체
+  const [ratingMatchMode, setRatingMatchMode] = useState<RatingMatchMode>('exact')
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
+  const filterDropdownRef = useRef<HTMLDivElement>(null)
+
   // 연속 재생 모드 상태
   const [continuousPlayState, setContinuousPlayState] = useState<{
     isActive: boolean
@@ -120,23 +128,54 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false)
       }
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setIsFilterDropdownOpen(false)
+      }
     }
 
-    if (isDropdownOpen) {
+    if (isDropdownOpen || isFilterDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isDropdownOpen])
+  }, [isDropdownOpen, isFilterDropdownOpen])
 
 
   // 정렬된 이미지 리스트 (ThumbnailPanel 내부에서 독립적으로 관리)
   const sortedImages = useMemo(() => {
-    const sorted = [...imageFiles]
+    // 1. 필터링: 별점 조건에 맞는 이미지만 선택
+    let filtered = [...imageFiles]
 
-    sorted.sort((a, b) => {
+    // "전체" 선택이 아닌 경우에만 필터링 적용
+    if (ratingFilter !== 'all') {
+      filtered = imageFiles.filter(imagePath => {
+        const imageRating = ratings.get(imagePath) || 0
+
+        if (ratingFilter === 'all_ratings') {
+          // 모든 별점: 1-5점만 (0 제외)
+          return imageRating >= 1 && imageRating <= 5
+        } else if (ratingFilter === 'unrated') {
+          // 별점 없음: 0점만
+          return imageRating === 0
+        } else {
+          // 개별 별점 (1-5)
+          const targetRating = parseInt(ratingFilter, 10)
+
+          if (ratingMatchMode === 'exact') {
+            // 별점 일치: 선택된 별점과 정확히 일치
+            return imageRating === targetRating
+          } else {
+            // 선택한 별점보다 높은: 선택된 별점 이상
+            return imageRating >= targetRating
+          }
+        }
+      })
+    }
+
+    // 2. 정렬
+    filtered.sort((a, b) => {
       let compareResult = 0
 
       switch (sortField) {
@@ -175,8 +214,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       return sortOrder === 'asc' ? compareResult : -compareResult
     })
 
-    return sorted
-  }, [imageFiles, sortField, sortOrder, lightMetadataMap])
+    return filtered
+  }, [imageFiles, sortField, sortOrder, lightMetadataMap, ratings, ratingFilter, ratingMatchMode])
 
   // currentFolder 변경 (폴더 변경) 시에만 focusedIndex 초기화 및 첫 이미지 로드
   useEffect(() => {
@@ -232,6 +271,14 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         if (savedSortOrder) {
           setSortOrder(savedSortOrder)
         }
+        const savedRatingFilter = await store.get<RatingFilter>('thumbnailRatingFilter')
+        if (savedRatingFilter) {
+          setRatingFilter(savedRatingFilter)
+        }
+        const savedMatchMode = await store.get<RatingMatchMode>('thumbnailFilterMatchMode')
+        if (savedMatchMode) {
+          setRatingMatchMode(savedMatchMode)
+        }
       } catch (error) {
         console.error('Failed to load thumbnail settings:', error)
       }
@@ -256,6 +303,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         await store.set('thumbnailSize', thumbnailSize)
         await store.set('thumbnailSortField', sortField)
         await store.set('thumbnailSortOrder', sortOrder)
+        await store.set('thumbnailRatingFilter', ratingFilter)
+        await store.set('thumbnailFilterMatchMode', ratingMatchMode)
         await store.save()
       } catch (error) {
         console.error('Failed to save thumbnail settings:', error)
@@ -269,7 +318,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       if (timeoutId) clearTimeout(timeoutId)
       store = null
     }
-  }, [thumbnailSize, sortField, sortOrder])
+  }, [thumbnailSize, sortField, sortOrder, ratingFilter, ratingMatchMode])
 
   // 패널 방향 및 크기 감지
   useEffect(() => {
@@ -1515,111 +1564,245 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
   }
 
+  // 필터 레이블 생성
+  const getFilterLabel = () => {
+    switch (ratingFilter) {
+      case 'all':
+        return '전체'
+      case 'all_ratings':
+        return '모든 별점'
+      case '1':
+        return '1점'
+      case '2':
+        return '2점'
+      case '3':
+        return '3점'
+      case '4':
+        return '4점'
+      case '5':
+        return '5점'
+      case 'unrated':
+        return '별점 없음'
+      default:
+        return '전체'
+    }
+  }
+
   return (
     <div ref={containerRef} className="flex h-full flex-col bg-neutral-900">
-      {/* 정렬 드롭다운 */}
+      {/* 정렬 및 필터 드롭다운 */}
       <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-300 hover:bg-neutral-800"
-          >
-            <span>
-              {sortField === 'filename' && '파일명'}
-              {sortField === 'filesize' && '파일크기'}
-              {sortField === 'date_taken' && '촬영날짜'}
-              {sortField === 'modified_time' && '수정시간'}
-            </span>
-            <span className="text-gray-500">
-              {sortOrder === 'asc' ? '↑' : '↓'}
-            </span>
-            <ChevronDown className="h-4 w-4" />
-          </button>
+        <div className="flex items-center gap-2">
+          {/* 정렬 드롭다운 */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-300 hover:bg-neutral-800"
+            >
+              <span>
+                {sortField === 'filename' && '파일명'}
+                {sortField === 'filesize' && '파일크기'}
+                {sortField === 'date_taken' && '촬영날짜'}
+                {sortField === 'modified_time' && '수정시간'}
+              </span>
+              <span className="text-gray-500">
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </span>
+              <ChevronDown className="h-4 w-4" />
+            </button>
 
-          {isDropdownOpen && (
-            <div className="absolute left-0 top-full z-10 mt-1 w-48 rounded-md border border-neutral-700 bg-neutral-800 shadow-lg">
-              <div className="py-1">
-                {/* 정렬 기준 */}
-                <button
-                  onClick={() => {
-                    setSortField('filename')
-                    setIsDropdownOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
-                >
-                  <div className="w-4">
-                    {sortField === 'filename' && <Check className="h-4 w-4" />}
-                  </div>
-                  <span>파일명</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSortField('filesize')
-                    setIsDropdownOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
-                >
-                  <div className="w-4">
-                    {sortField === 'filesize' && <Check className="h-4 w-4" />}
-                  </div>
-                  <span>파일크기</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSortField('date_taken')
-                    setIsDropdownOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
-                >
-                  <div className="w-4">
-                    {sortField === 'date_taken' && <Check className="h-4 w-4" />}
-                  </div>
-                  <span>촬영날짜</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSortField('modified_time')
-                    setIsDropdownOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
-                >
-                  <div className="w-4">
-                    {sortField === 'modified_time' && <Check className="h-4 w-4" />}
-                  </div>
-                  <span>수정시간</span>
-                </button>
+            {isDropdownOpen && (
+              <div className="absolute left-0 top-full z-10 mt-1 w-48 rounded-md border border-neutral-700 bg-neutral-800 shadow-lg">
+                <div className="py-1">
+                  {/* 정렬 기준 */}
+                  <button
+                    onClick={() => {
+                      setSortField('filename')
+                      setIsDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {sortField === 'filename' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>파일명</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSortField('filesize')
+                      setIsDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {sortField === 'filesize' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>파일크기</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSortField('date_taken')
+                      setIsDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {sortField === 'date_taken' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>촬영날짜</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSortField('modified_time')
+                      setIsDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {sortField === 'modified_time' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>수정시간</span>
+                  </button>
 
-                {/* 구분선 */}
-                <div className="my-1 h-px bg-neutral-700" />
+                  {/* 구분선 */}
+                  <div className="my-1 h-px bg-neutral-700" />
 
-                {/* 정렬 순서 */}
-                <button
-                  onClick={() => {
-                    setSortOrder('asc')
-                    setIsDropdownOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
-                >
-                  <div className="w-4">
-                    {sortOrder === 'asc' && <Check className="h-4 w-4" />}
-                  </div>
-                  <span>오름차순</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSortOrder('desc')
-                    setIsDropdownOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
-                >
-                  <div className="w-4">
-                    {sortOrder === 'desc' && <Check className="h-4 w-4" />}
-                  </div>
-                  <span>내림차순</span>
-                </button>
+                  {/* 정렬 순서 */}
+                  <button
+                    onClick={() => {
+                      setSortOrder('asc')
+                      setIsDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {sortOrder === 'asc' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>오름차순</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSortOrder('desc')
+                      setIsDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {sortOrder === 'desc' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>내림차순</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* 필터 드롭다운 */}
+          <div className="relative" ref={filterDropdownRef}>
+            <button
+              onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+              className="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-300 hover:bg-neutral-800"
+            >
+              <Filter className="h-4 w-4" />
+              <span>{getFilterLabel()}</span>
+              <ChevronDown className="h-4 w-4" />
+            </button>
+
+            {isFilterDropdownOpen && (
+              <div className="absolute left-0 top-full z-10 mt-1 w-56 rounded-md border border-neutral-700 bg-neutral-800 shadow-lg">
+                <div className="py-1">
+                  {/* 전체 */}
+                  <button
+                    onClick={() => {
+                      setRatingFilter('all')
+                      setIsFilterDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {ratingFilter === 'all' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>전체</span>
+                  </button>
+
+                  {/* 구분선 */}
+                  <div className="my-1 h-px bg-neutral-700" />
+
+                  {/* 모든 별점 */}
+                  <button
+                    onClick={() => {
+                      setRatingFilter('all_ratings')
+                      setIsFilterDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {ratingFilter === 'all_ratings' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>모든 별점</span>
+                  </button>
+
+                  {/* 개별 별점 */}
+                  {(['1', '2', '3', '4', '5'] as const).map(rating => (
+                    <button
+                      key={rating}
+                      onClick={() => {
+                        setRatingFilter(rating)
+                        setIsFilterDropdownOpen(false)
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                    >
+                      <div className="w-4">
+                        {ratingFilter === rating && <Check className="h-4 w-4" />}
+                      </div>
+                      <span>{rating}점</span>
+                    </button>
+                  ))}
+
+                  {/* 별점 없음 */}
+                  <button
+                    onClick={() => {
+                      setRatingFilter('unrated')
+                      setIsFilterDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {ratingFilter === 'unrated' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>별점 없음</span>
+                  </button>
+
+                  {/* 구분선 */}
+                  <div className="my-1 h-px bg-neutral-700" />
+
+                  {/* 매칭 모드 */}
+                  <button
+                    onClick={() => {
+                      setRatingMatchMode('exact')
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {ratingMatchMode === 'exact' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>별점 일치</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRatingMatchMode('higher')
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-neutral-700"
+                  >
+                    <div className="w-4">
+                      {ratingMatchMode === 'higher' && <Check className="h-4 w-4" />}
+                    </div>
+                    <span>선택한 별점보다 높은</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
