@@ -1101,6 +1101,20 @@ async fn delete_folder(path: String) -> Result<(), String> {
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// 파일들 삭제 (휴지통으로 이동)
+#[tauri::command]
+async fn delete_files(file_paths: Vec<String>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        for path in &file_paths {
+            trash::delete(path)
+                .map_err(|e| format!("파일 삭제 실패 ({}): {}", path, e))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 // 파일 경로들을 클립보드에 복사
 #[tauri::command]
 async fn copy_files_to_clipboard(file_paths: Vec<String>, is_cut: bool) -> Result<(), String> {
@@ -1223,6 +1237,7 @@ pub fn run() {
             create_folder,
             rename_folder,
             delete_folder,
+            delete_files,
             copy_files_to_clipboard,
             paste_files_from_clipboard,
             start_folder_watch,

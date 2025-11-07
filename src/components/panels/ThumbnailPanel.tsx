@@ -7,6 +7,7 @@ import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useToast } from '../../contexts/ToastContext'
+import { useDialog } from '../../contexts/DialogContext'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
@@ -61,6 +62,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const { success, error } = useToast()
+  const { showConfirm } = useDialog()
   const [thumbnails, setThumbnails] = useState<Map<string, ThumbnailResult>>(new Map())
   const [progress, setProgress] = useState<ThumbnailProgress | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -688,6 +690,56 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     [conflictDialog, handlePaste, overwriteFiles, skipFiles, currentFolder, success, error]
   )
 
+  // 파일 삭제 핸들러
+  const handleDelete = useCallback(async () => {
+    const imagesToDelete = Array.from(selectedImages)
+
+    if (imagesToDelete.length === 0) {
+      return
+    }
+
+    const fileCount = imagesToDelete.length
+    let message: string
+    if (fileCount === 1) {
+      const fileName = imagesToDelete[0].split(/[/\\]/).pop() || '파일'
+      message = `${fileName}을(를) 삭제하시겠습니까?`
+    } else {
+      message = `파일 ${fileCount}개를 삭제하시겠습니까?`
+    }
+
+    // 확인 다이얼로그 표시
+    const result = await showConfirm(message, {
+      confirmText: '삭제',
+      cancelText: '취소',
+      icon: 'warning',
+      dontAskAgainKey: 'deleteFiles',
+    })
+
+    if (!result.confirmed) {
+      return
+    }
+
+    try {
+      await invoke('delete_files', { filePaths: imagesToDelete })
+
+      let successMessage: string
+      if (fileCount === 1) {
+        const fileName = imagesToDelete[0].split(/[/\\]/).pop() || '파일'
+        successMessage = `${fileName}을(를) 삭제했습니다.`
+      } else {
+        successMessage = `파일 ${fileCount}개를 삭제했습니다.`
+      }
+
+      success(successMessage)
+
+      // 선택 상태 초기화
+      setSelectedImages(new Set())
+      setCutImages(new Set())
+    } catch (err) {
+      error(err as string)
+    }
+  }, [selectedImages, showConfirm, success, error])
+
   // 키보드 다운 핸들러 (e.repeat로 탭/홀드 구분)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Ctrl+C로 클립보드 복사
@@ -789,6 +841,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
       e.preventDefault()
       handlePaste()
+      return
+    }
+
+    // Delete 키로 파일 삭제 (Ctrl/Cmd 키 없을 때만)
+    if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault()
+      handleDelete()
       return
     }
 
@@ -932,7 +991,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         setFocusedIndex(foundIndex)
       }
     }
-  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error, handlePaste])
+  }, [isZoomedIn, sortedImages, focusedIndex, isVertical, columnCount, rowVirtualizer, horizontalVirtualizer, stopContinuousPlay, startContinuousPlay, toggleFullscreen, selectedImages, success, error, handlePaste, handleDelete])
 
   // 키보드 업 핸들러 (연속 재생 종료)
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -1710,7 +1769,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             icon={<Trash2 className="w-4 h-4" />}
             label="삭제"
             shortcut="Delete"
-            onClick={() => setContextMenu(null)}
+            onClick={() => {
+              handleDelete()
+              setContextMenu(null)
+            }}
           />
           <ContextMenuItem
             icon={<Edit3 className="w-4 h-4" />}
