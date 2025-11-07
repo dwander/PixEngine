@@ -189,10 +189,14 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   // imageFiles 변경 (폴더 변경) 시 focusedIndex 초기화 및 첫 이미지 로드
   useEffect(() => {
     setFocusedIndex(0)
-    setSelectedImages(new Set()) // 다중 선택 초기화
-    setLastSelectedIndex(null)
+    // 첫 번째 이미지를 선택 상태로 초기화
     if (sortedImages.length > 0) {
+      setSelectedImages(new Set([sortedImages[0]]))
+      setLastSelectedIndex(0)
       loadImage(sortedImages[0], 0)
+    } else {
+      setSelectedImages(new Set())
+      setLastSelectedIndex(null)
     }
   }, [imageFiles, loadImage, sortedImages])
 
@@ -1215,7 +1219,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                         >
                           <div
                             className={`group relative w-full h-full cursor-pointer overflow-hidden rounded-lg ${
-                              isFocused ? 'ring-2 ring-blue-500' : isSelected ? 'ring-2 ring-blue-400/60' : ''
+                              isFocused ? 'ring-2 ring-blue-500' : isSelected ? 'ring-2 ring-white/80' : ''
                             } hover:bg-neutral-800/50 transition-colors`}
                           >
                             {thumbnail ? (
@@ -1332,7 +1336,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                 >
                   <div
                     className={`group relative w-full h-full cursor-pointer overflow-hidden rounded-lg ${
-                      isFocused ? 'ring-2 ring-blue-500' : isSelected ? 'ring-2 ring-blue-400/60' : ''
+                      isFocused ? 'ring-2 ring-blue-500' : isSelected ? 'ring-2 ring-white/80' : ''
                     } hover:bg-neutral-800/50 transition-colors`}
                   >
                     {thumbnail ? (
