@@ -58,7 +58,7 @@ interface ThumbnailProgress {
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage, preloadImages } = useImageContext()
-  const { imageFiles, lightMetadataMap, currentFolder, loadLightMetadata } = useFolderContext()
+  const { imageFiles, lightMetadataMap, currentFolder, loadLightMetadata, renameFileInList } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const { success, error } = useToast()
@@ -756,6 +756,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       success(`파일명을 변경했습니다.`)
 
+      // FolderContext의 imageFiles 즉시 업데이트 (폴더 감시 이벤트보다 빠름)
+      renameFileInList(oldPath, newPath)
+
       // 로컬 상태를 일괄 업데이트하여 리렌더링 최소화
       setThumbnails((prev) => {
         const thumbnail = prev.get(oldPath)
@@ -788,17 +791,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       // 이름 변경 상태 초기화
       setRenamingImage(null)
       setNewFileName('')
-
-      // 메타데이터 새로 로드 (비동기, 백그라운드에서 실행)
-      loadLightMetadata([newPath]).catch((err) => {
-        console.error('Failed to load metadata for renamed file:', err)
-      })
     } catch (err) {
       error(err as string)
       setRenamingImage(null)
       setNewFileName('')
     }
-  }, [renamingImage, newFileName, success, error, loadLightMetadata])
+  }, [renamingImage, newFileName, success, error, renameFileInList])
 
   // 파일명 변경 취소 핸들러
   const handleRenameCancel = useCallback(() => {

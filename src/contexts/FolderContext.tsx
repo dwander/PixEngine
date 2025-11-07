@@ -22,6 +22,7 @@ interface FolderContextType {
   setLoading: (loading: boolean) => void;
   loadLightMetadata: (imagePaths: string[]) => Promise<void>;
   refreshCurrentFolder: () => Promise<void>;
+  renameFileInList: (oldPath: string, newPath: string) => void;
 }
 
 const FolderContext = createContext<FolderContextType | undefined>(undefined);
@@ -51,6 +52,27 @@ export function FolderProvider({ children }: { children: ReactNode }) {
   const setLoading = (loading: boolean) => {
     setIsLoading(loading);
   };
+
+  // 파일명 변경 시 로컬 상태 즉시 업데이트
+  const renameFileInList = useCallback((oldPath: string, newPath: string) => {
+    setImageFiles((prev) => {
+      const index = prev.indexOf(oldPath);
+      if (index === -1) return prev;
+      const next = [...prev];
+      next[index] = newPath;
+      return next;
+    });
+
+    // 메타데이터 맵도 업데이트
+    setLightMetadataMap((prev) => {
+      const metadata = prev.get(oldPath);
+      if (!metadata) return prev;
+      const next = new Map(prev);
+      next.delete(oldPath);
+      next.set(newPath, { ...metadata, path: newPath });
+      return next;
+    });
+  }, []);
 
   // 경량 메타데이터 로딩 (백그라운드)
   const loadLightMetadata = useCallback(async (imagePaths: string[]) => {
@@ -164,6 +186,7 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       setLoading,
       loadLightMetadata,
       refreshCurrentFolder,
+      renameFileInList,
     }}>
       {children}
     </FolderContext.Provider>
