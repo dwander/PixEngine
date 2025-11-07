@@ -1089,6 +1089,30 @@ async fn rename_folder(old_path: String, new_name: String) -> Result<(), String>
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// 파일 이름 변경
+#[tauri::command]
+async fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let old_path_buf = PathBuf::from(&old_path);
+        let parent = old_path_buf.parent()
+            .ok_or("부모 디렉토리를 찾을 수 없습니다")?;
+        let new_path = parent.join(&new_name);
+
+        // 이미 존재하는 파일인지 확인
+        if new_path.exists() && new_path != old_path_buf {
+            return Err("같은 이름의 파일이 이미 존재합니다.".to_string());
+        }
+
+        fs::rename(&old_path, &new_path)
+            .map_err(|e| format!("이름 변경 실패: {}", e))?;
+
+        // 새 경로 반환
+        Ok(new_path.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 // 폴더 삭제
 #[tauri::command]
 async fn delete_folder(path: String) -> Result<(), String> {
@@ -1236,6 +1260,7 @@ pub fn run() {
             write_image_rating,
             create_folder,
             rename_folder,
+            rename_file,
             delete_folder,
             delete_files,
             copy_files_to_clipboard,

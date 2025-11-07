@@ -89,6 +89,8 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const horizontalContentRef = useRef<HTMLDivElement>(null) // 가로 모드 내부 컨테이너
   const [focusedIndex, setFocusedIndex] = useState(0) // 키보드 포커스 인덱스
   const [ratings, setRatings] = useState<Map<string, number>>(new Map()) // 이미지 별점 (경로 -> 0-5)
+  const [renamingImage, setRenamingImage] = useState<string | null>(null) // 이름 변경 중인 이미지 경로
+  const [newFileName, setNewFileName] = useState('') // 새 파일명
 
   // 정렬 상태
   const [sortField, setSortField] = useState<SortField>('filename')
@@ -690,6 +692,68 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     [conflictDialog, handlePaste, overwriteFiles, skipFiles, currentFolder, success, error]
   )
 
+  // 파일명 변경 핸들러
+  const handleRename = useCallback(() => {
+    // 선택된 이미지가 정확히 1개일 때만
+    if (selectedImages.size !== 1) {
+      return
+    }
+
+    const imagePath = Array.from(selectedImages)[0]
+    const fileName = imagePath.split(/[/\\]/).pop() || ''
+    const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.')) || fileName
+
+    setRenamingImage(imagePath)
+    setNewFileName(fileNameWithoutExt)
+  }, [selectedImages])
+
+  // 파일명 변경 완료 핸들러
+  const handleRenameComplete = useCallback(async () => {
+    if (!renamingImage || !newFileName.trim()) {
+      setRenamingImage(null)
+      setNewFileName('')
+      return
+    }
+
+    const oldPath = renamingImage
+    const oldFileName = oldPath.split(/[/\\]/).pop() || ''
+    const extension = oldFileName.substring(oldFileName.lastIndexOf('.'))
+    const newFileNameWithExt = newFileName.trim() + extension
+
+    // 이름이 변경되지 않았으면 취소
+    if (newFileNameWithExt === oldFileName) {
+      setRenamingImage(null)
+      setNewFileName('')
+      return
+    }
+
+    try {
+      const newPath = await invoke<string>('rename_file', {
+        oldPath,
+        newName: newFileNameWithExt,
+      })
+
+      success(`파일명을 변경했습니다.`)
+
+      // 선택 상태 업데이트
+      setSelectedImages(new Set([newPath]))
+
+      // 이름 변경 상태 초기화
+      setRenamingImage(null)
+      setNewFileName('')
+    } catch (err) {
+      error(err as string)
+      setRenamingImage(null)
+      setNewFileName('')
+    }
+  }, [renamingImage, newFileName, success, error])
+
+  // 파일명 변경 취소 핸들러
+  const handleRenameCancel = useCallback(() => {
+    setRenamingImage(null)
+    setNewFileName('')
+  }, [])
+
   // 파일 삭제 핸들러
   const handleDelete = useCallback(async () => {
     const imagesToDelete = Array.from(selectedImages)
@@ -846,6 +910,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
       e.preventDefault()
       handlePaste()
+      return
+    }
+
+    // F2 키로 파일명 변경
+    if (e.key === 'F2') {
+      e.preventDefault()
+      handleRename()
       return
     }
 
@@ -1630,8 +1701,28 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                         {rating}
                       </div>
                     )}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                      <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
+                    <div className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 transition-opacity ${renamingImage === imagePath ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                      {renamingImage === imagePath ? (
+                        <input
+                          type="text"
+                          value={newFileName}
+                          onChange={(e) => setNewFileName(e.target.value)}
+                          onBlur={handleRenameComplete}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleRenameComplete()
+                            } else if (e.key === 'Escape') {
+                              handleRenameCancel()
+                            }
+                            e.stopPropagation() // 부모의 키 이벤트 방지
+                          }}
+                          onClick={(e) => e.stopPropagation()} // 클릭 이벤트 전파 방지
+                          autoFocus
+                          className="w-full px-1 py-0.5 text-xs text-white bg-neutral-900/90 border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      ) : (
+                        <p className="truncate text-xs text-white">{imagePath.split(/[/\\]/).pop()}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1768,6 +1859,17 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             shortcut="Ctrl+V"
             onClick={() => {
               handlePaste()
+              setContextMenu(null)
+            }}
+          />
+          <ContextMenuDivider />
+          <ContextMenuItem
+            icon={<Edit3 className="w-4 h-4" />}
+            label="이름 바꾸기"
+            shortcut="F2"
+            disabled={selectedImages.size !== 1}
+            onClick={() => {
+              handleRename()
               setContextMenu(null)
             }}
           />
