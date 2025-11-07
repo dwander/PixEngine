@@ -1206,11 +1206,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                           }}
                           onContextMenu={(e) => {
                             e.preventDefault()
+                            e.stopPropagation()
                             // 우클릭한 이미지가 선택되지 않았으면 해당 이미지만 선택
                             if (!selectedImages.has(imagePath)) {
                               setSelectedImages(new Set([imagePath]))
                               setLastSelectedIndex(index)
                             }
+                            console.log('Context menu triggered at', e.clientX, e.clientY)
                             setContextMenu({ x: e.clientX, y: e.clientY })
                           }}
                           onDoubleClick={() => {
@@ -1322,12 +1324,14 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault()
+                    e.stopPropagation()
                     const index = virtualItem.index
                     // 우클릭한 이미지가 선택되지 않았으면 해당 이미지만 선택
                     if (!selectedImages.has(imagePath)) {
                       setSelectedImages(new Set([imagePath]))
                       setLastSelectedIndex(index)
                     }
+                    console.log('Context menu triggered at', e.clientX, e.clientY)
                     setContextMenu({ x: e.clientX, y: e.clientY })
                   }}
                   onDoubleClick={() => {
@@ -1426,15 +1430,17 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       )}
 
       {/* 컨텍스트 메뉴 - Portal로 body에 렌더링 */}
-      {contextMenu && createPortal(
-        <div
-          className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-[9998] min-w-[12rem]"
-          style={{
-            left: `${contextMenu.x}px`,
-            top: `${contextMenu.y}px`
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
+      {contextMenu && (
+        console.log('Rendering context menu at', contextMenu),
+        createPortal(
+          <div
+            className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-[9998] min-w-[12rem]"
+            style={{
+              left: `${contextMenu.x}px`,
+              top: `${contextMenu.y}px`
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
           {/* 잘라내기 */}
           <button
             className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-neutral-700 flex items-center gap-2"
@@ -1594,9 +1600,9 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                 ))}
               </div>
             )}
-          </div>
-        </div>,
-        document.body
+          </div>,
+          document.body
+        )
       )}
     </div>
   )
