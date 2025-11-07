@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, memo } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { useImageContext } from '../../contexts/ImageContext'
+import { useFolderContext } from '../../contexts/FolderContext'
 import { Check, Shrink, Expand, X, ChevronLeft, ChevronRight, Star } from 'lucide-react'
 import type { HistogramWorkerMessage, HistogramWorkerResult } from '../../workers/histogram.worker'
 import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
@@ -104,6 +105,7 @@ interface ImageViewerPanelProps {
 
 export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'none', isFullscreenMode = false, onToggleFullscreen }: ImageViewerPanelProps) {
   const { currentPath, getCachedImage, metadata } = useImageContext()
+  const { pauseFolderWatch, resumeFolderWatch } = useFolderContext()
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [_imageLoaded, setImageLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -261,7 +263,10 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         setCurrentRating(rating)
         ratingJustSetRef.current = { path: currentPath, rating }
 
-        // 백그라운드에서 저장 및 이벤트 전송
+        // 1. 폴더 감시 일시 중지
+        await pauseFolderWatch()
+
+        // 2. 백그라운드에서 저장 및 이벤트 전송
         try {
           await writeImageRating(currentPath, rating)
           console.log(`별점 ${rating}으로 설정됨: ${currentPath}`)
@@ -276,13 +281,18 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
           ratingJustSetRef.current = null
         } finally {
           isProcessing = false
+
+          // 3. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
+          setTimeout(() => {
+            resumeFolderWatch()
+          }, 600)
         }
       }
     }
 
     document.addEventListener('keydown', handleRatingKey)
     return () => document.removeEventListener('keydown', handleRatingKey)
-  }, [currentPath])
+  }, [currentPath, pauseFolderWatch, resumeFolderWatch])
 
   // 이미지 변경 시 별점 로드
   useEffect(() => {

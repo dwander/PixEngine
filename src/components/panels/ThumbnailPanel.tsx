@@ -1173,13 +1173,23 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       // 모든 선택된 이미지에 별점 설정 (순차 처리 - 파일 잠금 문제 방지)
       ;(async () => {
-        for (const filePath of imagesToRate) {
-          try {
-            await writeImageRating(filePath, rating)
-            // rating-changed 이벤트는 백엔드에서 발생하므로 자동으로 UI 업데이트됨
-          } catch (error) {
-            console.error(`Failed to set rating for ${filePath}:`, error)
+        // 1. 폴더 감시 일시 중지
+        await pauseFolderWatch()
+
+        try {
+          for (const filePath of imagesToRate) {
+            try {
+              await writeImageRating(filePath, rating)
+              // rating-changed 이벤트는 백엔드에서 발생하므로 자동으로 UI 업데이트됨
+            } catch (error) {
+              console.error(`Failed to set rating for ${filePath}:`, error)
+            }
           }
+        } finally {
+          // 2. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
+          setTimeout(() => {
+            resumeFolderWatch()
+          }, 600)
         }
       })()
     } else if (e.key.length === 1 && /^[a-zA-Z6-9]$/.test(e.key)) {
