@@ -657,17 +657,17 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         imagesToRate.push(sortedImages[focusedIndex])
       }
 
-      // 모든 선택된 이미지에 별점 설정 (병렬 처리)
-      Promise.allSettled(
-        imagesToRate.map(async (filePath) => {
+      // 모든 선택된 이미지에 별점 설정 (순차 처리 - 파일 잠금 문제 방지)
+      ;(async () => {
+        for (const filePath of imagesToRate) {
           try {
             await writeImageRating(filePath, rating)
             // rating-changed 이벤트는 백엔드에서 발생하므로 자동으로 UI 업데이트됨
           } catch (error) {
             console.error(`Failed to set rating for ${filePath}:`, error)
           }
-        })
-      )
+        }
+      })()
     } else if (e.key.length === 1 && /^[a-zA-Z6-9]$/.test(e.key)) {
       // 알파벳/6-9 숫자 키: 단일 문자로 시작하는 다음 파일 검색
       e.preventDefault()
@@ -1415,7 +1415,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             setContextMenu(null)
             setShowRatingSubmenu(false)
           }}
-          scrollRef={scrollAreaRef}
+          scrollRef={scrollAreaRef as React.RefObject<HTMLElement>}
         >
           <ContextMenuItem
             icon={<Scissors className="w-4 h-4" />}
@@ -1493,15 +1493,16 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                 label={rating === 0 ? '별점 해제' : `★ ${rating}`}
                 onClick={async () => {
                   const imagesToRate = Array.from(selectedImages)
-                  await Promise.allSettled(
-                    imagesToRate.map(async (filePath) => {
-                      try {
-                        await writeImageRating(filePath, rating)
-                      } catch (error) {
-                        console.error(`Failed to set rating for ${filePath}:`, error)
-                      }
-                    })
-                  )
+
+                  // 순차 처리로 변경 (파일 잠금 문제 방지)
+                  for (const filePath of imagesToRate) {
+                    try {
+                      await writeImageRating(filePath, rating)
+                    } catch (error) {
+                      console.error(`Failed to set rating for ${filePath}:`, error)
+                    }
+                  }
+
                   setContextMenu(null)
                   setShowRatingSubmenu(false)
                 }}

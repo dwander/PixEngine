@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Button } from '../ui/Button'
 import { useDialog } from '../../contexts/DialogContext'
 import { useToast } from '../../contexts/ToastContext'

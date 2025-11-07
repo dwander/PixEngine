@@ -295,7 +295,7 @@ export function FolderTreePanel() {
     folderRefreshCallbacks.current.set(path, callback);
   };
 
-  const handleRenameComplete = async (oldPath: string, newName?: string, wasRenamed?: boolean) => {
+  const handleRenameComplete = async (oldPath: string, _newName?: string, wasRenamed?: boolean) => {
     setRenamingNode(null);
 
     // 부모 폴더 새로고침 (이름이 변경된 경우에만)
@@ -542,7 +542,10 @@ export function FolderTreePanel() {
           </button>
           <button
             className="w-full px-3 py-1.5 text-sm text-left hover:bg-neutral-700 cursor-pointer text-red-400 flex items-center gap-2"
-            onClick={handleDeleteFolder}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDeleteFolder()
+            }}
           >
             <Trash2 className="h-4 w-4" />
             삭제

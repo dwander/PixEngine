@@ -1,4 +1,4 @@
-use tauri::{Manager, PhysicalPosition, PhysicalSize, State};
+use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, State};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -1037,13 +1037,23 @@ async fn read_image_rating(file_path: String) -> Result<i32, String> {
 
 // XMP Rating 쓰기
 #[tauri::command]
-async fn write_image_rating(file_path: String, rating: i32) -> Result<(), String> {
+async fn write_image_rating(app: tauri::AppHandle, file_path: String, rating: i32) -> Result<(), String> {
+    let file_path_clone = file_path.clone();
+
     // 백그라운드 스레드에서 실행 (파일 I/O 블로킹)
     tokio::task::spawn_blocking(move || {
-        rating::write_rating(&file_path, rating)
+        rating::write_rating(&file_path_clone, rating)
     })
     .await
-    .map_err(|e| format!("Task failed: {}", e))?
+    .map_err(|e| format!("Task failed: {}", e))??;
+
+    // 별점 변경 이벤트 발생
+    app.emit("rating-changed", serde_json::json!({
+        "path": file_path,
+        "rating": rating
+    })).map_err(|e| format!("Failed to emit event: {}", e))?;
+
+    Ok(())
 }
 
 // 폴더 생성
