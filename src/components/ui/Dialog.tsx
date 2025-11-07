@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, AlertCircle, AlertTriangle, Info, CheckCircle } from 'lucide-react'
 import { Button } from './Button'
 
@@ -34,24 +34,96 @@ interface DialogProps {
 export function Dialog({ isOpen, options, onClose }: DialogProps) {
   const [inputValue, setInputValue] = useState(options.defaultValue || '')
   const [dontAskAgain, setDontAskAgain] = useState(false)
+  const [isTabPressed, setIsTabPressed] = useState(false)
+  const [focusedButton, setFocusedButton] = useState<'cancel' | 'confirm' | null>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (isOpen) {
       setInputValue(options.defaultValue || '')
       setDontAskAgain(false)
+      setIsTabPressed(false)
+
+      // 다이얼로그가 열릴 때 취소 버튼에 포커스 (실수 방지)
+      // prompt 타입이 아닐 때만 (prompt는 input이 autoFocus 받음)
+      if (options.type !== 'prompt') {
+        setTimeout(() => {
+          if (options.type === 'alert') {
+            confirmButtonRef.current?.focus()
+          } else {
+            cancelButtonRef.current?.focus()
+          }
+        }, 100)
+      }
     }
-  }, [isOpen, options.defaultValue])
+  }, [isOpen, options.defaultValue, options.type])
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+    const handleKeyboard = (e: KeyboardEvent) => {
+      if (!isOpen) return
+
+      // Escape 키로 닫기
+      if (e.key === 'Escape') {
         handleCancel()
+        return
+      }
+
+      // Tab 키 - 다이얼로그 내부에서만 순환
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        setIsTabPressed(true)
+
+        const activeElement = document.activeElement
+
+        // alert 타입 (확인 버튼만 있음)
+        if (options.type === 'alert') {
+          confirmButtonRef.current?.focus()
+          setFocusedButton('confirm')
+          return
+        }
+
+        // confirm/prompt 타입 (취소, 확인 버튼 둘 다)
+        if (e.shiftKey) {
+          // Shift+Tab: 역방향
+          if (activeElement === confirmButtonRef.current) {
+            cancelButtonRef.current?.focus()
+            setFocusedButton('cancel')
+          } else {
+            confirmButtonRef.current?.focus()
+            setFocusedButton('confirm')
+          }
+        } else {
+          // Tab: 정방향
+          if (activeElement === cancelButtonRef.current) {
+            confirmButtonRef.current?.focus()
+            setFocusedButton('confirm')
+          } else {
+            cancelButtonRef.current?.focus()
+            setFocusedButton('cancel')
+          }
+        }
+      }
+
+      // Enter 또는 Space 키로 현재 포커스된 버튼 활성화
+      if (e.key === 'Enter' || e.key === ' ') {
+        const activeElement = document.activeElement
+
+        // 버튼에 포커스가 있을 때만 처리
+        if (activeElement === cancelButtonRef.current) {
+          e.preventDefault()
+          handleCancel()
+        } else if (activeElement === confirmButtonRef.current) {
+          e.preventDefault()
+          handleConfirm()
+        }
+        // prompt input에서는 기존 Enter 핸들러가 작동하도록 여기서는 처리하지 않음
       }
     }
 
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [isOpen])
+    document.addEventListener('keydown', handleKeyboard)
+    return () => document.removeEventListener('keydown', handleKeyboard)
+  }, [isOpen, options.type])
 
   if (!isOpen) return null
 
@@ -161,21 +233,37 @@ export function Dialog({ isOpen, options, onClose }: DialogProps) {
           {/* Buttons (Right) */}
           <div className="flex gap-2">
             {options.type !== 'alert' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCancel}
-              >
-                {options.cancelText || '취소'}
-              </Button>
+              <div className="relative">
+                {isTabPressed && focusedButton === 'cancel' && (
+                  <div className="absolute inset-0 -m-0.5 rounded border-2 border-neutral-500 pointer-events-none" />
+                )}
+                <Button
+                  ref={cancelButtonRef}
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancel}
+                  onFocus={() => isTabPressed && setFocusedButton('cancel')}
+                  onBlur={() => setFocusedButton(null)}
+                >
+                  {options.cancelText || '취소'}
+                </Button>
+              </div>
             )}
-            <Button
-              variant={options.type === 'confirm' && options.icon === 'error' ? 'danger' : 'primary'}
-              size="sm"
-              onClick={handleConfirm}
-            >
-              {options.confirmText || getDefaultConfirmText()}
-            </Button>
+            <div className="relative">
+              {isTabPressed && focusedButton === 'confirm' && (
+                <div className="absolute inset-0 -m-0.5 rounded border-2 border-blue-500 pointer-events-none" />
+              )}
+              <Button
+                ref={confirmButtonRef}
+                variant={options.type === 'confirm' && options.icon === 'error' ? 'danger' : 'primary'}
+                size="sm"
+                onClick={handleConfirm}
+                onFocus={() => isTabPressed && setFocusedButton('confirm')}
+                onBlur={() => setFocusedButton(null)}
+              >
+                {options.confirmText || getDefaultConfirmText()}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

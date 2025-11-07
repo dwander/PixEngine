@@ -12,7 +12,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   fullWidth?: boolean
 }
 
-export function Button({
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   variant = 'secondary',
   size = 'md',
   icon: Icon,
@@ -22,7 +22,7 @@ export function Button({
   children,
   disabled,
   ...props
-}: ButtonProps) {
+}, ref) => {
   const baseClasses = 'inline-flex items-center justify-center gap-2 rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed'
 
   const variantClasses: Record<ButtonVariant, string> = {
@@ -46,6 +46,7 @@ export function Button({
 
   return (
     <button
+      ref={ref}
       className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
       disabled={disabled}
       {...props}
@@ -55,4 +56,6 @@ export function Button({
       {Icon && iconPosition === 'right' && <Icon className={iconSizeClasses[size]} />}
     </button>
   )
-}
+})
+
+Button.displayName = 'Button'
