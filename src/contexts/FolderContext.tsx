@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { logError } from '../lib/errorHandler';
 
 // 경량 메타데이터 (정렬용)
@@ -33,14 +34,19 @@ export function FolderProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [lightMetadataMap, setLightMetadataMap] = useState<Map<string, LightMetadata>>(new Map());
 
-  const setFolderImages = (folder: string, files: string[], size: number) => {
+  const setFolderImages = useCallback((folder: string, files: string[], size: number) => {
     setCurrentFolder(folder);
     setImageFiles(files);
     setImageCount(files.length);
     setTotalSize(size);
     // 폴더 변경 시 메타데이터 맵 초기화
     setLightMetadataMap(new Map());
-  };
+
+    // 폴더 변경 시 감시 시작
+    invoke('start_folder_watch', { folderPath: folder }).catch((err) => {
+      console.error('Failed to start folder watch:', err);
+    });
+  }, []);
 
   const setLoading = (loading: boolean) => {
     setIsLoading(loading);
@@ -97,6 +103,58 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, [currentFolder, loadLightMetadata]);
+
+  // 폴더 변화 이벤트 리스너
+  useEffect(() => {
+    const unlisten = listen<{ type: string; path: string }>('folder-change', (event) => {
+      const { type, path } = event.payload;
+
+      console.log(`[FolderContext] Folder change detected: ${type} - ${path}`);
+
+      if (type === 'file_added') {
+        // 파일 추가: 목록에 추가하고 메타데이터 로드
+        setImageFiles((prev) => {
+          if (prev.includes(path)) return prev;
+          return [...prev, path];
+        });
+        setImageCount((prev) => prev + 1);
+
+        // 새 파일의 메타데이터 로드
+        loadLightMetadata([path]).catch((err) => {
+          console.error('Failed to load metadata for new file:', err);
+        });
+      } else if (type === 'file_removed') {
+        // 파일 삭제: 목록에서 제거
+        setImageFiles((prev) => prev.filter((f) => f !== path));
+        setImageCount((prev) => prev - 1);
+
+        // 메타데이터 맵에서 제거
+        setLightMetadataMap((prev) => {
+          const newMap = new Map(prev);
+          newMap.delete(path);
+          return newMap;
+        });
+      } else if (type === 'file_modified') {
+        // 파일 수정: 메타데이터 다시 로드
+        loadLightMetadata([path]).catch((err) => {
+          console.error('Failed to reload metadata for modified file:', err);
+        });
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [loadLightMetadata]);
+
+  // 컴포넌트 언마운트 시 폴더 감시 중지
+  useEffect(() => {
+    return () => {
+      invoke('stop_folder_watch').catch((err) => {
+        console.error('Failed to stop folder watch:', err);
+      });
+    };
+  }, []);
 
   return (
     <FolderContext.Provider value={{

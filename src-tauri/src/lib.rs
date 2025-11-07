@@ -10,8 +10,10 @@ mod thumbnail_queue;
 mod idle_detector;
 mod rating;
 mod clipboard;
+mod folder_watcher;
 
 use thumbnail_queue::ThumbnailQueueManager;
+use folder_watcher::FolderWatcher;
 
 // 경로 검증 함수
 fn validate_path(path: &str) -> Result<PathBuf, String> {
@@ -1123,6 +1125,27 @@ async fn paste_files_from_clipboard(
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// 폴더 감시 시작
+#[tauri::command]
+async fn start_folder_watch(
+    app: tauri::AppHandle,
+    watcher: State<'_, Arc<Mutex<FolderWatcher>>>,
+    folder_path: String,
+) -> Result<(), String> {
+    let watcher = watcher.lock().await;
+    watcher.watch_folder(app, folder_path)
+}
+
+// 폴더 감시 중지
+#[tauri::command]
+async fn stop_folder_watch(
+    watcher: State<'_, Arc<Mutex<FolderWatcher>>>,
+) -> Result<(), String> {
+    let watcher = watcher.lock().await;
+    watcher.stop_watching();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1159,6 +1182,10 @@ pub fn run() {
             // 썸네일 큐 매니저 초기화
             let queue_manager = ThumbnailQueueManager::new(app.handle().clone());
             app.manage(Arc::new(Mutex::new(queue_manager)));
+
+            // 폴더 감시자 초기화
+            let folder_watcher = FolderWatcher::new();
+            app.manage(Arc::new(Mutex::new(folder_watcher)));
 
             Ok(())
         })
@@ -1197,7 +1224,9 @@ pub fn run() {
             rename_folder,
             delete_folder,
             copy_files_to_clipboard,
-            paste_files_from_clipboard
+            paste_files_from_clipboard,
+            start_folder_watch,
+            stop_folder_watch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
