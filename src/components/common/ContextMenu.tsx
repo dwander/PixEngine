@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react'
+import { ReactNode, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useWindowFocus } from '../../contexts/WindowFocusContext'
 
@@ -20,6 +20,7 @@ interface ContextMenuProps {
  */
 export function ContextMenu({ x, y, onClose, children, scrollRef }: ContextMenuProps) {
   const { setContextMenuOpen } = useWindowFocus()
+  const menuRef = useRef<HTMLDivElement>(null)
 
   // 컨텍스트 메뉴가 열렸음을 알림
   useEffect(() => {
@@ -32,13 +33,23 @@ export function ContextMenu({ x, y, onClose, children, scrollRef }: ContextMenuP
   // 외부 클릭 및 스크롤 감지
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      // 이벤트 전파를 막아 의도치 않은 동작 방지
+      // 메뉴 내부 클릭이면 무시
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return
+      }
+
+      // 외부 클릭이면 메뉴 닫기
       e.preventDefault()
       e.stopPropagation()
       onClose()
     }
     const handleContextMenu = (e: MouseEvent) => {
-      // 이벤트 전파를 막아 의도치 않은 동작 방지
+      // 메뉴 내부 우클릭이면 무시
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return
+      }
+
+      // 외부 우클릭이면 메뉴 닫기
       e.preventDefault()
       e.stopPropagation()
       onClose()
@@ -72,7 +83,8 @@ export function ContextMenu({ x, y, onClose, children, scrollRef }: ContextMenuP
 
   return createPortal(
     <div
-      className="fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-[9998] min-w-[12rem]"
+      ref={menuRef}
+      className="context-menu-container fixed bg-neutral-800 border border-neutral-700 rounded-md shadow-lg py-1 z-[9998] min-w-[12rem]"
       style={{
         left: `${adjustedX}px`,
         top: `${adjustedY}px`,
@@ -95,7 +107,7 @@ export function ContextMenu({ x, y, onClose, children, scrollRef }: ContextMenuP
 interface ContextMenuItemProps {
   icon?: ReactNode
   label: string
-  onClick: () => void
+  onClick: () => void | Promise<void>
   disabled?: boolean
   variant?: 'default' | 'danger'
 }
