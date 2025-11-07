@@ -58,7 +58,7 @@ interface ThumbnailProgress {
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage, preloadImages } = useImageContext()
-  const { imageFiles, lightMetadataMap, currentFolder, loadLightMetadata, renameFileInList } = useFolderContext()
+  const { imageFiles, lightMetadataMap, currentFolder, renameFileInList, pauseFolderWatch, resumeFolderWatch } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const { success, error } = useToast()
@@ -749,6 +749,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
 
     try {
+      // 1. 폴더 감시 일시 중지
+      await pauseFolderWatch()
+
+      // 2. 파일명 변경 실행
       const newPath = await invoke<string>('rename_file', {
         oldPath,
         newName: newFileNameWithExt,
@@ -756,10 +760,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
       success(`파일명을 변경했습니다.`)
 
-      // FolderContext의 imageFiles 즉시 업데이트 (폴더 감시 이벤트보다 빠름)
+      // 3. FolderContext의 imageFiles 즉시 업데이트
       renameFileInList(oldPath, newPath)
 
-      // 로컬 상태를 일괄 업데이트하여 리렌더링 최소화
+      // 4. 로컬 상태를 일괄 업데이트하여 리렌더링 최소화
       setThumbnails((prev) => {
         const thumbnail = prev.get(oldPath)
         if (!thumbnail) return prev
@@ -788,6 +792,11 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
         return next
       })
 
+      // 5. 디바운스 시간(500ms) + 여유 시간 대기 후 폴더 감시 재개
+      setTimeout(() => {
+        resumeFolderWatch()
+      }, 600)
+
       // 이름 변경 상태 초기화
       setRenamingImage(null)
       setNewFileName('')
@@ -795,8 +804,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       error(err as string)
       setRenamingImage(null)
       setNewFileName('')
+      // 에러 발생 시에도 폴더 감시 재개
+      setTimeout(() => {
+        resumeFolderWatch()
+      }, 600)
     }
-  }, [renamingImage, newFileName, success, error, renameFileInList])
+  }, [renamingImage, newFileName, success, error, renameFileInList, pauseFolderWatch, resumeFolderWatch])
 
   // 파일명 변경 취소 핸들러
   const handleRenameCancel = useCallback(() => {

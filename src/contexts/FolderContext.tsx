@@ -23,6 +23,8 @@ interface FolderContextType {
   loadLightMetadata: (imagePaths: string[]) => Promise<void>;
   refreshCurrentFolder: () => Promise<void>;
   renameFileInList: (oldPath: string, newPath: string) => void;
+  pauseFolderWatch: () => Promise<void>;
+  resumeFolderWatch: () => Promise<void>;
 }
 
 const FolderContext = createContext<FolderContextType | undefined>(undefined);
@@ -73,6 +75,25 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  // 폴더 감시 일시 중지
+  const pauseFolderWatch = useCallback(async () => {
+    try {
+      await invoke('stop_folder_watch');
+    } catch (err) {
+      console.error('Failed to pause folder watch:', err);
+    }
+  }, []);
+
+  // 폴더 감시 재개
+  const resumeFolderWatch = useCallback(async () => {
+    if (!currentFolder) return;
+    try {
+      await invoke('start_folder_watch', { folderPath: currentFolder });
+    } catch (err) {
+      console.error('Failed to resume folder watch:', err);
+    }
+  }, [currentFolder]);
 
   // 경량 메타데이터 로딩 (백그라운드)
   const loadLightMetadata = useCallback(async (imagePaths: string[]) => {
@@ -187,6 +208,8 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       loadLightMetadata,
       refreshCurrentFolder,
       renameFileInList,
+      pauseFolderWatch,
+      resumeFolderWatch,
     }}>
       {children}
     </FolderContext.Provider>
