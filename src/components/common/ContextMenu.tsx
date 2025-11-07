@@ -110,22 +110,28 @@ interface ContextMenuItemProps {
   onClick: () => void | Promise<void>
   disabled?: boolean
   variant?: 'default' | 'danger'
+  shortcut?: string
 }
 
 /**
  * 컨텍스트 메뉴 아이템
  */
-export function ContextMenuItem({ icon, label, onClick, disabled = false, variant = 'default' }: ContextMenuItemProps) {
+export function ContextMenuItem({ icon, label, onClick, disabled = false, variant = 'default', shortcut }: ContextMenuItemProps) {
   const colorClass = variant === 'danger' ? 'text-red-400' : disabled ? 'text-gray-400' : 'text-gray-300'
 
   return (
     <button
-      className={`w-full px-3 py-1.5 text-left text-sm ${colorClass} hover:bg-neutral-700 flex items-center gap-2`}
+      className={`w-full px-3 py-1.5 text-left text-sm ${colorClass} hover:bg-neutral-700 flex items-center justify-between gap-4`}
       onClick={onClick}
       disabled={disabled}
     >
-      {icon}
-      <span>{label}</span>
+      <div className="flex items-center gap-2">
+        {icon}
+        <span>{label}</span>
+      </div>
+      {shortcut && (
+        <span className="text-xs text-gray-500">{shortcut}</span>
+      )}
     </button>
   )
 }

@@ -1420,16 +1420,19 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           <ContextMenuItem
             icon={<Scissors className="w-4 h-4" />}
             label="잘라내기"
+            shortcut="Ctrl+X"
             onClick={() => setContextMenu(null)}
           />
           <ContextMenuItem
             icon={<Copy className="w-4 h-4" />}
             label="복사"
+            shortcut="Ctrl+C"
             onClick={() => setContextMenu(null)}
           />
           <ContextMenuItem
             icon={<Copy className="w-4 h-4 scale-x-[-1]" />}
             label="붙여넣기"
+            shortcut="Ctrl+V"
             onClick={() => setContextMenu(null)}
           />
           <ContextMenuItem
@@ -1440,11 +1443,13 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           <ContextMenuItem
             icon={<Trash2 className="w-4 h-4" />}
             label="삭제"
+            shortcut="Delete"
             onClick={() => setContextMenu(null)}
           />
           <ContextMenuItem
             icon={<Edit3 className="w-4 h-4" />}
             label="이름변경"
+            shortcut="F2"
             onClick={() => setContextMenu(null)}
           />
 
@@ -1452,6 +1457,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
           <ContextMenuItem
             label="전체선택"
+            shortcut="Ctrl+A"
             onClick={() => {
               setSelectedImages(new Set(sortedImages))
               setContextMenu(null)
@@ -1459,6 +1465,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           />
           <ContextMenuItem
             label="선택해제"
+            shortcut="Ctrl+D"
             onClick={() => {
               setSelectedImages(new Set())
               setContextMenu(null)
@@ -1466,6 +1473,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
           />
           <ContextMenuItem
             label="선택반전"
+            shortcut="Ctrl+I"
             onClick={() => {
               const newSelection = new Set<string>()
               sortedImages.forEach(img => {
