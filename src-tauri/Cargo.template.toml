@@ -66,7 +66,7 @@ base64 = "0.22"                # Base64 인코딩
 
 # Windows API (유휴 시간 감지, 윈도우 포커스 확인, 클립보드)
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation", "Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.58", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_DataExchange", "Win32_System_Memory"] }
 clipboard-win = "5.4"          # Windows 클립보드 (파일 경로 복사)
 
 [profile.release]

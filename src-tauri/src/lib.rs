@@ -1101,9 +1101,9 @@ async fn delete_folder(path: String) -> Result<(), String> {
 
 // 파일 경로들을 클립보드에 복사
 #[tauri::command]
-async fn copy_files_to_clipboard(file_paths: Vec<String>) -> Result<(), String> {
+async fn copy_files_to_clipboard(file_paths: Vec<String>, is_cut: bool) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        clipboard::copy_files_to_clipboard(file_paths)
+        clipboard::copy_files_to_clipboard(file_paths, is_cut)
     })
     .await
     .map_err(|e| format!("Task failed: {}", e))?

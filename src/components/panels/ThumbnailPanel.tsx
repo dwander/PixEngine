@@ -69,6 +69,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const [hqClassification, setHqClassification] = useState<{ existing: string[]; missing: string[] } | null>(null) // HQ 썸네일 분류 결과
   // const [selectedImage, setSelectedImage] = useState<string | null>(null) // 임시 비활성화
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set()) // 다중 선택된 이미지들
+  const [cutImages, setCutImages] = useState<Set<string>>(new Set()) // 잘라내기한 이미지들
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null) // Shift 클릭용
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null) // 컨텍스트 메뉴 위치
   const [showRatingSubmenu, setShowRatingSubmenu] = useState(false) // 별점 서브메뉴 표시 여부
@@ -566,21 +567,12 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
       const imagesToCopy = Array.from(selectedImages)
 
       if (imagesToCopy.length === 0) {
-        console.log('[클립보드 복사] 선택된 이미지가 없습니다.')
         return
       }
 
       const fileCount = imagesToCopy.length
-      const timestamp = new Date().toLocaleTimeString('ko-KR')
 
-      console.log(`[클립보드 복사 시작] ${timestamp}`)
-      console.log(`선택된 파일 수: ${fileCount}개`)
-      console.log('파일 목록:', imagesToCopy.map(path => {
-        const fileName = path.split(/[/\\]/).pop() || path
-        return `\n  - ${fileName}`
-      }).join(''))
-
-      invoke('copy_files_to_clipboard', { filePaths: imagesToCopy })
+      invoke('copy_files_to_clipboard', { filePaths: imagesToCopy, isCut: false })
         .then(() => {
           let message: string
           if (fileCount === 1) {
@@ -590,12 +582,46 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
             message = `파일 ${fileCount}개를 클립보드에 복사했습니다.`
           }
 
+          // 복사 시에는 잘라내기 상태 초기화
+          setCutImages(new Set())
+
           success(message)
-          console.log(`[클립보드 복사 완료] ${timestamp} - ${fileCount}개 파일 복사 성공`)
         })
-        .catch((err) => {
+        .catch(() => {
           error('클립보드 복사 실패')
-          console.error(`[클립보드 복사 실패] ${timestamp}`, err)
+        })
+
+      return
+    }
+
+    // Ctrl+X로 클립보드 잘라내기
+    if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+      e.preventDefault()
+      const imagesToCut = Array.from(selectedImages)
+
+      if (imagesToCut.length === 0) {
+        return
+      }
+
+      const fileCount = imagesToCut.length
+
+      invoke('copy_files_to_clipboard', { filePaths: imagesToCut, isCut: true })
+        .then(() => {
+          let message: string
+          if (fileCount === 1) {
+            const fileName = imagesToCut[0].split(/[/\\]/).pop() || '파일'
+            message = `${fileName}을(를) 잘라냈습니다.`
+          } else {
+            message = `파일 ${fileCount}개를 잘라냈습니다.`
+          }
+
+          // 잘라낸 이미지 목록 저장 (디밍 효과용)
+          setCutImages(new Set(imagesToCut))
+
+          success(message)
+        })
+        .catch(() => {
+          error('클립보드 잘라내기 실패')
         })
 
       return
@@ -1249,7 +1275,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                               <img
                                 src={`data:image/jpeg;base64,${thumbnail.thumbnail_base64}`}
                                 alt={imagePath}
-                                className="h-full w-full object-contain"
+                                className={`h-full w-full object-contain ${cutImages.has(imagePath) ? 'opacity-50' : ''}`}
                                 style={{ transform }}
                                 loading="lazy"
                               />
@@ -1368,7 +1394,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                       <img
                         src={`data:image/jpeg;base64,${thumbnail.thumbnail_base64}`}
                         alt={imagePath}
-                        className="h-full w-full object-contain"
+                        className={`h-full w-full object-contain ${cutImages.has(imagePath) ? 'opacity-50' : ''}`}
                         style={{ transform }}
                         loading="lazy"
                       />
