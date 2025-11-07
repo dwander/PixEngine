@@ -1,5 +1,6 @@
 import { ReactNode, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useWindowFocus } from '../../contexts/WindowFocusContext'
 
 interface ContextMenuProps {
   x: number
@@ -18,6 +19,16 @@ interface ContextMenuProps {
  * - Portal을 사용하여 body에 렌더링
  */
 export function ContextMenu({ x, y, onClose, children, scrollRef }: ContextMenuProps) {
+  const { setContextMenuOpen } = useWindowFocus()
+
+  // 컨텍스트 메뉴가 열렸음을 알림
+  useEffect(() => {
+    setContextMenuOpen(true)
+    return () => {
+      setContextMenuOpen(false)
+    }
+  }, [setContextMenuOpen])
+
   // 외부 클릭 및 스크롤 감지
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
