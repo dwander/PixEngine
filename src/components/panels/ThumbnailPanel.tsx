@@ -57,7 +57,7 @@ interface ThumbnailProgress {
 
 export const ThumbnailPanel = memo(function ThumbnailPanel() {
   const { loadImage, getCachedImage, preloadImages } = useImageContext()
-  const { imageFiles, lightMetadataMap } = useFolderContext()
+  const { imageFiles, lightMetadataMap, currentFolder } = useFolderContext()
   const isZoomedIn = useViewerStore((state) => state.isZoomedIn)
   const toggleFullscreen = useViewerStore((state) => state.toggleFullscreen)
   const { success, error } = useToast()
@@ -564,7 +564,6 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
 
   // 붙여넣기 함수
   const handlePaste = useCallback(async () => {
-    const { currentFolder } = useFolderContext.getState()
     if (!currentFolder) {
       error('폴더가 선택되지 않았습니다.')
       return
@@ -592,7 +591,7 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     } catch (err) {
       error(err as string)
     }
-  }, [overwriteFiles, skipFiles, success, error])
+  }, [currentFolder, overwriteFiles, skipFiles, success, error])
 
   // 파일 충돌 해결 핸들러
   const handleConflictResolve = useCallback(
