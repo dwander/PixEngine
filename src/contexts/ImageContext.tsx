@@ -121,18 +121,19 @@ export function ImageProvider({ children }: { children: ReactNode }) {
       try {
         let assetUrl: string;
 
-        // RAW 파일인 경우 고해상도 JPEG 미리보기 추출
-        if (isRawFile(path)) {
+        // JPG 또는 RAW 파일인 경우 고해상도 JPEG 미리보기 추출
+        // (EXIF orientation이 적용된 이미지를 얻기 위함)
+        if (isRawFile(path) || path.toLowerCase().match(/\.(jpg|jpeg)$/)) {
           try {
             const base64Data = await invoke<string>('extract_raw_preview_image', { filePath: path });
             assetUrl = `data:image/jpeg;base64,${base64Data}`;
           } catch (error) {
-            // RAW 미리보기 추출 실패 시 원본 파일로 fallback
-            logError(error, `Failed to extract RAW preview: ${path}`);
+            // 미리보기 추출 실패 시 원본 파일로 fallback
+            logError(error, `Failed to extract preview: ${path}`);
             assetUrl = convertFileSrc(path);
           }
         } else {
-          // 일반 이미지: convertFileSrc를 사용하여 asset URL 생성
+          // 기타 이미지 포맷: convertFileSrc를 사용하여 asset URL 생성
           assetUrl = convertFileSrc(path);
         }
 

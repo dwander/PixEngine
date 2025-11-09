@@ -489,7 +489,8 @@ async fn generate_thumbnail_for_image(
     thumbnail::generate_thumbnail(&app, &file_path).await
 }
 
-// RAW 파일에서 고해상도 JPEG 미리보기 추출 (캔버스 출력용)
+// 이미지 파일에서 고해상도 JPEG 미리보기 추출 (캔버스 출력용)
+// JPG: EXIF 썸네일 또는 원본, RAW: 내장 JPEG 미리보기
 #[tauri::command]
 async fn extract_raw_preview_image(file_path: String) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine};

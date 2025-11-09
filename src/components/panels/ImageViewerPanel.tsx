@@ -528,16 +528,16 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       // 캐시 미스: 이전 이미지 클리어 후 새로 로드
       setImageUrl(null)
 
-      // RAW 파일 처리
+      // JPG/RAW 파일 처리 (EXIF orientation 적용)
       const loadImageAsync = async () => {
         let assetUrl: string
 
-        if (isRawFile(currentPath)) {
+        if (isRawFile(currentPath) || currentPath.toLowerCase().match(/\.(jpg|jpeg)$/)) {
           try {
             const base64Data = await invoke<string>('extract_raw_preview_image', { filePath: currentPath })
             assetUrl = `data:image/jpeg;base64,${base64Data}`
           } catch (error) {
-            logError(error, `Failed to extract RAW preview: ${currentPath}`)
+            logError(error, `Failed to extract preview: ${currentPath}`)
             assetUrl = convertFileSrc(currentPath)
           }
         } else {

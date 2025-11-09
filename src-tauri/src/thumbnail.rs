@@ -510,14 +510,30 @@ pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>
     ))
 }
 
-/// RAW 파일에서 고해상도 JPEG 미리보기 추출 (캔버스 출력용)
-/// 썸네일보다 큰 미리보기 이미지를 반환 (원본 크기 유지)
+/// 이미지 파일에서 고해상도 JPEG 미리보기 추출 (캔버스 출력용)
+/// JPG: EXIF 내장 썸네일 추출 시도 → 원본 파일
+/// RAW: EXIF 내장 JPEG 미리보기 추출 (PRIMARY → THUMBNAIL IFD)
 pub fn extract_raw_preview(file_path: &str) -> Result<Vec<u8>, String> {
     use exif::In;
 
-    // 여러 IFD를 순서대로 시도 (SubIFD > PRIMARY > THUMBNAIL)
-    // SubIFD는 kamadak-exif에서 직접 지원하지 않으므로, PRIMARY와 THUMBNAIL만 시도
+    // JPG 파일인 경우: EXIF 썸네일 시도 후 원본 반환
+    if is_jpeg_file(file_path) {
+        // 1. EXIF 내장 썸네일 시도 (빠름)
+        if let Ok(exif_thumb) = extract_exif_thumbnail(file_path) {
+            // 썸네일 크기 확인 - 충분히 크면 사용
+            if let Ok(img) = image::load_from_memory(&exif_thumb) {
+                if img.width() >= 800 || img.height() >= 800 {
+                    return Ok(exif_thumb);
+                }
+            }
+        }
 
+        // 2. EXIF 썸네일이 없거나 작으면 원본 JPEG 파일 읽기
+        return std::fs::read(file_path)
+            .map_err(|e| format!("Failed to read JPEG file: {}", e));
+    }
+
+    // RAW 파일인 경우: IFD에서 JPEG 추출
     // PRIMARY IFD (0번 IFD) - 보통 더 큰 미리보기가 있음
     if let Ok(jpeg_data) = extract_jpeg_from_raw(file_path, In::PRIMARY) {
         // 크기가 충분히 큰지 확인 (최소 800px 이상)
