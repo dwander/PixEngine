@@ -14,6 +14,7 @@ import { useViewerStore } from '../../store/viewerStore'
 import { writeImageRating } from '../../lib/rating'
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuSubmenu } from '../common/ContextMenu'
 import { FileConflictDialog, DuplicateFileInfo } from '../common/FileConflictDialog'
+import { getFileExtensionDisplay, isRawFile } from '../../lib/pathUtils'
 import {
   THUMBNAIL_SIZE_DEFAULT,
   THUMBNAIL_SIZE_MIN,
@@ -1942,6 +1943,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                                 {rating}
                               </div>
                             )}
+                            {/* 확장자 배지 (우측 하단) */}
+                            <div className={`absolute bottom-2 right-2 ${isRawFile(imagePath) ? 'bg-amber-600' : 'bg-neutral-700'} text-white text-xs font-semibold rounded px-1.5 py-0.5 shadow-md`}>
+                              {getFileExtensionDisplay(imagePath)}
+                            </div>
                             <div className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 transition-opacity ${renamingImage === imagePath ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                               {renamingImage === imagePath ? (
                                 <input
@@ -2081,6 +2086,10 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
                         {rating}
                       </div>
                     )}
+                    {/* 확장자 배지 (우측 하단) */}
+                    <div className={`absolute bottom-2 right-2 ${isRawFile(imagePath) ? 'bg-amber-600' : 'bg-neutral-700'} text-white text-xs font-semibold rounded px-1.5 py-0.5 shadow-md`}>
+                      {getFileExtensionDisplay(imagePath)}
+                    </div>
                     <div className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 transition-opacity ${renamingImage === imagePath ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                       {renamingImage === imagePath ? (
                         <input

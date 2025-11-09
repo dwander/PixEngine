@@ -73,3 +73,15 @@ export function isRawFile(path: string): boolean {
   ];
   return rawExtensions.includes(ext);
 }
+
+/**
+ * 확장자를 대문자로 가져옵니다 (배지 표시용)
+ */
+export function getFileExtensionDisplay(path: string): string {
+  const ext = getFileExtension(path);
+  // JPEG는 JPG로 통일
+  if (ext === 'jpeg') return 'JPG';
+  // TIFF는 TIF로 통일
+  if (ext === 'tiff') return 'TIF';
+  return ext.toUpperCase();
+}
