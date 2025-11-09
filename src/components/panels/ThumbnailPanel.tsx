@@ -11,7 +11,7 @@ import { useDialog } from '../../contexts/DialogContext'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
-import { readImageRatingsBatch, writeImageRating } from '../../lib/rating'
+import { writeImageRating } from '../../lib/rating'
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuSubmenu } from '../common/ContextMenu'
 import { FileConflictDialog, DuplicateFileInfo } from '../common/FileConflictDialog'
 import {
@@ -1386,33 +1386,18 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     startGeneration()
   }, [imageFiles])
 
-  // 이미지 별점 로드 (백그라운드에서 비동기로)
+  // 이미지 별점을 lightMetadataMap에서 가져오기
   useEffect(() => {
-    if (imageFiles.length === 0) {
-      setRatings(new Map())
-      return
-    }
+    const newRatings = new Map<string, number>()
 
-    const loadRatings = async () => {
-      try {
-        // 배치 API로 한 번에 모든 별점 로드 (단일 invoke 호출)
-        const results = await readImageRatingsBatch(imageFiles)
-
-        const newRatings = new Map<string, number>()
-        results.forEach(([path, rating]) => {
-          if (rating && rating > 0) {
-            newRatings.set(path, rating)
-          }
-        })
-
-        setRatings(newRatings)
-      } catch (error) {
-        console.error('Failed to load ratings:', error)
+    lightMetadataMap.forEach((metadata, path) => {
+      if (metadata.rating && metadata.rating > 0) {
+        newRatings.set(path, metadata.rating)
       }
-    }
+    })
 
-    loadRatings()
-  }, [imageFiles])
+    setRatings(newRatings)
+  }, [lightMetadataMap])
 
   // 별점 변경 이벤트 리스너 (실시간 업데이트)
   useEffect(() => {

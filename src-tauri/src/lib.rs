@@ -963,6 +963,7 @@ struct LightMetadata {
     file_size: Option<u64>,
     modified_time: Option<String>,
     date_taken: Option<String>,
+    rating: Option<i32>, // XMP 별점 (0-5)
 }
 
 // 여러 이미지의 경량 메타데이터를 배치로 가져오기 (정렬용)
@@ -1014,11 +1015,15 @@ async fn get_images_light_metadata(file_paths: Vec<String>) -> Result<Vec<LightM
                 })
             });
 
+            // XMP 별점 읽기 (실패해도 계속 진행)
+            let rating = rating::read_rating(path).ok().filter(|&r| r > 0);
+
             LightMetadata {
                 path: path.clone(),
                 file_size,
                 modified_time,
                 date_taken,
+                rating,
             }
         })
         .collect();

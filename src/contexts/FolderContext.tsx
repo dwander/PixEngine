@@ -9,6 +9,7 @@ export interface LightMetadata {
   file_size?: number;
   modified_time?: string;
   date_taken?: string;
+  rating?: number; // XMP 별점 (0-5)
 }
 
 interface FolderContextType {
