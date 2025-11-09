@@ -424,10 +424,10 @@ const RAW_EXTENSIONS: &[&str] = &[
     "pef",                  // Pentax
 ];
 
-/// RAW 파일에서 EXIF 내장 JPEG 썸네일 추출
-/// RAW 파일은 대부분 EXIF에 JPEG 썸네일을 포함
-pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>, u32, u32), String> {
-    use exif::{In, Reader, Tag};
+/// RAW 파일에서 JPEG 이미지 추출 (썸네일 또는 미리보기)
+/// ifd_index: In::PRIMARY (0번 IFD, 보통 작은 썸네일), In::THUMBNAIL (1번 IFD)
+fn extract_jpeg_from_raw(file_path: &str, ifd: In) -> Result<Vec<u8>, String> {
+    use exif::{Reader, Tag};
     use std::io::BufReader;
 
     // RAW 파일에서 EXIF 데이터 읽기
@@ -441,9 +441,9 @@ pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>
         .read_from_container(&mut bufreader)
         .map_err(|e| format!("Failed to read EXIF from RAW: {}", e))?;
 
-    // 썸네일 오프셋과 길이 찾기
-    let tiff_offset = exif
-        .get_field(Tag::JPEGInterchangeFormat, In::THUMBNAIL)
+    // JPEG 오프셋과 길이 찾기
+    let offset = exif
+        .get_field(Tag::JPEGInterchangeFormat, ifd)
         .and_then(|field| {
             if let exif::Value::Long(ref longs) = field.value {
                 longs.first().copied()
@@ -451,10 +451,10 @@ pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>
                 None
             }
         })
-        .ok_or("RAW file has no embedded thumbnail offset")?;
+        .ok_or(format!("No JPEG offset in {:?} IFD", ifd))?;
 
     let length = exif
-        .get_field(Tag::JPEGInterchangeFormatLength, In::THUMBNAIL)
+        .get_field(Tag::JPEGInterchangeFormatLength, ifd)
         .and_then(|field| {
             if let exif::Value::Long(ref longs) = field.value {
                 longs.first().copied()
@@ -462,24 +462,32 @@ pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>
                 None
             }
         })
-        .ok_or("RAW file has no embedded thumbnail length")?;
+        .ok_or(format!("No JPEG length in {:?} IFD", ifd))?;
 
-    // 썸네일 데이터 읽기
+    // JPEG 데이터 읽기
     drop(bufreader);
     let mut file = File::open(file_path)
         .map_err(|e| format!("Failed to reopen RAW file: {}", e))?;
 
-    // RAW 파일의 TIFF 헤더 오프셋 찾기 (파일 포맷마다 다를 수 있음)
-    // 대부분의 RAW 파일은 TIFF 기반이므로 절대 오프셋 사용
-    file.seek(SeekFrom::Start(tiff_offset as u64))
-        .map_err(|e| format!("Failed to seek to RAW thumbnail: {}", e))?;
+    file.seek(SeekFrom::Start(offset as u64))
+        .map_err(|e| format!("Failed to seek to JPEG: {}", e))?;
 
-    let mut thumbnail_data = vec![0u8; length as usize];
-    file.read_exact(&mut thumbnail_data)
-        .map_err(|e| format!("Failed to read RAW thumbnail: {}", e))?;
+    let mut jpeg_data = vec![0u8; length as usize];
+    file.read_exact(&mut jpeg_data)
+        .map_err(|e| format!("Failed to read JPEG: {}", e))?;
+
+    Ok(jpeg_data)
+}
+
+/// RAW 파일에서 EXIF 내장 JPEG 썸네일 추출 (320x320 이내로 리사이징)
+pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>, u32, u32), String> {
+    use exif::In;
+
+    // 썸네일 IFD에서 JPEG 추출 시도
+    let thumbnail_jpeg = extract_jpeg_from_raw(file_path, In::THUMBNAIL)?;
 
     // JPEG 디코딩하여 크기 확인
-    let img = image::load_from_memory(&thumbnail_data)
+    let img = image::load_from_memory(&thumbnail_jpeg)
         .map_err(|e| format!("Failed to decode RAW thumbnail JPEG: {}", e))?;
 
     let orig_width = img.width();
@@ -500,6 +508,28 @@ pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>
         thumbnail.width(),
         thumbnail.height(),
     ))
+}
+
+/// RAW 파일에서 고해상도 JPEG 미리보기 추출 (캔버스 출력용)
+/// 썸네일보다 큰 미리보기 이미지를 반환 (원본 크기 유지)
+pub fn extract_raw_preview(file_path: &str) -> Result<Vec<u8>, String> {
+    use exif::In;
+
+    // 여러 IFD를 순서대로 시도 (SubIFD > PRIMARY > THUMBNAIL)
+    // SubIFD는 kamadak-exif에서 직접 지원하지 않으므로, PRIMARY와 THUMBNAIL만 시도
+
+    // PRIMARY IFD (0번 IFD) - 보통 더 큰 미리보기가 있음
+    if let Ok(jpeg_data) = extract_jpeg_from_raw(file_path, In::PRIMARY) {
+        // 크기가 충분히 큰지 확인 (최소 800px 이상)
+        if let Ok(img) = image::load_from_memory(&jpeg_data) {
+            if img.width() >= 800 || img.height() >= 800 {
+                return Ok(jpeg_data);
+            }
+        }
+    }
+
+    // THUMBNAIL IFD (1번 IFD) - fallback
+    extract_jpeg_from_raw(file_path, In::THUMBNAIL)
 }
 
 /// 썸네일을 JPEG로 인코딩

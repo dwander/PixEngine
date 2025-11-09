@@ -62,3 +62,14 @@ export function isImageFile(path: string): boolean {
   ];
   return imageExtensions.includes(ext);
 }
+
+/**
+ * 파일이 RAW 포맷인지 확인합니다
+ */
+export function isRawFile(path: string): boolean {
+  const ext = getFileExtension(path);
+  const rawExtensions = [
+    'nef', 'nrw', 'cr2', 'crw', 'arw', 'srf', 'sr2', 'dng', 'raf', 'orf', 'rw2', 'pef'
+  ];
+  return rawExtensions.includes(ext);
+}
