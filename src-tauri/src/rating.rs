@@ -26,6 +26,18 @@ pub fn read_rating(file_path: &str) -> Result<i32, String> {
     }
 }
 
+/// 여러 이미지의 별점을 배치로 읽기 (병렬 처리)
+pub fn read_ratings_batch(file_paths: Vec<String>) -> Vec<(String, Option<i32>)> {
+    use rayon::prelude::*;
+
+    file_paths.par_iter()
+        .map(|path| {
+            let rating = read_rating(path).ok();
+            (path.clone(), rating)
+        })
+        .collect()
+}
+
 /// XMP Rating 쓰기 (파일 수정 시간 복원 포함)
 pub fn write_rating(file_path: &str, rating: i32) -> Result<(), String> {
     // 유효성 검사

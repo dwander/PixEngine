@@ -11,7 +11,7 @@ import { useDialog } from '../../contexts/DialogContext'
 import { Store } from '@tauri-apps/plugin-store'
 import { logError } from '../../lib/errorHandler'
 import { useViewerStore } from '../../store/viewerStore'
-import { readImageRating, writeImageRating } from '../../lib/rating'
+import { readImageRatingsBatch, writeImageRating } from '../../lib/rating'
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuSubmenu } from '../common/ContextMenu'
 import { FileConflictDialog, DuplicateFileInfo } from '../common/FileConflictDialog'
 import {
@@ -1394,23 +1394,21 @@ export const ThumbnailPanel = memo(function ThumbnailPanel() {
     }
 
     const loadRatings = async () => {
-      const newRatings = new Map<string, number>()
+      try {
+        // 배치 API로 한 번에 모든 별점 로드 (단일 invoke 호출)
+        const results = await readImageRatingsBatch(imageFiles)
 
-      // 병렬로 모든 별점 로드 (실패해도 계속 진행)
-      await Promise.allSettled(
-        imageFiles.map(async (filePath) => {
-          try {
-            const rating = await readImageRating(filePath)
-            if (rating > 0) { // 0은 저장하지 않음 (unrated)
-              newRatings.set(filePath, rating)
-            }
-          } catch (error) {
-            // 별점 읽기 실패는 무시 (XMP가 없는 파일일 수 있음)
+        const newRatings = new Map<string, number>()
+        results.forEach(([path, rating]) => {
+          if (rating && rating > 0) {
+            newRatings.set(path, rating)
           }
         })
-      )
 
-      setRatings(newRatings)
+        setRatings(newRatings)
+      } catch (error) {
+        console.error('Failed to load ratings:', error)
+      }
     }
 
     loadRatings()

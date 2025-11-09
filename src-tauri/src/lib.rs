@@ -1037,6 +1037,17 @@ async fn read_image_rating(file_path: String) -> Result<i32, String> {
     .map_err(|e| format!("Task failed: {}", e))?
 }
 
+// XMP Rating 배치 읽기 (여러 파일)
+#[tauri::command]
+async fn read_image_ratings_batch(file_paths: Vec<String>) -> Result<Vec<(String, Option<i32>)>, String> {
+    // 백그라운드 스레드에서 병렬 처리
+    tokio::task::spawn_blocking(move || {
+        Ok(rating::read_ratings_batch(file_paths))
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
 // XMP Rating 쓰기
 #[tauri::command]
 async fn write_image_rating(app: tauri::AppHandle, file_path: String, rating: i32) -> Result<(), String> {
@@ -1256,6 +1267,7 @@ pub fn run() {
             get_exif_metadata,
             get_images_light_metadata,
             read_image_rating,
+            read_image_ratings_batch,
             write_image_rating,
             create_folder,
             rename_folder,
