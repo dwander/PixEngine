@@ -21,7 +21,7 @@ interface FolderContextType {
   lightMetadataMap: Map<string, LightMetadata>;
   setFolderImages: (folder: string, files: string[], size: number) => void;
   setLoading: (loading: boolean) => void;
-  loadLightMetadata: (imagePaths: string[]) => Promise<void>;
+  loadLightMetadata: (imagePaths: string[], replaceAll?: boolean) => Promise<void>;
   refreshCurrentFolder: () => Promise<void>;
   renameFileInList: (oldPath: string, newPath: string) => void;
   pauseFolderWatch: () => Promise<void>;
@@ -97,7 +97,7 @@ export function FolderProvider({ children }: { children: ReactNode }) {
   }, [currentFolder]);
 
   // 경량 메타데이터 로딩 (백그라운드)
-  const loadLightMetadata = useCallback(async (imagePaths: string[]) => {
+  const loadLightMetadata = useCallback(async (imagePaths: string[], replaceAll: boolean = false) => {
     if (imagePaths.length === 0) return;
 
     try {
@@ -105,13 +105,14 @@ export function FolderProvider({ children }: { children: ReactNode }) {
         filePaths: imagePaths
       });
 
-      // Map으로 변환
-      const newMap = new Map<string, LightMetadata>();
-      results.forEach(metadata => {
-        newMap.set(metadata.path, metadata);
+      setLightMetadataMap(prevMap => {
+        // replaceAll이 true이면 전체 교체, 아니면 기존 맵에 병합
+        const newMap = replaceAll ? new Map() : new Map(prevMap);
+        results.forEach(metadata => {
+          newMap.set(metadata.path, metadata);
+        });
+        return newMap;
       });
-
-      setLightMetadataMap(newMap);
     } catch (error) {
       logError(error, 'Load light metadata');
     }
@@ -133,9 +134,9 @@ export function FolderProvider({ children }: { children: ReactNode }) {
       setImageCount(result.files.length);
       setTotalSize(result.total_size);
 
-      // 경량 메타데이터 다시 로드
+      // 경량 메타데이터 다시 로드 (새로고침이므로 전체 교체)
       if (result.files.length > 0) {
-        await loadLightMetadata(result.files);
+        await loadLightMetadata(result.files, true);
       } else {
         setLightMetadataMap(new Map());
       }

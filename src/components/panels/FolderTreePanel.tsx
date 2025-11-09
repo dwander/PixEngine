@@ -813,8 +813,8 @@ function FolderTreeItem({
         // 이미지 캐시 정리
         clearCache();
 
-        // 경량 메타데이터 로딩 (백그라운드)
-        loadLightMetadata(imageFiles).catch(err => console.error('Failed to load light metadata:', err));
+        // 경량 메타데이터 로딩 (백그라운드, 폴더 변경이므로 전체 교체)
+        loadLightMetadata(imageFiles, true).catch(err => console.error('Failed to load light metadata:', err));
 
         // 마지막 접근 경로 저장
         if (onFolderClick && node.treeId) {
@@ -887,8 +887,8 @@ function FolderTreeItem({
           setFolderImages(node.path, imagePaths, totalSize);
           clearCache();
 
-          // 경량 메타데이터 로딩 (백그라운드)
-          loadLightMetadata(imagePaths).catch(err => console.error('Failed to load light metadata:', err));
+          // 경량 메타데이터 로딩 (백그라운드, 폴더 변경이므로 전체 교체)
+          loadLightMetadata(imagePaths, true).catch(err => console.error('Failed to load light metadata:', err));
 
           // 마지막 접근 경로 저장
           if (onFolderClick && node.treeId) {
