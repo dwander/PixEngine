@@ -511,26 +511,26 @@ pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>
 }
 
 /// 이미지 파일에서 고해상도 JPEG 미리보기 추출 (캔버스 출력용)
-/// JPG: EXIF 내장 썸네일 추출 시도 → 원본 파일
-/// RAW: EXIF 내장 JPEG 미리보기 추출 (PRIMARY → THUMBNAIL IFD)
+/// JPG: EXIF 썸네일 → DCT 리사이징 (2400px 이내)
+/// RAW: EXIF 내장 JPEG 미리보기 (PRIMARY → THUMBNAIL IFD)
 pub fn extract_raw_preview(file_path: &str) -> Result<Vec<u8>, String> {
     use exif::In;
 
-    // JPG 파일인 경우: EXIF 썸네일 시도 후 원본 반환
+    // JPG 파일인 경우: EXIF 썸네일 시도 → DCT 리사이징
     if is_jpeg_file(file_path) {
-        // 1. EXIF 내장 썸네일 시도 (빠름)
+        // 1. EXIF 내장 썸네일 시도 (빠름, 고품질)
         if let Ok(exif_thumb) = extract_exif_thumbnail(file_path) {
             // 썸네일 크기 확인 - 충분히 크면 사용
             if let Ok(img) = image::load_from_memory(&exif_thumb) {
-                if img.width() >= 800 || img.height() >= 800 {
+                if img.width() >= 1200 || img.height() >= 1200 {
                     return Ok(exif_thumb);
                 }
             }
         }
 
-        // 2. EXIF 썸네일이 없거나 작으면 원본 JPEG 파일 읽기
-        return std::fs::read(file_path)
-            .map_err(|e| format!("Failed to read JPEG file: {}", e));
+        // 2. EXIF 썸네일이 없거나 작으면 DCT 스케일링 사용 (메모리 효율적)
+        // 최대 2400px 이내로 리사이징 (4K 디스플레이 대응)
+        return generate_jpeg_preview_scaled(file_path, 2400);
     }
 
     // RAW 파일인 경우: IFD에서 JPEG 추출
@@ -548,13 +548,82 @@ pub fn extract_raw_preview(file_path: &str) -> Result<Vec<u8>, String> {
     extract_jpeg_from_raw(file_path, In::THUMBNAIL)
 }
 
+/// JPEG 파일을 DCT 스케일링으로 미리보기 생성 (메모리 효율적)
+fn generate_jpeg_preview_scaled(file_path: &str, max_size: u32) -> Result<Vec<u8>, String> {
+    use jpeg_decoder::{Decoder, PixelFormat};
+    use std::io::BufReader;
+
+    let file = File::open(file_path)
+        .map_err(|e| format!("Failed to open JPEG file: {}", e))?;
+
+    let mut decoder = Decoder::new(BufReader::new(file));
+
+    // 이미지 정보 읽기
+    decoder.read_info()
+        .map_err(|e| format!("Failed to read JPEG info: {}", e))?;
+
+    let info = decoder.info()
+        .ok_or_else(|| "Failed to get JPEG info".to_string())?;
+
+    let orig_width = info.width as u32;
+    let orig_height = info.height as u32;
+
+    // 리사이징 필요 여부 확인
+    if orig_width <= max_size && orig_height <= max_size {
+        // 원본이 충분히 작으면 그대로 읽기
+        drop(decoder);
+        return std::fs::read(file_path)
+            .map_err(|e| format!("Failed to read JPEG file: {}", e));
+    }
+
+    // DCT 스케일링 계산 (1/1, 1/2, 1/4, 1/8 중 선택)
+    let scale_factor = (orig_width.max(orig_height) as f32 / max_size as f32).ceil();
+    let (scale_num, scale_denom) = if scale_factor <= 1.0 {
+        (1, 1)
+    } else if scale_factor <= 2.0 {
+        (1, 2)
+    } else if scale_factor <= 4.0 {
+        (1, 4)
+    } else {
+        (1, 8)
+    };
+
+    decoder.scale(scale_num, scale_denom)
+        .map_err(|e| format!("Failed to set DCT scale: {}", e))?;
+
+    // 디코딩
+    let pixels = decoder.decode()
+        .map_err(|e| format!("Failed to decode JPEG: {}", e))?;
+
+    let scaled_info = decoder.info()
+        .ok_or_else(|| "Failed to get scaled JPEG info".to_string())?;
+
+    // RGB로 변환 (필요 시)
+    let rgb_data = match scaled_info.pixel_format {
+        PixelFormat::RGB24 => pixels,
+        PixelFormat::L8 => {
+            // Grayscale → RGB 변환
+            pixels.iter().flat_map(|&p| [p, p, p]).collect()
+        },
+        _ => return Err("Unsupported JPEG pixel format".to_string()),
+    };
+
+    // JPEG로 재인코딩 (품질 90)
+    encode_thumbnail_to_jpeg_with_quality(
+        &rgb_data,
+        scaled_info.width as u32,
+        scaled_info.height as u32,
+        90
+    )
+}
+
 /// 썸네일을 JPEG로 인코딩
 #[allow(dead_code)]
 pub fn encode_thumbnail_to_jpeg(rgb_data: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
     encode_thumbnail_to_jpeg_with_quality(rgb_data, width, height, 90)
 }
 
-#[allow(dead_code)]
+/// 썸네일을 JPEG로 인코딩 (품질 지정 가능)
 pub fn encode_thumbnail_to_jpeg_with_quality(rgb_data: &[u8], width: u32, height: u32, quality: u8) -> Result<Vec<u8>, String> {
     let img: RgbImage = ImageBuffer::from_raw(width, height, rgb_data.to_vec())
         .ok_or_else(|| "Failed to create RGB image buffer".to_string())?;

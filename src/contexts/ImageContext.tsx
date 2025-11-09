@@ -111,13 +111,14 @@ export function ImageProvider({ children }: { children: ReactNode }) {
     // 버퍼 상태 업데이트 (완료 후에도 유지)
     setPreloadProgress({ loaded: cachedCount, total });
 
-    // 캐시되지 않은 이미지만 로드
-    for (const path of paths) {
-      // 이미 캐시에 있으면 스킵
-      if (cache.has(path)) {
-        continue;
-      }
+    // 캐시되지 않은 이미지만 필터링
+    const pathsToLoad = paths.filter(path => !cache.has(path));
 
+    // 병렬 처리를 위한 concurrency limit (동시에 5개씩 처리)
+    const CONCURRENCY = 5;
+
+    // 이미지 로드 함수
+    const loadSingleImage = async (path: string) => {
       try {
         let assetUrl: string;
 
@@ -177,6 +178,12 @@ export function ImageProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         logError(error, `Preload image: ${path}`);
       }
+    };
+
+    // 병렬 처리 (concurrency limit 적용)
+    for (let i = 0; i < pathsToLoad.length; i += CONCURRENCY) {
+      const batch = pathsToLoad.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(path => loadSingleImage(path)));
     }
 
     // 최종 버퍼 상태 업데이트 (사라지지 않음)
