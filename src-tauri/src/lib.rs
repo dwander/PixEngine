@@ -822,19 +822,11 @@ async fn get_exif_metadata(file_path: String) -> Result<ExifMetadata, String> {
     let date_time_digitized = get_field_ascii(exif::Tag::DateTimeDigitized)
         .and_then(|s| format_exif_date(&s));
 
-    // Orientation 값을 문자열로 변환
+    // Orientation 값을 숫자 문자열로 변환 (1-8)
     let orientation = exif_data.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
         .map(|field| {
             match field.value {
-                exif::Value::Short(ref v) if !v.is_empty() => {
-                    match v[0] {
-                        1 => "Normal",
-                        3 => "Rotate 180°",
-                        6 => "Rotate 90° CW",
-                        8 => "Rotate 270° CW",
-                        _ => "Unknown",
-                    }.to_string()
-                },
+                exif::Value::Short(ref v) if !v.is_empty() => v[0].to_string(),
                 _ => field.display_value().to_string(),
             }
         });

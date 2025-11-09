@@ -904,12 +904,6 @@ export function KonvaImageViewer({
         >
           {image && (() => {
             const orientationTransform = getOrientationTransform(orientation)
-
-            // 디버깅: orientation 값 확인
-            if (orientation && orientation !== '1') {
-              console.log('EXIF Orientation:', orientation, 'Transform:', orientationTransform)
-            }
-
             const baseWidth = orientationTransform.swapDimensions ? image.height : image.width
             const baseHeight = orientationTransform.swapDimensions ? image.width : image.height
 
