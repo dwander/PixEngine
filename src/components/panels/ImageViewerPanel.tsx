@@ -503,13 +503,18 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       return
     }
 
+    // 새 이미지 로딩 시작 - 이전 이미지 즉시 클리어하여 깜빡임 방지
+    const pathToLoad = currentPath
     setImageLoaded(false)
 
     // 캐시에서 이미지 확인
     const cachedImg = getCachedImage(currentPath)
 
     if (cachedImg) {
-      // 캐시 히트: 이미 로드된 HTMLImageElement 사용
+      // 캐시 히트: 즉시 URL 설정 (깜빡임 없음)
+      const assetUrl = convertFileSrc(currentPath)
+      setImageUrl(assetUrl)
+
       currentImageRef.current = cachedImg
 
       // 히스토그램이 켜져 있을 때만 계산
@@ -517,12 +522,11 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
         calculateHistogram(cachedImg)
       }
 
-      // Konva에 전달할 URL 설정 (브라우저 캐시 활용)
-      const assetUrl = convertFileSrc(currentPath)
-      setImageUrl(assetUrl)
       setImageLoaded(true)
     } else {
-      // 캐시 미스: 새로 로드 필요
+      // 캐시 미스: 이전 이미지 클리어 후 새로 로드
+      setImageUrl(null)
+
       const assetUrl = convertFileSrc(currentPath)
 
       // 이미지 로드
@@ -530,20 +534,25 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       img.crossOrigin = 'anonymous'
 
       img.onload = () => {
-        currentImageRef.current = img
+        // 로드 완료 시점에 경로가 변경되지 않았는지 확인
+        if (pathToLoad === currentPath) {
+          currentImageRef.current = img
 
-        // 히스토그램이 켜져 있을 때만 계산
-        if (showHistogram) {
-          calculateHistogram(img)
+          // 히스토그램이 켜져 있을 때만 계산
+          if (showHistogram) {
+            calculateHistogram(img)
+          }
+
+          setImageUrl(assetUrl)
+          setImageLoaded(true)
         }
-
-        setImageUrl(assetUrl)
-        setImageLoaded(true)
       }
 
       img.onerror = () => {
-        logError(new Error(`Failed to load image: ${currentPath}`), 'Image load error')
-        setImageLoaded(false)
+        if (pathToLoad === currentPath) {
+          logError(new Error(`Failed to load image: ${currentPath}`), 'Image load error')
+          setImageLoaded(false)
+        }
       }
 
       img.src = assetUrl

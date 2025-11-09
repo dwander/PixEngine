@@ -63,21 +63,30 @@ export function KonvaImageViewer({
       return
     }
 
-    // Reset zoom and dragging state when loading new image
+    // Reset dragging state when loading new image
     setIsDragging(false)
     // Note: currentZoom will be set by the zoom steps effect
 
+    // 새 이미지 로딩 시작 - 현재 imageUrl 저장
+    const urlToLoad = imageUrl
     const img = new Image()
     img.crossOrigin = 'anonymous'
 
     img.onload = () => {
-      setImage(img)
-      onRenderComplete?.()
+      // 로드 완료 시점에 imageUrl이 변경되지 않았는지 확인
+      // (빠르게 이미지를 전환할 때 이전 로딩이 늦게 완료되는 경우 방지)
+      if (urlToLoad === imageUrl) {
+        setImage(img)
+        onRenderComplete?.()
+      }
     }
 
     img.onerror = () => {
-      console.error('Failed to load image:', imageUrl)
-      onError?.(new Error('Failed to load image'))
+      // 에러 시에도 동일한 URL인지 확인
+      if (urlToLoad === imageUrl) {
+        console.error('Failed to load image:', imageUrl)
+        onError?.(new Error('Failed to load image'))
+      }
     }
 
     img.src = imageUrl
