@@ -907,23 +907,24 @@ export function KonvaImageViewer({
             const baseWidth = orientationTransform.swapDimensions ? image.height : image.width
             const baseHeight = orientationTransform.swapDimensions ? image.width : image.height
 
-            // Calculate offset for rotation pivot point
-            // For rotations, we need to rotate around the center of the image
-            let offsetX = 0
-            let offsetY = 0
+            // Konva transform order: translate(x,y) -> rotate(rotation) -> scale(scaleX, scaleY) -> translate(-offsetX, -offsetY)
+            // For EXIF orientation, we need to rotate around the center of the displayed image area
 
-            if (orientationTransform.rotation !== 0 || orientationTransform.scaleX !== 1 || orientationTransform.scaleY !== 1) {
-              // Set offset to center of the original image (before transform)
-              offsetX = image.width / 2
-              offsetY = image.height / 2
-            }
+            // Set offset to center of original image (rotation pivot point)
+            const offsetX = image.width / 2
+            const offsetY = image.height / 2
+
+            // Position: where the pivot point should be placed
+            // When rotated 90°/270°, the displayed dimensions swap, so we need to account for that
+            const displayCenterX = imageScale.x + baseWidth * imageScale.scale / 2
+            const displayCenterY = imageScale.y + baseHeight * imageScale.scale / 2
 
             return (
               <KonvaImage
                 ref={imageRef}
                 image={image}
-                x={imageScale.x + baseWidth * imageScale.scale / 2}
-                y={imageScale.y + baseHeight * imageScale.scale / 2}
+                x={displayCenterX}
+                y={displayCenterY}
                 offsetX={offsetX}
                 offsetY={offsetY}
                 width={image.width}
