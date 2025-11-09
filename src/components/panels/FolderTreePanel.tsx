@@ -24,9 +24,12 @@ interface FolderNode {
 
 const IMAGE_EXTENSIONS = [
   '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
-  '.svg', '.ico', '.tiff', '.tif', '.heic', '.heif',
+  '.svg', '.ico', '.tiff', '.tif', '.exr', '.avif',
   '.JPG', '.JPEG', '.PNG', '.GIF', '.BMP', '.WEBP',
-  '.SVG', '.ICO', '.TIFF', '.TIF', '.HEIC', '.HEIF'
+  '.SVG', '.ICO', '.TIFF', '.TIF', '.EXR', '.AVIF',
+  // RAW formats
+  '.nef', '.nrw', '.cr2', '.crw', '.arw', '.srf', '.sr2', '.dng', '.raf', '.orf', '.rw2', '.pef',
+  '.NEF', '.NRW', '.CR2', '.CRW', '.ARW', '.SRF', '.SR2', '.DNG', '.RAF', '.ORF', '.RW2', '.PEF'
 ];
 
 interface DriveInfo {

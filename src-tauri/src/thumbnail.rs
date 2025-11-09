@@ -425,14 +425,61 @@ const RAW_EXTENSIONS: &[&str] = &[
 ];
 
 /// RAW 파일에서 EXIF 내장 JPEG 썸네일 추출
-/// RAW 파일은 대부분 EXIF에 JPEG 썸네일을 포함하므로 extract_exif_thumbnail 재사용
+/// RAW 파일은 대부분 EXIF에 JPEG 썸네일을 포함
 pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>, u32, u32), String> {
-    // EXIF 썸네일 추출 시도 (RAW 파일 대부분 JPEG 썸네일 포함)
-    let thumbnail_jpeg = extract_exif_thumbnail(file_path)
-        .map_err(|e| format!("RAW file has no embedded thumbnail: {}", e))?;
+    use exif::{In, Reader, Tag};
+    use std::io::BufReader;
+
+    // RAW 파일에서 EXIF 데이터 읽기
+    let file = File::open(file_path)
+        .map_err(|e| format!("Failed to open RAW file: {}", e))?;
+
+    let exif_reader = Reader::new();
+    let mut bufreader = BufReader::new(file);
+
+    let exif = exif_reader
+        .read_from_container(&mut bufreader)
+        .map_err(|e| format!("Failed to read EXIF from RAW: {}", e))?;
+
+    // 썸네일 오프셋과 길이 찾기
+    let tiff_offset = exif
+        .get_field(Tag::JPEGInterchangeFormat, In::THUMBNAIL)
+        .and_then(|field| {
+            if let exif::Value::Long(ref longs) = field.value {
+                longs.first().copied()
+            } else {
+                None
+            }
+        })
+        .ok_or("RAW file has no embedded thumbnail offset")?;
+
+    let length = exif
+        .get_field(Tag::JPEGInterchangeFormatLength, In::THUMBNAIL)
+        .and_then(|field| {
+            if let exif::Value::Long(ref longs) = field.value {
+                longs.first().copied()
+            } else {
+                None
+            }
+        })
+        .ok_or("RAW file has no embedded thumbnail length")?;
+
+    // 썸네일 데이터 읽기
+    drop(bufreader);
+    let mut file = File::open(file_path)
+        .map_err(|e| format!("Failed to reopen RAW file: {}", e))?;
+
+    // RAW 파일의 TIFF 헤더 오프셋 찾기 (파일 포맷마다 다를 수 있음)
+    // 대부분의 RAW 파일은 TIFF 기반이므로 절대 오프셋 사용
+    file.seek(SeekFrom::Start(tiff_offset as u64))
+        .map_err(|e| format!("Failed to seek to RAW thumbnail: {}", e))?;
+
+    let mut thumbnail_data = vec![0u8; length as usize];
+    file.read_exact(&mut thumbnail_data)
+        .map_err(|e| format!("Failed to read RAW thumbnail: {}", e))?;
 
     // JPEG 디코딩하여 크기 확인
-    let img = image::load_from_memory(&thumbnail_jpeg)
+    let img = image::load_from_memory(&thumbnail_data)
         .map_err(|e| format!("Failed to decode RAW thumbnail JPEG: {}", e))?;
 
     let orig_width = img.width();

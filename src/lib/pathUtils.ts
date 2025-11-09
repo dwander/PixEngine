@@ -54,6 +54,11 @@ export function getFileExtension(path: string): string {
  */
 export function isImageFile(path: string): boolean {
   const ext = getFileExtension(path);
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'tif', 'raw', 'cr2', 'nef', 'arw'];
+  const imageExtensions = [
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'tif',
+    'exr', 'avif', 'ico', 'svg',
+    // RAW formats
+    'nef', 'nrw', 'cr2', 'crw', 'arw', 'srf', 'sr2', 'dng', 'raf', 'orf', 'rw2', 'pef'
+  ];
   return imageExtensions.includes(ext);
 }
