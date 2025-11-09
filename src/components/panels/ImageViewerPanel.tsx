@@ -512,9 +512,9 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
     const cachedImg = getCachedImage(currentPath)
 
     if (cachedImg) {
-      // 캐시 히트: 즉시 URL 설정 (깜빡임 없음)
-      const assetUrl = convertFileSrc(currentPath)
-      setImageUrl(assetUrl)
+      // 캐시 히트: 캐시된 이미지의 src 사용 (이미 RAW 변환이 완료된 상태)
+      // ImageContext에서 RAW 파일은 이미 data URL로 변환되어 캐시됨
+      setImageUrl(cachedImg.src)
 
       currentImageRef.current = cachedImg
 
