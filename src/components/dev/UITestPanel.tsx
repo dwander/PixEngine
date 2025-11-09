@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Button } from '../ui/Button'
 import { useDialog } from '../../contexts/DialogContext'
 import { useToast } from '../../contexts/ToastContext'
-import { AlertCircle, CheckCircle, Info, AlertTriangle, FolderPlus, Trash2 } from 'lucide-react'
+import { useDevStore } from '../../store/devStore'
+import { AlertCircle, CheckCircle, Info, AlertTriangle, FolderPlus, Trash2, RefreshCw } from 'lucide-react'
 
 export function UITestPanel() {
   const dialog = useDialog()
   const toast = useToast()
   const [testValue, setTestValue] = useState('')
+  const { strictMode, setStrictMode } = useDevStore()
 
   const handleAlertTest = async () => {
     await dialog.showAlert('이것은 알림 메시지입니다.', {
@@ -206,6 +208,49 @@ export function UITestPanel() {
           >
             삭제 플로우
           </Button>
+        </div>
+      </section>
+
+      {/* Dev Settings */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">개발 설정 (개발 모드 전용)</h2>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-neutral-800 rounded-lg border border-neutral-700">
+            <div>
+              <h3 className="font-medium mb-1">React Strict Mode</h3>
+              <p className="text-sm text-gray-400">
+                개발 모드에서 useEffect 이중 실행 등 부작용 감지 기능 활성화
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-400">
+                {strictMode ? '활성화' : '비활성화'}
+              </span>
+              <button
+                onClick={() => {
+                  setStrictMode(!strictMode)
+                  toast.info('설정이 변경되었습니다. 페이지를 새로고침하세요.')
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  strictMode ? 'bg-blue-600' : 'bg-neutral-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    strictMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={RefreshCw}
+                onClick={() => window.location.reload()}
+              >
+                새로고침
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
