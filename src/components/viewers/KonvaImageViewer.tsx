@@ -12,6 +12,7 @@ import { useWindowFocus } from '../../contexts/WindowFocusContext'
 interface KonvaImageViewerProps {
   imageUrl: string | null
   gridType?: 'none' | '3div' | '6div'
+  orientation?: string  // EXIF orientation value
   onRenderComplete?: () => void
   onError?: (error: Error) => void
   containerWidth: number
@@ -24,9 +25,39 @@ interface KonvaImageViewerProps {
 // Zoom levels: fit → dynamic steps to 100% → fixed steps after 100%
 const ZOOM_LEVELS_AFTER_100 = [1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
 
+/**
+ * Calculate EXIF orientation transforms
+ * Returns rotation, scaleX, scaleY, and whether dimensions should be swapped
+ */
+function getOrientationTransform(orientation?: string) {
+  const orientationNum = orientation ? parseInt(orientation, 10) : 1
+
+  switch (orientationNum) {
+    case 1: // Normal
+      return { rotation: 0, scaleX: 1, scaleY: 1, swapDimensions: false }
+    case 2: // Flip horizontal
+      return { rotation: 0, scaleX: -1, scaleY: 1, swapDimensions: false }
+    case 3: // Rotate 180°
+      return { rotation: 180, scaleX: 1, scaleY: 1, swapDimensions: false }
+    case 4: // Flip vertical
+      return { rotation: 0, scaleX: 1, scaleY: -1, swapDimensions: false }
+    case 5: // Transpose (flip horizontal + rotate 270°)
+      return { rotation: 270, scaleX: -1, scaleY: 1, swapDimensions: true }
+    case 6: // Rotate 90° CW
+      return { rotation: 90, scaleX: 1, scaleY: 1, swapDimensions: true }
+    case 7: // Transverse (flip horizontal + rotate 90°)
+      return { rotation: 90, scaleX: -1, scaleY: 1, swapDimensions: true }
+    case 8: // Rotate 270° CW
+      return { rotation: 270, scaleX: 1, scaleY: 1, swapDimensions: true }
+    default:
+      return { rotation: 0, scaleX: 1, scaleY: 1, swapDimensions: false }
+  }
+}
+
 export function KonvaImageViewer({
   imageUrl,
   gridType = 'none',
+  orientation,
   onRenderComplete,
   onError,
   containerWidth,
@@ -122,8 +153,11 @@ export function KonvaImageViewer({
   useLayoutEffect(() => {
     if (!image) return
 
-    const imgWidth = image.width
-    const imgHeight = image.height
+    const orientationTransform = getOrientationTransform(orientation)
+
+    // Use swapped dimensions if orientation requires it (90° or 270° rotations)
+    const imgWidth = orientationTransform.swapDimensions ? image.height : image.width
+    const imgHeight = orientationTransform.swapDimensions ? image.width : image.height
     const containerW = containerWidth
     const containerH = containerHeight
 
@@ -198,7 +232,7 @@ export function KonvaImageViewer({
         }
       }
     }
-  }, [image, containerWidth, containerHeight, imageUrl, currentZoom])
+  }, [image, containerWidth, containerHeight, imageUrl, currentZoom, orientation])
 
   // Notify parent when zoom state changes (only when it actually changes)
   useEffect(() => {
@@ -244,8 +278,11 @@ export function KonvaImageViewer({
     // Update previous container size
     previousContainerSize.current = { width: containerWidth, height: containerHeight }
 
-    const imgWidth = image.width
-    const imgHeight = image.height
+    const orientationTransform = getOrientationTransform(orientation)
+
+    // Use swapped dimensions if orientation requires it
+    const imgWidth = orientationTransform.swapDimensions ? image.height : image.width
+    const imgHeight = orientationTransform.swapDimensions ? image.width : image.height
     const containerW = containerWidth
     const containerH = containerHeight
 
@@ -254,7 +291,7 @@ export function KonvaImageViewer({
     const y = (containerH - imgHeight * targetScale) / 2
 
     setImageScale({ x, y, scale: targetScale })
-  }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale])
+  }, [image, containerWidth, containerHeight, currentZoom, imageScale.scale, orientation])
 
   // Reset isZoomingRef after all state updates complete
   useEffect(() => {
@@ -312,8 +349,12 @@ export function KonvaImageViewer({
   const renderGridLines = useCallback(() => {
     if (!image || gridType === 'none') return null
 
-    const imgWidth = image.width * imageScale.scale
-    const imgHeight = image.height * imageScale.scale
+    const orientationTransform = getOrientationTransform(orientation)
+    const baseWidth = orientationTransform.swapDimensions ? image.height : image.width
+    const baseHeight = orientationTransform.swapDimensions ? image.width : image.height
+
+    const imgWidth = baseWidth * imageScale.scale
+    const imgHeight = baseHeight * imageScale.scale
     const offsetX = imageScale.x
     const offsetY = imageScale.y
 
@@ -434,7 +475,7 @@ export function KonvaImageViewer({
     }
 
     return lines
-  }, [image, gridType, imageScale])
+  }, [image, gridType, imageScale, orientation])
 
   // Zoom in/out function with position preservation
   // ⚠️ CRITICAL: This function must use imageScale.scale/x/y to calculate zoom positions
@@ -442,6 +483,10 @@ export function KonvaImageViewer({
   // to control positioning during zoom operations via isZoomingRef flag
   const zoom = useCallback((direction: 'in' | 'out', mouseX?: number, mouseY?: number) => {
     if (!image || zoomSteps.current.length === 0) return
+
+    const orientationTransform = getOrientationTransform(orientation)
+    const imgWidth = orientationTransform.swapDimensions ? image.height : image.width
+    const imgHeight = orientationTransform.swapDimensions ? image.width : image.height
 
     const oldZoom = currentZoom
     let newZoom = oldZoom
@@ -482,8 +527,8 @@ export function KonvaImageViewer({
         const currentScale = imageScale.scale
         const imgLeft = imageScale.x
         const imgTop = imageScale.y
-        const imgRight = imgLeft + image.width * currentScale
-        const imgBottom = imgTop + image.height * currentScale
+        const imgRight = imgLeft + imgWidth * currentScale
+        const imgBottom = imgTop + imgHeight * currentScale
 
         // 마우스 포인터가 이미지 위에 있는지 확인
         const isOnImage = (
@@ -501,8 +546,8 @@ export function KonvaImageViewer({
           newY = containerHeight / 2 - imagePointY * newScale
         } else {
           // 빈 공간 클릭 시 이미지 중앙을 뷰포트 중앙에 배치
-          newX = containerWidth / 2 - (image.width / 2) * newScale
-          newY = containerHeight / 2 - (image.height / 2) * newScale
+          newX = containerWidth / 2 - (imgWidth / 2) * newScale
+          newY = containerHeight / 2 - (imgHeight / 2) * newScale
         }
       }
       // Case 2: 이미 줌인된 상태에서 추가 줌 (클릭한 위치가 중앙으로 오도록)
@@ -523,8 +568,6 @@ export function KonvaImageViewer({
       }
       // Case 3: fit 이하로 줌아웃 시 중앙 정렬
       else {
-        const imgWidth = image.width
-        const imgHeight = image.height
         newX = (containerWidth - imgWidth * newScale) / 2
         newY = (containerHeight - imgHeight * newScale) / 2
       }
@@ -546,7 +589,7 @@ export function KonvaImageViewer({
       // Show zoom indicator
       showZoomIndicatorTemporarily()
     }
-  }, [image, currentZoom, imageScale, containerWidth, containerHeight, showZoomIndicatorTemporarily])
+  }, [image, currentZoom, imageScale, containerWidth, containerHeight, showZoomIndicatorTemporarily, orientation])
 
   // Handle mouse wheel zoom (Ctrl + Wheel)
   const handleWheel = useCallback((e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -859,18 +902,40 @@ export function KonvaImageViewer({
           listening={false}
           clearBeforeDraw={true}
         >
-          {image && (
-            <KonvaImage
-              ref={imageRef}
-              image={image}
-              x={imageScale.x}
-              y={imageScale.y}
-              width={image.width * imageScale.scale}
-              height={image.height * imageScale.scale}
-              listening={false}
-              perfectDrawEnabled={false}
-            />
-          )}
+          {image && (() => {
+            const orientationTransform = getOrientationTransform(orientation)
+            const baseWidth = orientationTransform.swapDimensions ? image.height : image.width
+            const baseHeight = orientationTransform.swapDimensions ? image.width : image.height
+
+            // Calculate offset for rotation pivot point
+            // For rotations, we need to rotate around the center of the image
+            let offsetX = 0
+            let offsetY = 0
+
+            if (orientationTransform.rotation !== 0 || orientationTransform.scaleX !== 1 || orientationTransform.scaleY !== 1) {
+              // Set offset to center of the original image (before transform)
+              offsetX = image.width / 2
+              offsetY = image.height / 2
+            }
+
+            return (
+              <KonvaImage
+                ref={imageRef}
+                image={image}
+                x={imageScale.x + baseWidth * imageScale.scale / 2}
+                y={imageScale.y + baseHeight * imageScale.scale / 2}
+                offsetX={offsetX}
+                offsetY={offsetY}
+                width={image.width}
+                height={image.height}
+                scaleX={orientationTransform.scaleX * imageScale.scale}
+                scaleY={orientationTransform.scaleY * imageScale.scale}
+                rotation={orientationTransform.rotation}
+                listening={false}
+                perfectDrawEnabled={false}
+              />
+            )
+          })()}
           {renderGridLines()}
         </Layer>
       </Stage>

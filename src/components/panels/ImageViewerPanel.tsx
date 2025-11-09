@@ -716,6 +716,7 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
               gridType={gridType}
               containerWidth={containerSize.width}
               containerHeight={containerSize.height}
+              orientation={metadata?.orientation}
               onRenderComplete={() => setImageLoaded(true)}
               onError={handleViewerError}
               onZoomStateChange={handleZoomStateChange}
