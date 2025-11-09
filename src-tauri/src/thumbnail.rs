@@ -369,6 +369,49 @@ pub fn generate_generic_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec
     ))
 }
 
+/// SVG 파일을 위한 썸네일 생성
+pub fn generate_svg_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>, u32, u32), String> {
+    use resvg::usvg::Tree;
+
+    // SVG 파싱 (v0.45 API: Options 불필요, postprocess 자동 처리)
+    let svg_data = std::fs::read(file_path)
+        .map_err(|e| format!("Failed to read SVG file: {}", e))?;
+
+    let tree = Tree::from_data(&svg_data, &resvg::usvg::Options::default())
+        .map_err(|e| format!("Failed to parse SVG: {}", e))?;
+
+    // 원본 SVG 크기
+    let svg_size = tree.size();
+    let svg_width = svg_size.width();
+    let svg_height = svg_size.height();
+
+    // 크기 계산 (비율 유지하며 max_size 이내로)
+    let scale = (max_size as f32 / svg_width.max(svg_height)).min(1.0);
+    let width = (svg_width * scale) as u32;
+    let height = (svg_height * scale) as u32;
+
+    // 최소 크기 보장 (1px 이상)
+    let width = width.max(1);
+    let height = height.max(1);
+
+    // Pixmap 생성
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
+        .ok_or("Failed to create pixmap for SVG")?;
+
+    // 렌더링 (스케일 적용)
+    let transform = resvg::tiny_skia::Transform::from_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    // RGBA → RGB 변환
+    let rgba_data = pixmap.data();
+    let rgb_data: Vec<u8> = rgba_data
+        .chunks_exact(4)
+        .flat_map(|rgba| [rgba[0], rgba[1], rgba[2]])
+        .collect();
+
+    Ok((rgb_data, width, height))
+}
+
 /// 썸네일을 JPEG로 인코딩
 #[allow(dead_code)]
 pub fn encode_thumbnail_to_jpeg(rgb_data: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
@@ -415,6 +458,16 @@ fn is_jpeg_file(file_path: &str) -> bool {
     if let Some(ext) = Path::new(file_path).extension() {
         let ext_str = ext.to_string_lossy().to_lowercase();
         matches!(ext_str.as_str(), "jpg" | "jpeg")
+    } else {
+        false
+    }
+}
+
+/// 파일 확장자로 SVG 여부 확인
+fn is_svg_file(file_path: &str) -> bool {
+    if let Some(ext) = Path::new(file_path).extension() {
+        let ext_str = ext.to_string_lossy().to_lowercase();
+        ext_str == "svg"
     } else {
         false
     }
@@ -472,6 +525,9 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
     let (rgb_data, width, height) = if is_jpeg_file(file_path) {
         // JPEG: DCT 스케일링 (고속)
         generate_dct_thumbnail(file_path, 320)?
+    } else if is_svg_file(file_path) {
+        // SVG: 벡터 렌더링
+        generate_svg_thumbnail(file_path, 320)?
     } else {
         // 기타 포맷: 범용 이미지 디코딩 (PNG, WebP, GIF, TIFF, BMP, EXR, AVIF, ICO 등)
         generate_generic_thumbnail(file_path, 320)?

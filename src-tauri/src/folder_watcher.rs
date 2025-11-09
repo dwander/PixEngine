@@ -29,6 +29,7 @@ const IMAGE_EXTENSIONS: &[&str] = &[
     "exr",          // OpenEXR
     "avif",         // AVIF
     "ico",          // ICO
+    "svg",          // SVG
 ];
 
 fn is_image_file(path: &Path) -> bool {

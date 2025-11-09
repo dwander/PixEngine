@@ -40,6 +40,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 jpeg-decoder = "0.3"           # DCT 스케일링 지원
 fast_image_resize = "4.0"      # 고속 리사이징
 webp = "0.3"                   # WebP 인코딩 (빠른 썸네일)
+resvg = "0.45"                 # SVG 렌더링
 
 # 병렬 처리
 rayon = "1.10"
