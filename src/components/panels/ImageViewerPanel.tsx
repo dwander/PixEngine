@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, memo } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { useImageContext } from '../../contexts/ImageContext'
 import { useFolderContext } from '../../contexts/FolderContext'
@@ -9,6 +9,7 @@ import { KonvaImageViewer } from '../viewers/KonvaImageViewer'
 import { logError } from '../../lib/errorHandler'
 import { readImageRating, writeImageRating } from '../../lib/rating'
 import { FOLDER_WATCH_RESUME_DELAY } from '../../lib/constants'
+import { isRawFile } from '../../lib/pathUtils'
 
 // 측광 모드 아이콘 선택
 function getMeteringModeIcon(mode: string | undefined): string {
@@ -527,35 +528,52 @@ export const ImageViewerPanel = memo(function ImageViewerPanel({ gridType = 'non
       // 캐시 미스: 이전 이미지 클리어 후 새로 로드
       setImageUrl(null)
 
-      const assetUrl = convertFileSrc(currentPath)
+      // RAW 파일 처리
+      const loadImageAsync = async () => {
+        let assetUrl: string
 
-      // 이미지 로드
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-
-      img.onload = () => {
-        // 로드 완료 시점에 경로가 변경되지 않았는지 확인
-        if (pathToLoad === currentPath) {
-          currentImageRef.current = img
-
-          // 히스토그램이 켜져 있을 때만 계산
-          if (showHistogram) {
-            calculateHistogram(img)
+        if (isRawFile(currentPath)) {
+          try {
+            const base64Data = await invoke<string>('extract_raw_preview_image', { filePath: currentPath })
+            assetUrl = `data:image/jpeg;base64,${base64Data}`
+          } catch (error) {
+            logError(error, `Failed to extract RAW preview: ${currentPath}`)
+            assetUrl = convertFileSrc(currentPath)
           }
-
-          setImageUrl(assetUrl)
-          setImageLoaded(true)
+        } else {
+          assetUrl = convertFileSrc(currentPath)
         }
+
+        // 이미지 로드
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+
+        img.onload = () => {
+          // 로드 완료 시점에 경로가 변경되지 않았는지 확인
+          if (pathToLoad === currentPath) {
+            currentImageRef.current = img
+
+            // 히스토그램이 켜져 있을 때만 계산
+            if (showHistogram) {
+              calculateHistogram(img)
+            }
+
+            setImageUrl(assetUrl)
+            setImageLoaded(true)
+          }
+        }
+
+        img.onerror = () => {
+          if (pathToLoad === currentPath) {
+            logError(new Error(`Failed to load image: ${currentPath}`), 'Image load error')
+            setImageLoaded(false)
+          }
+        }
+
+        img.src = assetUrl
       }
 
-      img.onerror = () => {
-        if (pathToLoad === currentPath) {
-          logError(new Error(`Failed to load image: ${currentPath}`), 'Image load error')
-          setImageLoaded(false)
-        }
-      }
-
-      img.src = assetUrl
+      loadImageAsync()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPath, showHistogram])
