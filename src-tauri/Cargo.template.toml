@@ -36,7 +36,7 @@ raw-window-handle = "0.6"
 lazy_static = "1.5"
 
 # 이미지 처리
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "tiff", "exr", "avif", "ico"] }
 jpeg-decoder = "0.3"           # DCT 스케일링 지원
 fast_image_resize = "4.0"      # 고속 리사이징
 webp = "0.3"                   # WebP 인코딩 (빠른 썸네일)

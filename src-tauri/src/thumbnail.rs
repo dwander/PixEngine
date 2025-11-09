@@ -115,7 +115,7 @@ pub fn get_cache_path(app_handle: &tauri::AppHandle, cache_key: &str) -> Result<
     fs::create_dir_all(&cache_dir)
         .map_err(|e| format!("Failed to create cache directory: {}", e))?;
 
-    Ok(cache_dir.join(format!("{}.jpg", cache_key)))
+    Ok(cache_dir.join(format!("{}.webp", cache_key)))
 }
 
 /// 메타데이터 파일 경로 가져오기 (폴더별)
@@ -350,11 +350,32 @@ pub fn generate_dct_thumbnail(file_path: &str, max_size: u16) -> Result<(Vec<u8>
     Ok((pixels, info.width as u32, info.height as u32))
 }
 
+/// 범용 이미지 포맷을 위한 썸네일 생성 (JPEG DCT 제외)
+pub fn generate_generic_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>, u32, u32), String> {
+    // image 크레이트로 이미지 로드
+    let img = image::open(file_path)
+        .map_err(|e| format!("Failed to open image: {}", e))?;
+
+    // 썸네일 생성 (비율 유지하며 max_size 이내로 축소)
+    let thumbnail = img.thumbnail(max_size, max_size);
+
+    // RGB8로 변환
+    let rgb_img = thumbnail.to_rgb8();
+
+    Ok((
+        rgb_img.into_raw(),
+        thumbnail.width(),
+        thumbnail.height(),
+    ))
+}
+
 /// 썸네일을 JPEG로 인코딩
+#[allow(dead_code)]
 pub fn encode_thumbnail_to_jpeg(rgb_data: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
     encode_thumbnail_to_jpeg_with_quality(rgb_data, width, height, 90)
 }
 
+#[allow(dead_code)]
 pub fn encode_thumbnail_to_jpeg_with_quality(rgb_data: &[u8], width: u32, height: u32, quality: u8) -> Result<Vec<u8>, String> {
     let img: RgbImage = ImageBuffer::from_raw(width, height, rgb_data.to_vec())
         .ok_or_else(|| "Failed to create RGB image buffer".to_string())?;
@@ -389,26 +410,38 @@ pub fn encode_thumbnail_to_webp(rgb_data: &[u8], width: u32, height: u32, qualit
     Ok(webp_data.to_vec())
 }
 
-/// 썸네일 생성 (캐시 우선, EXIF → DCT fallback)
+/// 파일 확장자로 JPEG 여부 확인
+fn is_jpeg_file(file_path: &str) -> bool {
+    if let Some(ext) = Path::new(file_path).extension() {
+        let ext_str = ext.to_string_lossy().to_lowercase();
+        matches!(ext_str.as_str(), "jpg" | "jpeg")
+    } else {
+        false
+    }
+}
+
+/// 썸네일 생성 (캐시 우선, EXIF → DCT/Generic fallback)
 pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ThumbnailResult, String> {
     // 항상 원본 이미지에서 EXIF 메타데이터 추출 (orientation 정보 필수)
     let exif_metadata = extract_exif_metadata(file_path).ok();
 
-    // 1. EXIF 썸네일 추출 시도 (캐시 없이 항상 추출 - 매우 빠름)
-    if let Ok(exif_thumb) = extract_exif_thumbnail(file_path) {
-        let thumbnail_base64 = encode_to_base64(&exif_thumb);
+    // 1. EXIF 썸네일 추출 시도 (JPEG만 해당, 캐시 없이 항상 추출 - 매우 빠름)
+    if is_jpeg_file(file_path) {
+        if let Ok(exif_thumb) = extract_exif_thumbnail(file_path) {
+            let thumbnail_base64 = encode_to_base64(&exif_thumb);
 
-        let img = image::load_from_memory(&exif_thumb)
-            .map_err(|e| format!("Failed to decode EXIF thumbnail: {}", e))?;
+            let img = image::load_from_memory(&exif_thumb)
+                .map_err(|e| format!("Failed to decode EXIF thumbnail: {}", e))?;
 
-        return Ok(ThumbnailResult {
-            path: file_path.to_string(),
-            thumbnail_base64,
-            width: img.width(),
-            height: img.height(),
-            source: ThumbnailSource::ExifEmbedded,
-            exif_metadata,
-        });
+            return Ok(ThumbnailResult {
+                path: file_path.to_string(),
+                thumbnail_base64,
+                width: img.width(),
+                height: img.height(),
+                source: ThumbnailSource::ExifEmbedded,
+                exif_metadata,
+            });
+        }
     }
 
     // 2. HQ 캐시 확인 (EXIF 썸네일이 없는 경우)
@@ -417,33 +450,41 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
     let cache_path = get_cache_path(app_handle, &cache_key)?;
 
     if cache_path.exists() {
-        let cached_data = fs::read(&cache_path)
+        let webp_data = fs::read(&cache_path)
             .map_err(|e| format!("Failed to read cache: {}", e))?;
 
-        let thumbnail_base64 = encode_to_base64(&cached_data);
+        let thumbnail_base64 = encode_to_base64(&webp_data);
 
-        let img = image::load_from_memory(&cached_data)
-            .map_err(|e| format!("Failed to decode cached image: {}", e))?;
+        // WebP 이미지 크기 추출
+        let (width, height) = extract_webp_dimensions(&webp_data).unwrap_or((320, 320));
 
         return Ok(ThumbnailResult {
             path: file_path.to_string(),
             thumbnail_base64,
-            width: img.width(),
-            height: img.height(),
+            width,
+            height,
             source: ThumbnailSource::Cache,
             exif_metadata,
         });
     }
 
-    // 3. DCT 스케일링 fallback (EXIF도 없고 캐시도 없는 경우)
-    let (rgb_data, width, height) = generate_dct_thumbnail(file_path, 320)?;
-    let jpeg_data = encode_thumbnail_to_jpeg(&rgb_data, width, height)?;
+    // 3. 썸네일 생성 (포맷별 최적화)
+    let (rgb_data, width, height) = if is_jpeg_file(file_path) {
+        // JPEG: DCT 스케일링 (고속)
+        generate_dct_thumbnail(file_path, 320)?
+    } else {
+        // 기타 포맷: 범용 이미지 디코딩 (PNG, WebP, GIF, TIFF, BMP, EXR, AVIF, ICO 등)
+        generate_generic_thumbnail(file_path, 320)?
+    };
+
+    // WebP 인코딩 (품질 60 = 빠른 인코딩 + 충분한 품질, JPEG 70보다 2배 빠름)
+    let webp_data = encode_thumbnail_to_webp(&rgb_data, width, height, 60.0)?;
 
     // HQ 캐시에 저장
-    fs::write(&cache_path, &jpeg_data)
+    fs::write(&cache_path, &webp_data)
         .map_err(|e| format!("Failed to write cache: {}", e))?;
 
-    let thumbnail_base64 = encode_to_base64(&jpeg_data);
+    let thumbnail_base64 = encode_to_base64(&webp_data);
 
     Ok(ThumbnailResult {
         path: file_path.to_string(),

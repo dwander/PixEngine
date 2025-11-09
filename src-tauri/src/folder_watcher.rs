@@ -19,7 +19,17 @@ pub enum FolderChangeEvent {
 }
 
 // 지원하는 이미지 확장자 목록
-const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff", "tif"];
+const IMAGE_EXTENSIONS: &[&str] = &[
+    "jpg", "jpeg",  // JPEG
+    "png",          // PNG
+    "gif",          // GIF
+    "bmp",          // BMP
+    "webp",         // WebP
+    "tiff", "tif",  // TIFF
+    "exr",          // OpenEXR
+    "avif",         // AVIF
+    "ico",          // ICO
+];
 
 fn is_image_file(path: &Path) -> bool {
     if let Some(ext) = path.extension() {
