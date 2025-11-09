@@ -412,6 +412,49 @@ pub fn generate_svg_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>
     Ok((rgb_data, width, height))
 }
 
+/// RAW 파일 확장자 목록 (EXIF 썸네일 추출 가능)
+const RAW_EXTENSIONS: &[&str] = &[
+    "nef", "nrw",           // Nikon
+    "cr2", "crw",           // Canon (CR3는 EXIF 구조 다름)
+    "arw", "srf", "sr2",    // Sony
+    "dng",                  // Adobe
+    "raf",                  // Fuji
+    "orf",                  // Olympus
+    "rw2",                  // Panasonic
+    "pef",                  // Pentax
+];
+
+/// RAW 파일에서 EXIF 내장 JPEG 썸네일 추출
+/// RAW 파일은 대부분 EXIF에 JPEG 썸네일을 포함하므로 extract_exif_thumbnail 재사용
+pub fn generate_raw_thumbnail(file_path: &str, max_size: u32) -> Result<(Vec<u8>, u32, u32), String> {
+    // EXIF 썸네일 추출 시도 (RAW 파일 대부분 JPEG 썸네일 포함)
+    let thumbnail_jpeg = extract_exif_thumbnail(file_path)
+        .map_err(|e| format!("RAW file has no embedded thumbnail: {}", e))?;
+
+    // JPEG 디코딩하여 크기 확인
+    let img = image::load_from_memory(&thumbnail_jpeg)
+        .map_err(|e| format!("Failed to decode RAW thumbnail JPEG: {}", e))?;
+
+    let orig_width = img.width();
+    let orig_height = img.height();
+
+    // 이미 충분히 작으면 그대로 사용
+    if orig_width <= max_size && orig_height <= max_size {
+        let rgb_img = img.to_rgb8();
+        return Ok((rgb_img.into_raw(), orig_width, orig_height));
+    }
+
+    // 크기 조정 필요 시 리사이징
+    let thumbnail = img.thumbnail(max_size, max_size);
+    let rgb_img = thumbnail.to_rgb8();
+
+    Ok((
+        rgb_img.into_raw(),
+        thumbnail.width(),
+        thumbnail.height(),
+    ))
+}
+
 /// 썸네일을 JPEG로 인코딩
 #[allow(dead_code)]
 pub fn encode_thumbnail_to_jpeg(rgb_data: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
@@ -473,6 +516,16 @@ fn is_svg_file(file_path: &str) -> bool {
     }
 }
 
+/// 파일 확장자로 RAW 여부 확인
+fn is_raw_file(file_path: &str) -> bool {
+    if let Some(ext) = Path::new(file_path).extension() {
+        let ext_str = ext.to_string_lossy().to_lowercase();
+        RAW_EXTENSIONS.contains(&ext_str.as_str())
+    } else {
+        false
+    }
+}
+
 /// 썸네일 생성 (캐시 우선, EXIF → DCT/Generic fallback)
 pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) -> Result<ThumbnailResult, String> {
     // 항상 원본 이미지에서 EXIF 메타데이터 추출 (orientation 정보 필수)
@@ -528,6 +581,9 @@ pub async fn generate_thumbnail(app_handle: &tauri::AppHandle, file_path: &str) 
     } else if is_svg_file(file_path) {
         // SVG: 벡터 렌더링
         generate_svg_thumbnail(file_path, 320)?
+    } else if is_raw_file(file_path) {
+        // RAW: 내장 JPEG 미리보기 추출
+        generate_raw_thumbnail(file_path, 320)?
     } else {
         // 기타 포맷: 범용 이미지 디코딩 (PNG, WebP, GIF, TIFF, BMP, EXR, AVIF, ICO 등)
         generate_generic_thumbnail(file_path, 320)?

@@ -30,6 +30,15 @@ const IMAGE_EXTENSIONS: &[&str] = &[
     "avif",         // AVIF
     "ico",          // ICO
     "svg",          // SVG
+    // RAW 포맷 (EXIF 썸네일 지원)
+    "nef", "nrw",           // Nikon
+    "cr2", "crw",           // Canon
+    "arw", "srf", "sr2",    // Sony
+    "dng",                  // Adobe
+    "raf",                  // Fuji
+    "orf",                  // Olympus
+    "rw2",                  // Panasonic
+    "pef",                  // Pentax
 ];
 
 fn is_image_file(path: &Path) -> bool {
