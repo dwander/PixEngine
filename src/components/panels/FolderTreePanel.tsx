@@ -704,7 +704,12 @@ function FolderTreeItem({
 
       // 경로 정규화
       const normalizePathForComparison = (path: string) => {
-        return normalizePath(path).toLowerCase().replace(/^\\\\\?\\/, '').replace(/\/+$/, '');
+        // normalizePath는 백슬래시를 슬래시로 변환하므로, //?/ 패턴도 제거해야 함
+        return normalizePath(path)
+          .toLowerCase()
+          .replace(/^\\\\\?\\/, '') // \\?\ 제거
+          .replace(/^\/\/\?\//, '')  // //?/ 제거 (normalizePath 후)
+          .replace(/\/+$/, '');      // 끝의 슬래시 제거
       };
 
       const normalizedNodePath = normalizePathForComparison(node.path);
@@ -718,12 +723,6 @@ function FolderTreeItem({
       }
 
       setHasAutoExpanded(true);
-
-      // 카테고리나 이미 children이 있는 노드는 단순 펼치기
-      if (node.children !== undefined) {
-        setIsOpen(true);
-        return;
-      }
 
       // 드라이브는 폴더 목록만 로드 (이미지 필터링 없음)
       if (node.isDrive) {
@@ -753,7 +752,7 @@ function FolderTreeItem({
     };
 
     autoExpand();
-  }, [lastAccessed, hasAutoExpanded, node.isCategory, node.path, node.treeId, isOpen, isLoading, node.children, node.isDrive]);
+  }, [lastAccessed, hasAutoExpanded, node.isCategory, node.path, node.treeId, isOpen, isLoading, node.isDrive]);
 
   const loadFolderContents = async () => {
     if (isLoading) return;
